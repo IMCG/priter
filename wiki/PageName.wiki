@@ -1,0 +1,88 @@
+#summary One-sentence summary of this page.
+
+= Introduction =
+
+Add your content here.
+
+
+= Details =
+
+Add your content here.  Format your content with:
+  * Text in *bold* or _italic_
+  * Headings, paragraphs, and lists
+  * Automatic links to other wiki pages
+
+                                                            Map_PageRank
+                                                            Input: Key n, Value ∆R
+                                                             1: <links> = look up n’s outlinks;
+Map_SSSP
+                                                             2: for link in <links> do
+Input: Key n, Value d(n)
+                                                             3: Output( link.endnode, (d × ∆R) / |<links>| );
+ 1: <links> = look up n’s outlinks;
+                                                             4: end for
+ 2: for link in <links> do
+ 3: Output( link.endnode, d(n) + link.weight );
+                                                            Reduce_PageRank
+ 4: end for
+                                                            Input: Key n, Set <values>
+                                                             1: Output( n, sum(<values>) );
+Reduce_SSSP
+Input: Key n, Set <values>
+                                                            InitStateTable
+ 1: Output( n, min(<values>) );
+                                                            Input: Personal preferred nodeset Vp
+                                                             1: for n in nodeset V do
+InitStateTable
+                                                             2: StateTable(n).iState = 0;
+Input: sourcenode s
+                                                             3: StateTable(n).cState = 0;
+ 1: for n in nodeset V do
+                                                             4: end for
+ 2: StateTable(n).iState = maxValue;
+                                                             5: for n in Vp do
+ 3: StateTable(n).cState = maxValue;
+                                                             6: StateTable(n).iState = (1-d) / |Vp|;
+ 4: end for
+                                                             7: StateTable(n).cState = (1-d) / |Vp|;
+ 5: StateTable(s).iState = 0;
+                                                             8: end for
+ 6: StateTable(s).cState = 0;
+                                                            StateUpdate
+StateUpdate
+                                                            Input: Key n, Value ∆R
+Input: Key n, Value d(n)
+                                                             1: StateTable(n).iState = sum(StateTable(n).iState, ∆R);
+ 1: StateTable(n).iState = min(StateTable(n).iState, d(n));
+                                                             2: StateTable(n).cState = sum(StateTable(n).cState, ∆R);
+ 2: StateTable(n).cState = min(StateTable(n).cState, d(n));
+                                                            PriorityDecision
+PriorityDecision
+                                                            Input: Key n, Value iState
+Input: Key n, Value iState
+                                                             1: n.priority = iState;
+ 1: n.priority = -iState;
+                                                            Main
+Main
+                                                             1: Job job = new Job();
+ 1: Job job = new Job();
+                                                             2: job.setMap(Map_PageRank);
+ 2: job.setMap(Map_SSSP);
+                                                             3: job.setReduce(Reduce_PageRank);
+ 3: job.setReduce(Reduce_SSSP);
+                                                             4: job.setStaticDataPath(graphpath);
+ 4: job.setStaticDataPath(graphpath);
+                                                             5: job.setInitState(InitStateTable);
+ 5: job.setInitState(InitStateTable);
+                                                             6: job.setState(StateUpdate);
+ 6: job.setState(StateUpdate);
+                                                             7: job.setPriority(PriorityDecision);
+ 7: job.setPriority(PriorityDecision);
+                                                             8: job.setFactorc(10);
+ 8: job.setFactorc(10);
+                                                             9: job.setTopK(1000);
+ 9: job.setTopK(10000);
+                                                             10: job.setSnapshotInterval(20);
+ 10: job.setSnapshotInterval(5);
+                                                             11: job.submit();
+ 11: job.submit();
