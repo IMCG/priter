@@ -11,10 +11,12 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 
 *Map* 
 Input: Key n, Value distance(n)
+{{{
 Set(links)=look up n's outlinks;
 for link in Set(links) do
   Output(link.endnode, distance(n)+link.weight);
 end for
+}}}
 
 *Reduce*
 Input: Key n, Set (values)
