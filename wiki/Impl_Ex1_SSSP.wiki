@@ -10,6 +10,7 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 = Details =
 
 *_Map_* 
+
 Input: Key n, Value distance(n)
 {{{
 Set(links)=look up n's outlinks;
@@ -19,6 +20,7 @@ end for
 }}}
 
 *_Reduce_*
+
 Input: Key n, Set (values)
 {{{
 Output(n, _min_(Set(values)));
