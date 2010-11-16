@@ -2,13 +2,67 @@
 
 = Introduction =
 
-PageRank algorithm is widely used for many applications
- such as web search and personalized recommendation. The PageRank algorithm assumes that a user starts at a page with equal probability and performs random walk on the web linkage graph. 
+PageRank algorithm is widely used for many applications such as web search and personalized recommendation. The PageRank algorithm assumes that a user starts at a page with equal probability and performs random walk on the web linkage graph. 
 
+To extract priority property from PageRank problem, we change PageRank to another form, which will get the same results. The changed PageRank form is called incremental PageRank, which does not iterate ranking score but iterate a delta ranking score. These partial delta is accumulated to get a final ranking score. 
 
 = Details =
+*_Map_* 
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+Input: Key n, Value delta R
+{{{
+Set(links)=_lookup_ n's outlinks;
+for link in Set(links) do
+  Output(link.endnode, (d*delta R)/|Set(links)|);
+end for
+}}}
+
+*_Reduce_*
+
+Input: Key n, Set (values)
+{{{
+Output(n, _sum_(Set(values)));
+}}}
+
+*_InitStateTable_*
+
+Input: Personal preferred nodeset Vp
+{{{
+for n in nodeset V do
+  StateTable(n).iState = 0;
+  StateTable(n).cState = 0;
+end for
+StateTable(s).iState = (1-d)/|Vp|;
+StateTable(s).cState = (1-d)/|Vp|;
+}}}
+
+*_StateUpdate_*
+
+Input: Key n, Value delta R
+{{{
+StateTable(n).iState = _sum_(StateTable(n).iState, delta R);
+StateTable(n).cState = _sum_(StateTable(n).cState, delta R);
+}}}
+
+*_PriorityDecision_*
+
+Input: Key n, Value iState
+{{{
+n.priority = iState;
+}}}
+
+*_Main_*
+
+{{{
+Job job = new Job();
+job.setMap(Map);
+job.setReduce(Reduce);
+job.setStaticDataPath(graphpath);
+job.setInitState(InitStateTable);
+job.setState(StateUpdate);
+job.setPriority(PriorityDecision);
+job.setFactorc(10);
+job.setTopK(1000);
+job.setSnapshotInterval(20);
+job.submit();
+}}}
