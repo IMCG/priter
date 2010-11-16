@@ -27,6 +27,7 @@ Output(n, _min_(Set(values)));
 }}}
 
 *_InitStateTable_*
+
 Input: sourcenode s
 {{{
 for n in nodeset V do
@@ -38,6 +39,7 @@ StateTable(s).cState = 0;
 }}}
 
 *_StateUpdate_*
+
 Input: Key n, Value distance(n)
 {{{
 StateTable(n).iState = _min_(StateTable(n).iState, distance(n));
@@ -45,12 +47,14 @@ StateTable(n).cState = _min_(StateTable(n).cState, distance(n));
 }}}
 
 *_PriorityDecision_*
+
 Input: Key n, Value iState
 {{{
 n.priority = -iState;
 }}}
 
 *_Main_*
+
 {{{
 Job job = new Job();
 job.setMap(Map);
