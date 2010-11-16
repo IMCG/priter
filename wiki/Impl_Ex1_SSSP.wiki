@@ -20,27 +20,36 @@ end for
 
 *Reduce*
 Input: Key n, Set (values)
+{{{
 Output(n, _min_(Set(values)));
+}}}
 
 *InitStateTable*
 Input: sourcenode s
+{{{
 for n in nodeset V do
   StateTable(n).iState = maxValue;
   StateTable(n).cState = maxValue;
 end for
 StateTable(s).iState = 0;
 StateTable(s).cState = 0;
+}}}
 
 *StateUpdate*
 Input: Key n, Value distance(n)
+{{{
 StateTable(n).iState = _min_(StateTable(n).iState, distance(n));
 StateTable(n).cState = _min_(StateTable(n).cState, distance(n));
+}}}
 
 *PriorityDecision*
 Input: Key n, Value iState
+{{{
 n.priority = -iState;
+}}}
 
 *Main*
+{{{
 Job job = new Job();
 job.setMap(Map);
 job.setReduce(Reduce);
@@ -52,3 +61,4 @@ job.setFactorc(10);
 job.setTopK(10000);
 job.setSnapshotInterval(5);
 job.submit();
+}}}
