@@ -11,7 +11,7 @@ To extract priority property from PageRank problem, we change PageRank to anothe
 
 Input: Key n, Value delta R
 {{{
-Set(links)=_lookup_ n's outlinks;
+Set(links)=lookup n outlinks;
 for link in Set(links) do
   Output(link.endnode, (d*delta R)/|Set(links)|);
 end for
@@ -21,7 +21,7 @@ end for
 
 Input: Key n, Set (values)
 {{{
-Output(n, _sum_(Set(values)));
+Output(n, sum(Set(values)));
 }}}
 
 *_InitStateTable_*
@@ -40,8 +40,8 @@ StateTable(s).cState = (1-d)/|Vp|;
 
 Input: Key n, Value delta R
 {{{
-StateTable(n).iState = _sum_(StateTable(n).iState, delta R);
-StateTable(n).cState = _sum_(StateTable(n).cState, delta R);
+StateTable(n).iState = sum(StateTable(n).iState, delta R);
+StateTable(n).cState = sum(StateTable(n).cState, delta R);
 }}}
 
 *_PriorityDecision_*
