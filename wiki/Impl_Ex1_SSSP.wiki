@@ -13,7 +13,7 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 
 Input: Key n, Value distance(n)
 {{{
-Set(links)=look up n's outlinks;
+Set(links)=lookup n outlinks;
 for link in Set(links) do
   Output(link.endnode, distance(n)+link.weight);
 end for
@@ -23,7 +23,7 @@ end for
 
 Input: Key n, Set (values)
 {{{
-Output(n, _min_(Set(values)));
+Output(n, min(Set(values)));
 }}}
 
 *_InitStateTable_*
@@ -42,8 +42,8 @@ StateTable(s).cState = 0;
 
 Input: Key n, Value distance(n)
 {{{
-StateTable(n).iState = _min_(StateTable(n).iState, distance(n));
-StateTable(n).cState = _min_(StateTable(n).cState, distance(n));
+StateTable(n).iState = min(StateTable(n).iState, distance(n));
+StateTable(n).cState = min(StateTable(n).cState, distance(n));
 }}}
 
 *_PriorityDecision_*
