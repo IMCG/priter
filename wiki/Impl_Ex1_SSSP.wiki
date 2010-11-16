@@ -3,7 +3,7 @@
 = Introduction =
 SSSP problem is a classical problem that derives the shortest distance from a source node to other nodes in a graph. Under a parallel computing environment, the most straightforward approach to find the shortest distance is to use breadth first search (BFS).
 
-In the MapReduce model, each iteration performs the above computation for all nodes. As a result, iteration _i_ computes the shortest distance up to $i$ hops away. However, as we can see from Dijsktra's algorithm, it is more efficient if we expand the node with the shortest distance first since it is more likely that node has already determine its shortest distance. Therefore, a prioritized execution of the iterative process is desirable.
+In the MapReduce model, each iteration performs the above computation for all nodes. As a result, iteration _i_ computes the shortest distance up to _i_ hops away. However, as we can see from Dijsktra's algorithm, it is more efficient if we expand the node with the shortest distance first since it is more likely that node has already determine its shortest distance. Therefore, a prioritized execution of the iterative process is desirable.
 
 A prioritized execution of the SSSP algorithm can be described as follows. In each iteration, only a subset of nodes perform the iterative computation. The selection of the subset is according to a priority. First, a node is eligible to perform the iterative computation only if it has obtained a shorter distance since its last time the iterative computation is performed on the node. Second, among all eligible nodes, the nodes with shorter distance have a higher priority to be activated to send its distance to its neighbors. Third, when the iterative operation is performed on a node, the node gets the distance values from neighboring nodes only if the neighboring nodes were activated since the node was last activated. The operation derives the shortest distance for the node among all distance values received. 
 
@@ -11,7 +11,42 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 
 *Map* 
 Input: Key n, Value distance(n)
-\<links\>=look up n's outlinks;
-*for* link in <links> *do*
-  Output(link.endnode, d(n)+link.weight);
-*end for*
+Set(links)=look up n's outlinks;
+for link in Set(links) do
+  Output(link.endnode, distance(n)+link.weight);
+end for
+
+*Reduce*
+Input: Key n, Set (values)
+Output(n, _min_(Set(values)));
+
+*InitStateTable*
+Input: sourcenode s
+for n in nodeset V do
+  StateTable(n).iState = maxValue;
+  StateTable(n).cState = maxValue;
+end for
+StateTable(s).iState = 0;
+StateTable(s).cState = 0;
+
+*StateUpdate*
+Input: Key n, Value distance(n)
+StateTable(n).iState = _min_(StateTable(n).iState, distance(n));
+StateTable(n).cState = _min_(StateTable(n).cState, distance(n));
+
+*PriorityDecision*
+Input: Key n, Value iState
+n.priority = -iState;
+
+*Main*
+Job job = new Job();
+job.setMap(Map);
+job.setReduce(Reduce);
+job.setStaticDataPath(graphpath);
+job.setInitState(InitStateTable);
+job.setState(StateUpdate);
+job.setPriority(PriorityDecision);
+job.setFactorc(10);
+job.setTopK(10000);
+job.setSnapshotInterval(5);
+job.submit();
