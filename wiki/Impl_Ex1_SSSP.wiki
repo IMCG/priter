@@ -1,4 +1,4 @@
-#summary Single Source Shortest Path iterative implementation with priority.
+#summary Single Source Shortest Path implementation with priority.
 
 = Introduction =
 SSSP problem is a classical problem that derives the shortest distance from a source node to other nodes in a graph. Under a parallel computing environment, the most straightforward approach to find the shortest distance is to use breadth first search (BFS).
