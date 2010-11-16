@@ -9,7 +9,7 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 
 = Details =
 
-*Map* 
+*_Map_* 
 Input: Key n, Value distance(n)
 {{{
 Set(links)=look up n's outlinks;
@@ -18,13 +18,13 @@ for link in Set(links) do
 end for
 }}}
 
-*Reduce*
+*_Reduce_*
 Input: Key n, Set (values)
 {{{
 Output(n, _min_(Set(values)));
 }}}
 
-*InitStateTable*
+*_InitStateTable_*
 Input: sourcenode s
 {{{
 for n in nodeset V do
@@ -35,20 +35,20 @@ StateTable(s).iState = 0;
 StateTable(s).cState = 0;
 }}}
 
-*StateUpdate*
+*_StateUpdate_*
 Input: Key n, Value distance(n)
 {{{
 StateTable(n).iState = _min_(StateTable(n).iState, distance(n));
 StateTable(n).cState = _min_(StateTable(n).cState, distance(n));
 }}}
 
-*PriorityDecision*
+*_PriorityDecision_*
 Input: Key n, Value iState
 {{{
 n.priority = -iState;
 }}}
 
-*Main*
+*_Main_*
 {{{
 Job job = new Job();
 job.setMap(Map);
