@@ -117,6 +117,7 @@ public class MapTask extends Task {
 							TaskAttemptID reduceTasktId = event.getTaskAttemptId();
 							
 							//LOG.info(reduceAttemptId.getTaskID() + " : " + reduceTaskId);
+							/*
 							if(job.getBoolean("mapred.iterative.mapsync", false)){
 								if (!reduceTasks.contains(reduceTasktId)) {
 									BufferExchange.BufferType type = BufferExchange.BufferType.PKVBUF;
@@ -137,7 +138,7 @@ public class MapTask extends Task {
 							}else{
 								//LOG.info("I am here for reduce buffer request " + reduceTasktId.getTaskID() + " : " + oneReduceTaskId);
 								//wrong
-								
+							*/	
 								if (reduceTasktId.getTaskID().equals(oneReduceTaskId)) {
 									LOG.info("Map " + getTaskID() + " sending buffer request to reducer " + oneReduceTaskId);
 									BufferExchange.BufferType type = BufferExchange.BufferType.PKVBUF;
@@ -152,7 +153,7 @@ public class MapTask extends Task {
 										LOG.warn("BufferUmbilical problem sending request " + request + ". " + e);
 									}
 								}
-							}					
+							//}					
 						}
 						break;
 						}
@@ -218,7 +219,8 @@ public class MapTask extends Task {
 	}
 	
 	@Override
-	public int getNumberOfInputs() { 		
+	public int getNumberOfInputs() { 	
+		/*
 		if(job != null && job.getBoolean("mapred.iterative.mapsync", false)){
 			return job.getInt("mapred.iterative.ttnum", 0);
 		}else if(this.isIterative()){
@@ -226,6 +228,8 @@ public class MapTask extends Task {
 		}else{
 			return super.getNumberOfInputs();
 		}	
+		*/
+		return 1;
 	}
 	
 	@Override
