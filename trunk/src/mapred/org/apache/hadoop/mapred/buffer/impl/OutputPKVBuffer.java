@@ -114,7 +114,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		this.topk = this.job.getInt("mapred.iterative.topk", 0);
 		this.emitSize = job.getInt("mapred.iterative.reduce.emitsize", 100);
 		this.wearfactor = job.getFloat("mapred.iterative.output.wearfactor", (float)10);
-		int type = job.getInt("mapred.iterative.priority.type", 2);
+		int type = job.getInt("mapred.iterative.priority.type", 0);
 		if(type == 0){
 			this.priType = PRI_TYPE.SORT;
 		}else if(type == 1){
@@ -518,7 +518,8 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		
 		this.iteration++;
 		
-		int partitions = job.getBoolean("mapred.iterative.mapsync", false) ? job.getInt("mapred.iterative.ttnum", 1) : 1;
+		//int partitions = job.getBoolean("mapred.iterative.mapsync", false) ? job.getInt("mapred.iterative.ttnum", 1) : 1;
+		int partitions = 1;
 		return new OutputFile(this.taskAttemptID, this.iteration, filename, indexFilename, partitions);
 		
 	}

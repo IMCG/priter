@@ -526,7 +526,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					if (collector.read(istream, header)) {
 						updateProgress(header);
 						
-						if(conf.getBoolean("mapred.iterative.reducesync", false)){
+						//if(conf.getBoolean("mapred.iterative.reducesync", false)){
 							int recMaps = (syncMapPos.containsKey(position.longValue())) ? syncMapPos.get(position.longValue()) + 1 : 1;
 
 							LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
@@ -537,10 +537,10 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 							}else{
 								syncMapPos.put(position.longValue(), recMaps);
 							}
-						}else{
-							((ReduceTask)task).spillIter = true;
-							task.notifyAll();
-						}
+						//}else{
+							//((ReduceTask)task).spillIter = true;
+							//task.notifyAll();
+						//}
 			
 						//task.notifyAll();
 						position.set(header.sequence() + 1);
@@ -680,7 +680,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					
 					if (collector.read(istream, header)) {
 						updateProgress(header);
-						
+						/*
 						if(conf.getBoolean("mapred.iterative.mapsync", false)){
 							int recReduces = (syncReducePos.containsKey(position.longValue())) ? syncReducePos.get(position.longValue()) + 1 : 1;
 
@@ -692,9 +692,10 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 								syncReducePos.put(position.longValue(), recReduces);
 							}
 						}else{
+						*/
 							task.notifyAll();	
 							
-						}
+						//}
 						position.set(header.iteration() + 1);
 						LOG.debug("PKVBuffer handler " + " done receiving up to position " + position.longValue());
 					}else {

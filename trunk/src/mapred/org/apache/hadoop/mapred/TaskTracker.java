@@ -716,6 +716,7 @@ public class TaskTracker
 					  } else if(task.isMapTask() && task.isIterative()) {
 						  //LOG.info("iterative map task is " + task);
 
+						  /*
 						  if(rjob.jobConf.getBoolean("mapred.iterative.mapsync", false)){
 				                if (rjob.getReduceFetchStatus() == null) {
 						              
@@ -727,6 +728,7 @@ public class TaskTracker
 				                if(f != null) fList.add(f);
 					                
 						  }else{
+						  */
 							  TaskID reduceID = null;
 							  for (TaskInProgress tip2 : rjob.tasks) {
 								  if(!tip2.getTask().isMapTask()){
@@ -746,7 +748,7 @@ public class TaskTracker
 							  f = rjob.getReduceFetchStatus();
 							  if(f != null) fList.add(f);	
 							  
-						  }
+						  //}
 						  break;
 					  }
 				  }
@@ -928,9 +930,12 @@ public class TaskTracker
         				(e.getTaskAttemptId().getId() <= runningJobs.get(jobId).jobConf.getInt("mapred.iterative.ttnum", 0))){
         			//LOG.info("add event : " + e + " is map? " + isMap);
         			allEvents.add(e);
-        		}else if(getJobConf(jobId).getBoolean("mapred.iterative.mapsync", false)){
+        		}
+        		/*
+        		else if(getJobConf(jobId).getBoolean("mapred.iterative.mapsync", false)){
         			allEvents.add(e);
         		}
+        		*/
         	}
         }
         
