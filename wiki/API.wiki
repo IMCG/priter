@@ -2,7 +2,9 @@
 
 = System Property Parameters =
 
-|| table || cells ||
+|| property name || type || default value ||
+|| "mapred.job.iterative" || boolean || false ||
+
 
 * "mapred.job.iterative" (boolean, true)
 * "mapred.iterative.topk" (integer, 10)
