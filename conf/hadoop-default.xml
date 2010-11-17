@@ -1548,4 +1548,39 @@ creations/deletions), or "all".</description>
   </description>
 </property>
 
+<property>
+  <name>mapred.job.iterative</name>
+  <value>false</value>
+  <description> prioritized iterative processing
+  </description>
+</property>
+
+<property>
+  <name>mapred.iterative.output.wearfactor</name>
+  <value>10</value>
+  <description> The ratio of the computation to the overhead.
+  </description>
+</property>
+
+<property>
+  <name>mapred.iterative.snapshot.interval</name>
+  <value>20000</value>
+  <description> The snapshot generation interval (ms).
+  </description>
+</property>
+
+<property>
+  <name>mapred.iterative.reduce.emitsize</name>
+  <value>100</value>
+  <description> The initial output queue size.
+  </description>
+</property>
+
+<property>
+  <name>mapred.iterative.reduce.window</name>
+  <value>-1</value>
+  <description> the window size for waiting reduce operation.
+  </description>
+</property>
+
 </configuration>
