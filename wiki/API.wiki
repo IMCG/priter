@@ -1,0 +1,17 @@
+#summary PrIter API.
+
+= System Property Parameters =
+
+|| table || cells ||
+
+* "mapred.job.iterative" (boolean, true)
+* "mapred.iterative.topk" (integer, 10)
+* "mapred.iterative.output.wearfactor" ()
+
+
+= User-Defined Functions =
+
+Add your content here.  Format your content with:
+  * Text in *bold* or _italic_
+  * Headings, paragraphs, and lists
+  * Automatic links to other wiki pages
