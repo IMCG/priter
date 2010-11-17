@@ -12,7 +12,10 @@
 
 = User-Defined Functions =
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+|| *function* || *input* || *output* || *description* || *invoked* ||
+|| Map.initStateTable() || StateTable || na || initialize the StateTable || in the init phase ||
+|| Map.loadStaticData() || static data path || na || load the static data to memory || in the init phase ||
+|| Map.iterate() || na || na || do some summarization || after each map-reduce iteration ||
+|| Reduce.updateState() || output key-value pair || iState & cState || set each output key-value pair's state || after reduce operation ||
+|| Reduce.setPriority() || output key-value pair || priority || set each output key-value pair's priority || before enqueue ||
+|| Reduce.iterate() || na || na || do some summarization || after each map-reduce iteration ||
