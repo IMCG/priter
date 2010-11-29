@@ -10,24 +10,27 @@ import org.apache.hadoop.io.WritableComparable;
 public class PriorityRecord<P extends Object, V extends Object>
 				implements Writable, Comparable<PriorityRecord<P, V>> {
 	private P priority;
-	private V value;
+	private V iState;
+	private V cState;
 		
 	public PriorityRecord() {
 		super();
 	}
 	
-	public PriorityRecord(P p, V v) {
+	public PriorityRecord(P p, V iniState, V incState) {
 		super();
 		
 		priority = p;
-		value = v;
+		iState = iniState;
+		cState = incState;
 	}
 
 	public PriorityRecord(PriorityRecord<P, V> record) {
 		super();
 		
 		priority = record.priority;
-		value = record.value;
+		iState = record.iState;
+		cState = record.cState;
 	}
 	
 	@Override
@@ -44,7 +47,7 @@ public class PriorityRecord<P extends Object, V extends Object>
 
 	@Override
 	public int hashCode() {
-		return this.value.hashCode();
+		return this.iState.hashCode();
 	}
 	
 	@Override
@@ -53,16 +56,24 @@ public class PriorityRecord<P extends Object, V extends Object>
 		return ((WritableComparable)this.priority).compareTo(other.priority);
 	}
 	
-	public V getValue() {
-		return this.value;
+	public V getiState() {
+		return this.iState;
+	}
+	
+	public V getcState() {
+		return this.cState;
 	}
 	
 	public P getPriority() {
 		return this.priority;
 	}
 	
-	public void setValue(V v) {
-		this.value = v;
+	public void setiState(V iniState) {
+		this.iState = iniState;
+	}
+	
+	public void setcState(V incState) {
+		this.cState = incState;
 	}
 	
 	public void setPriority(P p) {
@@ -72,17 +83,19 @@ public class PriorityRecord<P extends Object, V extends Object>
 	@Override
 	public void readFields(DataInput in) throws IOException {
 		((Writable) this.priority).readFields(in);
-		((Writable) this.value).readFields(in);
+		((Writable) this.iState).readFields(in);
+		((Writable) this.cState).readFields(in);
 	}
 
 	@Override
 	public void write(DataOutput out) throws IOException {
 		((Writable)this.priority).write(out);
-		((Writable)this.value).write(out);
+		((Writable)this.iState).write(out);
+		((Writable)this.cState).write(out);
 	}
 
 	@Override
 	public String toString(){
-		return new String(priority + "\t" + value);
+		return new String(priority + "\t" + iState + "\t" + cState);
 	}
 }

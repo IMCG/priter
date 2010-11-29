@@ -19,18 +19,11 @@ public interface IterativeReducer<P extends Writable, K2, V2, K3 extends Writabl
 	 */
 	boolean snapshot(BufferedWriter writer) throws IOException;
 	
-	P[] bufSplit(P min, P max, boolean init);
-	
-	int bucketTransfer(int[] bucketSize);
-	
-	void defaultKV(K3 k, V3 v);
-	
-	P bound(P min, P max);
-	
-	void combine(P priority1, V3 value1, P priority2, V3 value2, PriorityRecord<P, V3> output);
-	
 	//get priority function
-	P setPriority(K3 key, V3 value);
+	P setPriority(V3 iState);
+	V3 setDefaultiState();
+	V3 updateState(V3 oldState, V3 value);
+	void defaultKV(K3 key, V3 value);
 	
 	void reduce(K2 key, Iterator<V2> values,
 			OutputPKVBuffer<P, K3, V3> output, Reporter reporter)
