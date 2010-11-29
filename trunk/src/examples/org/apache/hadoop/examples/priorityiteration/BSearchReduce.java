@@ -291,4 +291,22 @@ public class BSearchReduce extends MapReduceBase implements
 	public void iterate() {
 		iterate++;
 	}
+
+	@Override
+	public Text setDefaultiState() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public IntWritable setPriority(Text iState) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Text updateState(Text oldState, Text value) {
+		// TODO Auto-generated method stub
+		return null;
+	}
 }

@@ -19,6 +19,8 @@
 package org.apache.hadoop.examples;
 import org.apache.hadoop.examples.dancing.DistributedPentomino;
 import org.apache.hadoop.examples.dancing.Sudoku;
+import org.apache.hadoop.examples.priorityiteration.BSearch;
+import org.apache.hadoop.examples.priorityiteration.PageRank;
 import org.apache.hadoop.examples.terasort.TeraGen;
 import org.apache.hadoop.examples.terasort.TeraSort;
 import org.apache.hadoop.examples.terasort.TeraValidate;
@@ -69,6 +71,9 @@ public class ExampleDriver {
       pgd.addClass("teragen", TeraGen.class, "Generate data for the terasort");
       pgd.addClass("terasort", TeraSort.class, "Run the terasort");
       pgd.addClass("teravalidate", TeraValidate.class, "Checking results of terasort");
+      
+      pgd.addClass("shortestpath", BSearch.class, "BFS shortest path");
+      pgd.addClass("pagerank", PageRank.class, "pagerank");
       pgd.driver(argv);
 
       // Success
