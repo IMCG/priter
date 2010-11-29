@@ -202,16 +202,7 @@ public class ReduceTask extends Task {
 			FSDataOutputStream ostream = hdfs.create(new Path(snapshot), true);
 			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 			
-			iterReducer.snapshot(writer);
-
-			/*
-			//for sort, n buckets
-			TextOutputFormat.LineRecordWriter outBucket[] = new TextOutputFormat.LineRecordWriter[ttnum];
-			for(int i=0; i<ttnum; i++){
-				outBucket[i] = 
-					(TextOutputFormat.LineRecordWriter)conf.getOutputFormat().getRecordWriter(fs, conf, filename, reporter);
-			}
-			*/
+			pkvBuffer.snapshot(writer, index);
 	    
 			writer.close();
 			ostream.close();
