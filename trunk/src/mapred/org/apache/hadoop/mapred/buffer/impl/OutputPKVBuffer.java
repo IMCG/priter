@@ -1,5 +1,6 @@
 package org.apache.hadoop.mapred.buffer.impl;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -42,13 +43,9 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	//**************************************
 	private static final Log LOG = LogFactory.getLog(OutputPKVBuffer.class.getName());
 	
-	private static enum PRI_TYPE{SORT, BUCKET, THRESHOLD};
-	private PRI_TYPE priType;
-	
 	private TaskAttemptID taskAttemptID;
 	private int iteration = 0;
-	private int topk;
-	private Class<P> priorityClass;
+	//private Class<P> priorityClass;
 	private Class<K> keyClass;	
 	private Class<V> valClass;
 	public boolean start = false;
@@ -62,26 +59,14 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
     Serializer<K> keySerializer;
     Serializer<V> valueSerializer;
     DataOutputBuffer buffer = new DataOutputBuffer();
+    private V defaultiState;
     
     private IterativeReducer iterReducer = null;
 
 	//main part of this class, storing priority-key-value records
-	private Map<K, PriorityRecord<P, V>> HoldMap = new HashMap<K, PriorityRecord<P, V>>();
-	private ArrayList<KVRecord<K, V>> records = new ArrayList<KVRecord<K, V>>();
+	private Map<K, PriorityRecord<P, V>> stateTable = new HashMap<K, PriorityRecord<P, V>>();
+	private ArrayList<KVRecord<K, V>> priorityQueue = new ArrayList<KVRecord<K, V>>();
 	
-	//for buffer control
-	//for buckets method
-	private P minP;
-	private P maxP;
-	private P initMinP;
-	private P initMaxP;
-	private P[] steps;
-	private ArrayList[] buckets = new ArrayList[10];
-	
-	//for threshold;
-	private P thresholdP;
-	
-	private int iter;
 	public int total_map = 0;
 	public int total_reduce = 0;
 	
@@ -93,6 +78,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	public int actualEmit = 0;
 	public static int WAIT_ITER = 2;
 	private float wearfactor;
+	private int topk;
 	
 	public OutputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
 			Reporter reporter, Progress progress, 
@@ -102,7 +88,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		LOG.info("OutputPKVBuffer is reset for task " + task.getTaskID());
 
 		this.taskAttemptID = task.getTaskID();
-		this.priorityClass = priorityClass;
+		//this.priorityClass = priorityClass;
 		this.keyClass = keyClass;
 		this.valClass = valClass;
 		
@@ -110,32 +96,11 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		this.localFs = FileSystem.getLocal(job);
 		this.outputHandle = new FileHandle(taskAttemptID.getJobID());
 		this.outputHandle.setConf(job);
-		//this.bSort = this.job.getBoolean("mapred.iterative.sort", true);
-		this.topk = this.job.getInt("mapred.iterative.topk", 0);
 		this.emitSize = job.getInt("mapred.iterative.reduce.emitsize", 100);
 		this.wearfactor = job.getFloat("mapred.iterative.output.wearfactor", (float)10);
-		int type = job.getInt("mapred.iterative.priority.type", 0);
-		if(type == 0){
-			this.priType = PRI_TYPE.SORT;
-		}else if(type == 1){
-			this.priType = PRI_TYPE.BUCKET;
-		}else if(type == 2){
-			this.priType = PRI_TYPE.THRESHOLD;
-		}
-		this.iterReducer = iterReducer;
-				
-		LOG.info(priorityClass);
-		minP = (P)WritableFactories.newInstance(priorityClass, job);
-		maxP = (P)WritableFactories.newInstance(priorityClass, job);
-		iterReducer.bufSplit(minP, maxP, true);
-		initMinP = minP;
-		initMaxP = maxP;
-		thresholdP = (P)this.iterReducer.bound(minP, maxP);
-		//10 buckets storing kv pairs, desend order
-		for(int i=0; i<buckets.length; i++){
-			buckets[i] = new ArrayList<K>();
-		}
-		iter = 0;
+		this.topk = job.getInt("mapred.iterative.topk", 1000);
+		this.iterReducer = iterReducer;		
+		this.defaultiState = (V)iterReducer.setDefaultiState();
 		
 		Date start = new Date();
 	}
@@ -148,116 +113,9 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		return this.taskAttemptID;
 	}
 
-	private synchronized ArrayList<KVRecord<K, V>> getThresholdRecords() {
-		synchronized(this.HoldMap){	
-			ArrayList<KVRecord<K, V>> toprecords = new ArrayList<KVRecord<K, V>>();
-			
-			Iterator<K> hold_itr = new ArrayList<K>(this.HoldMap.keySet()).iterator();
-			int count = 0;
-			PriorityRecord<P, V> rec = null;
-			while(hold_itr.hasNext()){
-				K key = hold_itr.next();
-				rec = this.HoldMap.get(key);
-				
-				//LOG.info(rec + "\t" + thresholdP);
-				if(((WritableComparable)rec.getPriority()).compareTo(thresholdP) >= 0){
-					toprecords.add(new KVRecord<K, V>(key, rec.getValue()));
-					this.HoldMap.remove(key);
-					count++;
-				}
-			}
-				
-			return toprecords;
-		}
-	}
-	
-	@SuppressWarnings("unchecked")
-	private synchronized ArrayList<KVRecord<K, V>> getBucketRecords() {
-		synchronized(this.HoldMap){		
-			steps = (P[])this.iterReducer.bufSplit(minP, maxP, false);
-						
-			for(int i=0; i<10; i++){
-				buckets[i].clear();
-			}
-			
-			Iterator<K> hold_itr = new ArrayList<K>(this.HoldMap.keySet()).iterator();
-			while(hold_itr.hasNext()){
-				K key = hold_itr.next();
-				P pri = this.HoldMap.get(key).getPriority();
-				
-				if(((WritableComparable)pri).compareTo(steps[0]) >= 0){
-					buckets[0].add(key);
-				}else if(((WritableComparable)pri).compareTo(steps[1]) >= 0){
-					buckets[1].add(key);
-				}else if(((WritableComparable)pri).compareTo(steps[2]) >= 0){
-					buckets[2].add(key);
-				}else if(((WritableComparable)pri).compareTo(steps[3]) >= 0){
-					buckets[3].add(key);
-				}else if(((WritableComparable)pri).compareTo(steps[4]) >= 0){
-					buckets[4].add(key);
-				}else if(((WritableComparable)pri).compareTo(steps[5]) >= 0){
-					buckets[5].add(key);
-				}else if(((WritableComparable)pri).compareTo(steps[6]) >= 0){
-					buckets[6].add(key);
-				}else if(((WritableComparable)pri).compareTo(steps[7]) >= 0){
-					buckets[7].add(key);
-				}else if(((WritableComparable)pri).compareTo(steps[8]) >= 0){
-					buckets[8].add(key);
-				}else{
-					buckets[9].add(key);
-				}
-			}
-		
-			LOG.info("iter " + (iter++) + " buckets status, min " + minP + " max " + maxP + 
-					" bucket[0]=" + buckets[0].size() +
-					" bucket[1]=" + buckets[1].size() +
-					" bucket[2]=" + buckets[2].size() +
-					" bucket[3]=" + buckets[3].size() +
-					" bucket[4]=" + buckets[4].size() +
-					" bucket[5]=" + buckets[5].size() +
-					" bucket[6]=" + buckets[6].size() +
-					" bucket[7]=" + buckets[7].size() +
-					" bucket[8]=" + buckets[8].size() +
-					" bucket[9]=" + buckets[9].size());
-
-			int[] bucketSizes = new int[10];
-			for(int i=0; i<10; i++){
-				bucketSizes[i] = buckets[i].size();
-			}
-			int bucketIndex = this.iterReducer.bucketTransfer(bucketSizes);
-			
-			ArrayList<KVRecord<K, V>> records = new ArrayList<KVRecord<K, V>>();
-			int count = 0;
-				
-			List<K> keys = new ArrayList<K>();
-			for(int index=0; index<bucketIndex; index++){
-				keys.addAll(buckets[index]);
-			}
-						
-			Iterator<K> sort_itr =keys.iterator();
-			PriorityRecord<P, V> record = null;
-			while(sort_itr.hasNext()){
-				Object k = sort_itr.next();
-				record = HoldMap.get(k);
-				
-				records.add(new KVRecord(k, record.getValue()));				
-				
-				this.HoldMap.remove(k);	
-				count++;
-			}
-			
-			LOG.info("expend " + count + " k-v pairs");
-			
-			maxP = (bucketIndex > 0) ? steps[bucketIndex-1] : steps[0];
-
-			return records;
-			
-		}
-	}
-	
 	private synchronized ArrayList<KVRecord<K, V>> getSortRecords() {
-		synchronized(this.HoldMap){	
-			List<K> keys = new ArrayList<K>(this.HoldMap.keySet());
+		synchronized(this.stateTable){	
+			List<K> keys = new ArrayList<K>(this.stateTable.keySet());
 			
 			Date start_sort_date = new Date();
 			long start_sort = start_sort_date.getTime();
@@ -265,7 +123,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 			iter_time = (iter_time_per_node <= 0) ? 0.2 : iter_time_per_node;
 			
 			//LOG.info("heap size : " + this.recordsMap.size());
-			final Map<K, PriorityRecord<P, V>> langForSort = HoldMap;
+			final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
 			Collections.sort(keys, 
 					new Comparator(){
 						public int compare(Object left, Object right){
@@ -282,13 +140,13 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 			
 			sort_time = end_sort - start_sort + 500;
 			
-			if (iter > WAIT_ITER){
+			if (iteration > WAIT_ITER){
 				emitSize = (int) ((double)(sort_time * wearfactor) / iter_time);
 			}
 			if (emitSize == 0){
 				emitSize = 1;
 			}
-			LOG.info("iteration " + iter + " outputqueuesize " + emitSize + " wearfactor " + wearfactor 
+			LOG.info("iteration " + iteration + " outputqueuesize " + emitSize + " wearfactor " + wearfactor 
 					+ " overhead: " + sort_time + 
 					" on " + keys.size() + " nodes, iterationtime " + (start_sort - iter_previous_time) 
 					+ " and " + iter_time + " per key");
@@ -302,26 +160,18 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 			PriorityRecord<P, V> record = null;
 			while(sort_itr.hasNext() && actualEmit<this.emitSize){
 				Object k = sort_itr.next();
-				record = HoldMap.get(k);				
-				records.add(new KVRecord(k, record.getValue()));								
-				this.HoldMap.remove(k);	
+				record = stateTable.get(k);				
+				records.add(new KVRecord(k, record.getiState()));
+				this.stateTable.get(k).setiState(defaultiState);
 				actualEmit++;
 			}
 			
-			LOG.info("iteration " + iter + " expend " + actualEmit + " k-v pairs");
-			iter++;
+			LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs");
 			return records;
 		}
 	}
 	
-	public synchronized void collect(P priority, K key, V value) throws IOException {
-		//LOG.info("some key value pair in: " + priority + " : " + key + " : " + value);
-		
-		if (priority.getClass() != priorityClass) {
-			throw new IOException("Type mismatch in priority from map: expected "
-					+ priorityClass.getName() + ", recieved "
-					+ priority.getClass().getName());
-		}
+	public synchronized void collect(K key, V value) throws IOException {
 		if (key.getClass() != keyClass) {
 			throw new IOException("Type mismatch in key from map: expected "
 					+ keyClass.getName() + ", recieved "
@@ -334,60 +184,24 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		}
 				
 		start = true;
-		synchronized(this.HoldMap){		
-			PriorityRecord<P, V> newpkvRecord = new PriorityRecord<P, V>();
-			P pri = priority;
+		synchronized(this.stateTable){		
+			P pri;
 
-			//do combination
-			boolean merge = false;
-			if(this.HoldMap.containsKey(key)){
-				merge = true;
-				PriorityRecord<P, V> pkvRecord = this.HoldMap.get(key);
-				this.iterReducer.combine(priority, value, 
-						pkvRecord.getPriority(), pkvRecord.getValue(),
-						newpkvRecord);	
-				pri = newpkvRecord.getPriority();
-				/*
-				LOG.info("priority1 " + priority + " value1 " + value + 
-						"\tpriority2 " + pkvRecord.getPriority() + " value2 " + pkvRecord.getValue() + 
-						"\tfinal priority " + newpkvRecord.getPriority() + " final value " + newpkvRecord.getValue());
-				*/
+			if(this.stateTable.containsKey(key)){
+				PriorityRecord<P, V> pkvRecord = this.stateTable.get(key);
+				V newiState = (V)iterReducer.updateState(pkvRecord.getiState(), value);
+				V newcState = (V)iterReducer.updateState(pkvRecord.getcState(), value);
+				pri = (P)iterReducer.setPriority(newiState);
+				pkvRecord.setPriority(pri);
+				pkvRecord.setiState(newiState);
+				pkvRecord.setcState(newcState);
 			}else{
-				newpkvRecord.setPriority(priority);
-				newpkvRecord.setValue(value);
-			}
-			
-			if(this.priType == PRI_TYPE.THRESHOLD){
-				//LOG.info("compare " + pri + "\t" +  thresholdP);
-				if(((WritableComparable)pri).compareTo(thresholdP) > 0){
-					this.records.add(new KVRecord<K, V>(key, newpkvRecord.getValue()));
-					if(merge){
-						this.HoldMap.remove(key);
-					}
-				}else{
-					this.HoldMap.put(key, newpkvRecord);
-				}
-				
-				if(((WritableComparable)pri).compareTo(maxP) > 0){
-					maxP = pri;
-				}else if(((WritableComparable)pri).compareTo(minP) < 0){
-					minP = pri;
-				}	
-			}else if(this.priType == PRI_TYPE.SORT){
-				this.HoldMap.put(key, newpkvRecord);
-			}else if(this.priType == PRI_TYPE.BUCKET){
-	
+				pri = (P)iterReducer.setPriority(value);
+				PriorityRecord<P, V> newpkvRecord = new PriorityRecord<P, V>(pri, value, value);
+				this.stateTable.put(key, newpkvRecord);
 			}
 		}
 		total_reduce++;
-	}
-	
-	@Override
-	public synchronized void collect(K key, V value) throws IOException {
-		//LOG.info("some key value pair in: " + key + " : " + value);
-		
-		//PriorityRecord<K, V> rec = new PriorityRecord<K, V>(Integer.MIN_VALUE, key, value);
-		//this.recordsMap.put(key, rec);
 	}
 	
 	/**
@@ -429,64 +243,28 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 			
 			ArrayList<KVRecord<K, V>> entries = null;
 			
-			if(this.priType == PRI_TYPE.THRESHOLD){
-				if(iteration % 10 == 0){
-					LOG.info("hold buffer reshape");
-					entries = getThresholdRecords();			
-				}
-				
-				//determine threshold for next round
-				thresholdP = (P)this.iterReducer.bound(minP, maxP);
-				LOG.info("mapP is " + maxP + " threshold is " + thresholdP);
-				maxP = thresholdP;
-
-			}else if(this.priType == PRI_TYPE.BUCKET){
-				entries = getBucketRecords();
-			}else if(this.priType == PRI_TYPE.SORT){
-				Date current = new Date();
-				iter_time = (current.getTime() - iter_previous_time) / emitSize;
-				entries = getSortRecords();
-			}
+			Date current = new Date();
+			iter_time = (current.getTime() - iter_previous_time) / emitSize;
+			entries = getSortRecords();
+			
 	
-			if(entries != null) records.addAll(entries);
+			if(entries != null) this.priorityQueue.addAll(entries);
 			int count = 0;
 					
-			if(records.size() == 0){
+			if(priorityQueue.size() == 0){
 				LOG.info("no records to send");
 				K k = (K)WritableFactories.newInstance(keyClass, job);
 				V v = (V)WritableFactories.newInstance(valClass, job);
 				this.iterReducer.defaultKV(k, v);
 				writer.append(k, v);
-				/*
-				if (null != writer) {
-					writer.close();
-					writer = null;
-				}
-				
-				if (out != null){
-					out.close();
-					out = null;
-				}
-				if (indexOut != null) {
-					indexOut.close();
-					indexOut = null;
-				}
-				 
-				localFs.delete(filename, true);
-				localFs.delete(indexFilename, true);
-				return null;
-				*/
 			}else{
-				//LOG.info("emit size: " + emitRecSize);
-				//int writedRecords = 0;
-				for(KVRecord<K, V> entry : records){		
+				for(KVRecord<K, V> entry : priorityQueue){		
 					writer.append(entry.k, entry.v);
-					//writedRecords++;
 					//LOG.info("send records: " + entry.k + " : " + entry.v);
 					entry = null;
 					count++;
 				}
-				records.clear();
+				priorityQueue.clear();
 				total_map += count;
 			}		
 			writer.close();
@@ -528,14 +306,6 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 			FSDataOutputStream out, long start,
 			IFile.Writer<K, V> writer)
 	throws IOException {
-		//when we write the offset/decompressed-length/compressed-length to
-		//the final index file, we write longs for both compressed and
-		//decompressed lengths. This helps us to reliably seek directly to
-		//the offset/length for a partition when we start serving the
-		//byte-ranges to the reduces. We probably waste some space in the
-		//file by doing this as opposed to writing VLong but it helps us later on.
-		// index record: <offset, raw-length, compressed-length>
-		//StringBuffer sb = new StringBuffer();
 		indexOut.writeLong(start);
 		indexOut.writeLong(writer.getRawLength());
 		long segmentLength = out.getPos() - start;
@@ -545,33 +315,49 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 				start + ", " + writer.getRawLength() + ", " + segmentLength);
 	}
 	
+	public void snapshot(BufferedWriter writer, int snapshot_index) {
+
+		synchronized(this.stateTable){
+			final Map<K, PriorityRecord<P, V>> langForComp = this.stateTable;
+			List<K> keys = new ArrayList<K>(this.stateTable.keySet());
+			Collections.sort(keys, 
+					new Comparator(){
+						public int compare(Object left, Object right){
+							P leftpriority = (P)iterReducer.setPriority(langForComp.get((K)left).getcState());
+							P rightpriority = (P)iterReducer.setPriority(langForComp.get((K)right).getcState());
+
+							return ((WritableComparable)leftpriority).compareTo(rightpriority);
+						}
+					});
+
+			Iterator<K> itr =keys.iterator();
+			PriorityRecord<P, V> record = null;
+			int count = 0;
+			int len = 0;
+			while(itr.hasNext() && count < topk){
+				K k = itr.next();
+				record = stateTable.get(k);	
+				
+				if(record.getcState().equals(defaultcState)) break;
+				
+				writer.write(record.getPriority() + "\t" + k + "\t" + record.getcState() + "\n");
+				
+				count++;
+			}
+
+			System.out.println("snapshot index " + snapshot_index + " iterations " + iterate +
+					" reduce is " + reduce + " compare is " + compare);
+		}
+	}
+	
 	@Override
 	public String toString() {
 		return new String(this.taskAttemptID + " priority buffer(" + this.iteration + ")");
 	}
 	
 	public int size() {
-		synchronized(this.HoldMap){
-			return this.HoldMap.size();
+		synchronized(this.stateTable){
+			return this.stateTable.size();
 		}		
 	}
-	/*
-	public void bufferStat() {
-		Iterator<K> hold_itr = new ArrayList<K>(this.HoldMap.keySet()).iterator();
-		minP = initMinP;
-		maxP = initMaxP;
-		while(hold_itr.hasNext()){
-			K key = hold_itr.next();
-			P pri = this.HoldMap.get(key).getPriority();
-			
-			if(((WritableComparable)pri).compareTo(minP) < 0){
-				minP = pri;
-			}
-			if(((WritableComparable)pri).compareTo(maxP) > 0){
-				maxP = pri;
-			}
-			
-		}
-	}
-	*/
 }
