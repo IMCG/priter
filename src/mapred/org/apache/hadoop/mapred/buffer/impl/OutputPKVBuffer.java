@@ -60,6 +60,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
     Serializer<V> valueSerializer;
     DataOutputBuffer buffer = new DataOutputBuffer();
     private V defaultiState;
+    private V defaultcState;
     
     private IterativeReducer iterReducer = null;
 
@@ -101,6 +102,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		this.topk = job.getInt("mapred.iterative.topk", 1000);
 		this.iterReducer = iterReducer;		
 		this.defaultiState = (V)iterReducer.setDefaultiState();
+		this.defaultcState = (V)iterReducer.setDefaultcState();
 		
 		Date start = new Date();
 	}
@@ -315,7 +317,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 				start + ", " + writer.getRawLength() + ", " + segmentLength);
 	}
 	
-	public void snapshot(BufferedWriter writer, int snapshot_index) {
+	public void snapshot(BufferedWriter writer, int snapshot_index) throws IOException {
 
 		synchronized(this.stateTable){
 			final Map<K, PriorityRecord<P, V>> langForComp = this.stateTable;
@@ -345,8 +347,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 				count++;
 			}
 
-			System.out.println("snapshot index " + snapshot_index + " iterations " + iterate +
-					" reduce is " + reduce + " compare is " + compare);
+			System.out.println("snapshot index " + snapshot_index + " iterations " + iteration);
 		}
 	}
 	
