@@ -22,7 +22,10 @@ public interface IterativeReducer<P extends Writable, K2, V2, K3 extends Writabl
 	//get priority function
 	P setPriority(V3 iState);
 	V3 setDefaultiState();
+	V3 setDefaultcState();
 	V3 updateState(V3 oldState, V3 value);
+	
+	//avoid no records to send to activate map
 	void defaultKV(K3 key, V3 value);
 	
 	void reduce(K2 key, Iterator<V2> values,
