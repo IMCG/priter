@@ -39,22 +39,5 @@ public class MainDriver {
 	public static final String IN_MEM = "store.in.memory";
 	
 	public static final int MACHINE_NUM = 3;
-		
-	public static void main(String[] args) {
-		// TODO Auto-generated method stub
-		int exitCode = -1;
-	    ProgramDriver pgd = new ProgramDriver();
-	    try {
-	    	pgd.addClass("bsearch", BSearch.class, "shortest path");
-	    	pgd.addClass("pagerank", PageRank.class, "pagerank");
-	    	
-	    	pgd.driver(args);
-	    	exitCode = 0;
-	    }
-	    catch(Throwable e){
-	      e.printStackTrace();
-	    }
-	    
-	    System.exit(exitCode);
-	  }
+
 }
