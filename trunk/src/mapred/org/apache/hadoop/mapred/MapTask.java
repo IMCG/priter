@@ -187,7 +187,6 @@ public class MapTask extends Task {
 	
     protected Class inputKeyClass;
     protected Class inputValClass;
-    protected Class priorityClass;
     
     protected TaskID pipeReduceTaskId = null;
 
@@ -368,7 +367,6 @@ public class MapTask extends Task {
 
 				this.inputKeyClass = job.getMapOutputKeyClass();
 				this.inputValClass = job.getMapOutputValueClass();
-				this.priorityClass = job.getPriorityClass();
 				Class<? extends CompressionCodec> codecClass = null;
 				if (conf.getCompressMapOutput()) {
 					codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
@@ -414,7 +412,7 @@ public class MapTask extends Task {
 			LOG.info("mapper configure phase");
 			//mapper.configure(job);
 			LOG.info("mapper initPKVBuffer phase");
-			mapper.initPKVBuffer(pkvBuffer);
+			mapper.initStarter(pkvBuffer);
 			
 			//setPhase(TaskStatus.Phase.SHUFFLE); 
 			

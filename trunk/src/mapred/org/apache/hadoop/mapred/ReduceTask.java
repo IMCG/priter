@@ -298,7 +298,6 @@ public class ReduceTask extends Task {
     protected Class inputValClass;
     protected Class outputKeyClass;
     protected Class outputValClass;
-    protected Class priorityClass;
 	protected Class<? extends CompressionCodec> codecClass = null;
 
 	protected CompressionCodec codec;
@@ -437,8 +436,6 @@ public class ReduceTask extends Task {
 	    this.outputKeyClass = job.getOutputKeyClass();
 	    this.outputValClass = job.getOutputValueClass();
 	    
-	    this.priorityClass = job.getPriorityClass();
-	    
 		if (job.getCompressMapOutput()) {
 			this.codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
 		}
@@ -517,7 +514,7 @@ public class ReduceTask extends Task {
 		if (this.pkvBuffer == null) {
 			Progress progress = sink.getProgress(); 				
 			this.pkvBuffer = new OutputPKVBuffer(umbilical, this, job, reporter, progress, 
-										priorityClass, outputKeyClass, outputValClass, this.iterReducer);
+										outputKeyClass, outputValClass, this.iterReducer);
 		}
 		
 		//termination check thread, also do generating snapshot work
