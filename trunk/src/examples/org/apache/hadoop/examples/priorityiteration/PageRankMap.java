@@ -27,7 +27,6 @@ public class PageRankMap extends MapReduceBase implements
 	private JobConf job;
 
 	private String subGraphsDir;
-	//private String subRankDir;
 	private Path graphLinks;
 	private RandomAccessFile linkFileIn;
 	private Path graphIndex;
@@ -235,10 +234,9 @@ public class PageRankMap extends MapReduceBase implements
 	
 	@Override
 	public void configure(JobConf job) {
-		inMem = job.getBoolean(MainDriver.IN_MEM, true);	
 		this.job = job;
-	
 		int taskid = Util.getTaskId(job);
+		inMem = job.getBoolean(MainDriver.IN_MEM, true);
 		if(inMem){
 			//load graph to memory
 			this.loadGraphToMem(job, taskid);
@@ -307,7 +305,6 @@ public class PageRankMap extends MapReduceBase implements
 		report.setStatus(String.valueOf(kvs));
 		
 		int page = key.get();
-		
 		ArrayList<Integer> links = null;
 		if(inMem){
 			//for in-memory graph
@@ -326,22 +323,14 @@ public class PageRankMap extends MapReduceBase implements
 			System.out.println("no links found for page " + page);
 			//output.collect(new IntWritable(page), new DoubleWritable(value.get()));
 			return;
-		}
-			
+		}	
 		double delta = value.get() * PageRank.DAMPINGFAC / links.size();
 		
 		for(int link : links){
-			//int linkTo = Integer.parseInt(link);
 			output.collect(new IntWritable(link), new DoubleWritable(delta));
 			expand++;
 			//System.out.println("output: " + link + " : " + delta);
 		}	
-		/*
-		if(kvs > 1000) init = false;
-		if(!init){
-			System.out.println("map " + kvs + " expand " + expand + " value is " + delta);
-		}	
-		*/
 	}
 
 	@Override
