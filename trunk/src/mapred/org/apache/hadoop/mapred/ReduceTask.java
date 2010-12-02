@@ -226,7 +226,6 @@ public class ReduceTask extends Task {
 						e.printStackTrace();
 						iterative_stop = true;
 					}
-
 				}
 				//LOG.info("if we stop? " + iterative_stop);
 			}
