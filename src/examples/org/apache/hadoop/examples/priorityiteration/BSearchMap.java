@@ -26,8 +26,6 @@ import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 //input <node, shortest length and point to list>
 //output <node, shortest length>
 public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWritable, IntWritable, IntWritable, IntWritable, IntWritable> {
-	private JobConf conf;
-	
 	private String subGraphsDir;
 	private Path graphLinks;
 	private RandomAccessFile linkFileIn;
@@ -35,6 +33,7 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 	private FSDataInputStream indexFileIn;
 	private BufferedReader indexReader;
 	private HashMap<Integer, Long> subGraphIndex;
+	private boolean inMem = true;
 	private int numSubGraph;
 	private int lookupScale;
 	private int startnode;
@@ -58,26 +57,6 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 		public String toString() {
 			return new String(node + "\t" + weight);
 		}
-	}
-	
-	private static int getTaskId(JobConf conf) throws IllegalArgumentException
-	{
-		if (conf == null) {
-			throw new NullPointerException("conf is null");
-		}
-		String taskId = conf.get("mapred.task.id");
-		if (taskId == null) {
-			throw new IllegalArgumentException("Configutaion does not contain the property mapred.task.id");
-		}
-
-		String[] parts = taskId.split("_");
-		if (parts.length != 6 ||
-				!parts[0].equals("attempt") ||
-				(!"m".equals(parts[3]) && !"r".equals(parts[3]))) {
-			throw new IllegalArgumentException("TaskAttemptId string : " + taskId + " is not properly formed");
-		}
-
-		return Integer.parseInt(parts[4]);
 	}
 
 	private synchronized void loadGraphToDisk(JobConf conf, int n) {
@@ -223,11 +202,9 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 		}
 	}
 	
-	private ArrayList<String> getLinks(int node) throws Exception {
+	private ArrayList<Link> getLinks(int node) throws Exception {
 		Long offset = subGraphIndex.get(node / lookupScale);
-		//System.out.println(node);
-		//System.out.println(node / lookupScale);
-							
+			
 		if(offset == null){
 			System.out.println("no matched!!! for node " + node);
 			return null;
@@ -235,15 +212,10 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 		
 		linkFileIn.seek(offset);	
 		//System.out.println(offset);
-		//linkReader = new BufferedReader(new InputStreamReader(linkFileIn));
-		
 		int linenum = (node / numSubGraph) % MainDriver.INDEX_BLOCK_SIZE;
-		//System.out.println(linenum);
 		String record = new String();
 		while(/*linkReader.ready() && */(linenum-- >= 0)){
-			//record = linkReader.readLine();
 			record = linkFileIn.readLine();
-			//System.out.println(record);
 		}
 		//System.out.println(record);		
 		//System.out.println(" index is " + offset + " and the record is " + record);
@@ -262,41 +234,32 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 			return null;
 		}
 		
-		String linkstring = record.substring(lindex+1);
-		ArrayList<String> links = new ArrayList<String>();
-		StringTokenizer st = new StringTokenizer(linkstring);
+		ArrayList<Link> links = new ArrayList<Link>();
+		StringTokenizer st = new StringTokenizer(record.substring(lindex+1));
 		while(st.hasMoreTokens()){
-			links.add(st.nextToken());
+			String linkstring = st.nextToken();
+			String[] field = linkstring.split(",");
+			Link l = new Link(Integer.parseInt(field[0]), Integer.parseInt(field[1]));
+			links.add(l);
 		}
 		
 		return links;
 	}
 	
 	@Override
-	public void configure(JobConf job){    
-	    this.conf = job;
+	public void configure(JobConf job){   
 	    startnode = job.getInt(MainDriver.SP_START_NODE, 0);
-	    
-	    int ttnum = 0;
-		try {
-			JobClient jobclient = new JobClient(conf);
-			ClusterStatus status = jobclient.getClusterStatus();
-		    ttnum = status.getTaskTrackers();
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
+	    int taskid = Util.getTaskId(job);
+	    inMem = job.getBoolean(MainDriver.IN_MEM, true);
+		if(inMem){
+			//load graph to memory
+			this.loadGraphToMem(job, taskid);
+		}else{
+			//load graph to local disk
+			loadGraphToDisk(job, taskid);
 		}
-	    
-		numSubGraph = ttnum;
-		
-		//for shortest path, we load graph on local disk
-		int n = getTaskId(conf);
-		//loadGraphToDisk(conf, n);
-		loadGraphToMem(conf, n);
 	}
 	
-	//format node	f:len
-	//       node	v:shortest_length
 	@Override
 	public void map(IntWritable key, IntWritable value,
 			OutputCollector<IntWritable, IntWritable> output, Reporter report)
@@ -308,48 +271,33 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 		int distance = value.get();
 		
 		if(distance != Integer.MAX_VALUE){	
-			/*for disk graph
-			ArrayList<String> links = null;
-			try {
-				links = getLinks(nnode);
-			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}		
-			
-			if(links == null) return;
-						
-			//output.collect(key, new Text(v));
-			
-			for(String linkstr : links){
-				int index2 = linkstr.indexOf(",");
-				int node2 = Integer.parseInt(linkstr.substring(0, index2));
-				int length = Integer.parseInt(linkstr.substring(index2+1));
-				
-				String f = "f:" + String.valueOf(base_len+length);
-				output.collect(new IntWritable(node2), new Text(f));
-				
-				//System.out.println(node2 + " : " + f);
+			ArrayList<Link> links = null;
+			if(inMem){
+				//for in-memory graph
+				links = this.linkList.get(node);
+			}else{
+				//for on-disk graph
+				try {
+					links = getLinks(node);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 			}
-			*/
 			
-			//for memory graph
-			ArrayList<Link> links = this.linkList.get(node);
 			if(links == null) {
 				for(int i=0; i<numSubGraph; i++){
 					output.collect(new IntWritable(i), new IntWritable(Integer.MAX_VALUE));
 				}
 				return;
 			}
-			
-			workload++;
-			
+				
 			for(Link l : links){				
 				addition++;
 				output.collect(new IntWritable(l.node), new IntWritable(distance + l.weight));
 				report.setStatus(String.valueOf(workload) + ":" + addition);
 			}
-			
+			workload++;
 			//System.out.println("iter " + (iter++) + " workload is " + workload + " addition is " + addition);
 		} else{
 			//triger reduce to run

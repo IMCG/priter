@@ -34,6 +34,7 @@ public class BSearch extends Configured implements Tool {
 	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
 	    job.setInt(MainDriver.SP_TOTAL_NODES, nNodes);
 	    job.setInt(MainDriver.SP_START_NODE, startnode);
+	    job.setBoolean(MainDriver.IN_MEM, true);
 	    
 	    FileInputFormat.addInputPath(job, new Path(input));
 	    FileOutputFormat.setOutputPath(job, new Path(output));
@@ -53,7 +54,6 @@ public class BSearch extends Configured implements Tool {
 	    job.setJarByClass(BSearch.class);
 	    job.setMapperClass(BSearchMap.class);	
 	    job.setReducerClass(BSearchReduce.class);
-	    job.setPriorityClass(IntWritable.class);				//set priority
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(IntWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);

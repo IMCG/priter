@@ -12,7 +12,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 
 public class BSearchReduce extends MapReduceBase implements
-		IterativeReducer<IntWritable, IntWritable, IntWritable, IntWritable, IntWritable> {
+		IterativeReducer<IntWritable, IntWritable, IntWritable, IntWritable> {
 	private JobConf job;
 	private int reduce = 0;
 	private int iterate = 0;
@@ -27,7 +27,7 @@ public class BSearchReduce extends MapReduceBase implements
 	//       node	v:shortest_length
 	@Override
 	public void reduce(IntWritable key, Iterator<IntWritable> values,
-			OutputPKVBuffer<IntWritable, IntWritable, IntWritable> output, Reporter report)
+			OutputPKVBuffer<IntWritable, IntWritable> output, Reporter report)
 			throws IOException {
 		reduce++;	
 		//System.out.println("input: " + key);
@@ -64,11 +64,6 @@ public class BSearchReduce extends MapReduceBase implements
 	public IntWritable setDefaultiState() {
 		return new IntWritable(Integer.MAX_VALUE);
 	}
-	
-	@Override
-	public IntWritable setPriority(IntWritable iState) {
-		return new IntWritable(-iState.get());
-	}
 
 	@Override
 	public void updateState(IntWritable iState, IntWritable cState, IntWritable value) {
@@ -82,11 +77,16 @@ public class BSearchReduce extends MapReduceBase implements
 
 	@Override
 	public void initStateTable(
-			OutputPKVBuffer<IntWritable, IntWritable, IntWritable> stateTable) {
+			OutputPKVBuffer<IntWritable, IntWritable> stateTable) {
 		int n = Util.getTaskId(job);
 		int ttnum = Util.getTTNum(job);
 		for(int i=n; i<nNodes; i=i+ttnum){
 			stateTable.init(new IntWritable(i), new IntWritable(Integer.MAX_VALUE), new IntWritable(Integer.MAX_VALUE));
 		}
+	}
+
+	@Override
+	public int compare(IntWritable state1, IntWritable state2) {
+		return -state1.compareTo(state2);
 	}
 }
