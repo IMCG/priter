@@ -157,7 +157,6 @@ public class ReduceTask extends Task {
 	private class snapshotThread extends Thread {
 		
 		private int ttnum = 0;
-		private String snapshotDir;
 		private FileSystem hdfs;
 		private TaskUmbilicalProtocol trackerUmbilical;
 		private Task reduceTask;
@@ -183,34 +182,9 @@ public class ReduceTask extends Task {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			//the output snapshot path
-			String outputDir = conf.get("mapred.output.dir");
-			int taskid = getTaskID().getTaskID().getId();
-			snapshotDir = outputDir + "/" + taskid;
 			  		  
 			this.trackerUmbilical = umbilical;
 			this.reduceTask = task;
-		}
-		
-		//return false if stop
-		private boolean genSnapshot(int index) throws IOException {
-			//LOG.info("let's generate snapshot " + index + " with size " + pkvPairs.size());
-			//generate snapshot
-			
-			String snapshot = snapshotDir + "/snapshot-" + index;							
-					
-			FSDataOutputStream ostream = hdfs.create(new Path(snapshot), true);
-			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
-			
-			pkvBuffer.snapshot(writer, index);
-	    
-			writer.close();
-			ostream.close();
-			
-			reporter.incrCounter(Counter.SNAPSHOT_TIMES, 1);
-			reporter.progress();
-			
-			return true;
 		}
 		
 		public void run() {
@@ -233,17 +207,8 @@ public class ReduceTask extends Task {
 						while(!pkvBuffer.start){
 							this.wait(500);
 						}
-						//for generating snapshots, we want top records, no consider if they
-						//have been sent or not
-						//ArrayList<PriorityRecord> pkvPairs = pkvBuffer.getRecords(topk);
 						
-						if(!genSnapshot(index)){
-							iterative_stop = true;
-							LOG.info("stop reduce, stop iteration");
-						}
-						
-					    
-					    //LOG.info("snapshot event: " + index + " : " + id);
+						pkvBuffer.snapshot(index);
 						
 						SnapshotCompletionEvent event = new SnapshotCompletionEvent(index, id, getJobID());
 						try {
