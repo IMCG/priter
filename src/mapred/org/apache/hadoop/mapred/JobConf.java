@@ -465,16 +465,7 @@ public class JobConf extends Configuration {
     }
     return codecClass;
   }
-  
-  public Class<?> getPriorityClass() {
-	    Class<?> retv = getClass("mapred.iterative.priority.class", null, Object.class);
 
-	    return retv;
-  }
-  
-  public void setPriorityClass(Class<?> theClass) {
-	    setClass("mapred.iterative.priority.class", theClass, Object.class);
-	  }
   /**
    * Get the key class for the map output data. If it is not set, use the
    * (final) output key class. This allows the map output key class to be

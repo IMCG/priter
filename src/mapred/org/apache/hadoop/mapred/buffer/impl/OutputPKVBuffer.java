@@ -39,7 +39,7 @@ import org.apache.hadoop.mapred.buffer.OutputFile.Header;
 import org.apache.hadoop.util.Progress;
 
 
-public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends Writable> 
+public class OutputPKVBuffer<K extends Writable, V extends Writable> 
 		implements OutputCollector<K, V> {
 	
 	
@@ -54,14 +54,13 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	private String stateTableSnapshot = null;
 
     private IterativeReducer iterReducer = null;
-	private Map<K, PriorityRecord<P, V>> stateTable = new HashMap<K, PriorityRecord<P, V>>();
+	private Map<K, PriorityRecord<V>> stateTable = new HashMap<K, PriorityRecord<V>>();
 	private ArrayList<KVRecord<K, V>> priorityQueue = new ArrayList<KVRecord<K, V>>();
 	private K defaultKey;
     private V defaultiState;
 	
 	private Class<K> keyClass;	
 	private Class<V> valClass;
-	Serializer<P> prioritySerializer;
     Serializer<K> keySerializer;
     Serializer<V> valueSerializer;
     DataOutputBuffer buffer = new DataOutputBuffer();
@@ -70,7 +69,6 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	private int topk;
 	private int emitSize;
 	
-
 	private int iteration = 0;
 	public int total_map = 0;
 	public int total_reduce = 0;
@@ -84,10 +82,8 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	public int actualEmit = 0;
 	public static int WAIT_ITER = 2;
 
-	
 	public OutputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
-			Reporter reporter, Progress progress, 
-		       Class<P> priorityClass, Class<K> keyClass, Class<V> valClass, 
+			Reporter reporter, Progress progress, Class<K> keyClass, Class<V> valClass, 
 		       		IterativeReducer iterReducer) throws IOException{	
 		
 		LOG.info("OutputPKVBuffer is reset for task " + task.getTaskID());
@@ -123,8 +119,7 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	}
 
 	public void init(K key, V iState, V cState){
-		P pri = (P)iterReducer.setPriority(iState);
-		PriorityRecord<P, V> newpkvRecord = new PriorityRecord<P, V>(pri, iState, cState);
+		PriorityRecord<V> newpkvRecord = new PriorityRecord<V>(iState, cState);
 		this.stateTable.put(key, newpkvRecord);
 	}
 	
@@ -138,16 +133,13 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 			iter_time = (iter_time_per_node <= 0) ? 0.2 : iter_time_per_node;
 			
 			//LOG.info("heap size : " + this.recordsMap.size());
-			final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
+			final Map<K, PriorityRecord<V>> langForSort = stateTable;
 			Collections.sort(keys, 
 					new Comparator(){
 						public int compare(Object left, Object right){
-							K leftKey = (K)left;
-							K rightKey = (K)right;
-		 
-							PriorityRecord<P, V> leftValue = (PriorityRecord<P, V>)langForSort.get(leftKey);
-							PriorityRecord<P, V> rightValue = (PriorityRecord<P, V>)langForSort.get(rightKey);
-							return -leftValue.compareTo(rightValue);
+							V leftiState = langForSort.get((K)left).getiState();
+							V rightiState = langForSort.get((K)right).getiState();
+							return iterReducer.compare(leftiState, rightiState);
 						}
 					});
 			Date end_sort_date = new Date();
@@ -172,11 +164,9 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 			actualEmit = 0;
 						
 			Iterator<K> sort_itr =keys.iterator();
-			PriorityRecord<P, V> record = null;
 			while(sort_itr.hasNext() && actualEmit<this.emitSize){
-				Object k = sort_itr.next();
-				record = stateTable.get(k);				
-				records.add(new KVRecord(k, record.getiState()));
+				K k = sort_itr.next();			
+				records.add(new KVRecord<K, V>(k, stateTable.get(k).getiState()));
 				this.stateTable.get(k).setiState(defaultiState);
 				actualEmit++;
 			}
@@ -200,13 +190,9 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 				
 		start = true;
 		synchronized(this.stateTable){		
-			P pri;
-
 			if(this.stateTable.containsKey(key)){
-				PriorityRecord<P, V> pkvRecord = this.stateTable.get(key);
+				PriorityRecord<V> pkvRecord = this.stateTable.get(key);
 				iterReducer.updateState(pkvRecord.getiState(), pkvRecord.getcState(), value);
-				pri = (P)iterReducer.setPriority(pkvRecord.getiState());
-				pkvRecord.setPriority(pri);
 			}else{
 				LOG.error("no such key " + key);
 			}
@@ -326,10 +312,10 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		FSDataOutputStream ostream = hdfs.create(new Path(stateTableSnapshot), true);
 		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 		
-		Set<Map.Entry<K, PriorityRecord<P, V>>> entries = this.stateTable.entrySet();
-		for(Map.Entry<K, PriorityRecord<P, V>> entry : entries) {
+		Set<Map.Entry<K, PriorityRecord<V>>> entries = this.stateTable.entrySet();
+		for(Map.Entry<K, PriorityRecord<V>> entry : entries) {
 		    K key = entry.getKey();
-		    PriorityRecord<P, V> record = entry.getValue();
+		    PriorityRecord<V> record = entry.getValue();
 		    writer.write(key + "\t" + record + "\n");
 		}
 		writer.close();
@@ -341,29 +327,23 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	}
 	
 	public void snapshot(BufferedWriter writer, int snapshot_index) throws IOException {
-
 		synchronized(this.stateTable){
-			final Map<K, PriorityRecord<P, V>> langForComp = this.stateTable;
+			final Map<K, PriorityRecord<V>> langForComp = this.stateTable;
 			List<K> keys = new ArrayList<K>(this.stateTable.keySet());
 			Collections.sort(keys, 
 					new Comparator(){
 						public int compare(Object left, Object right){
-							P leftpriority = (P)iterReducer.setPriority(langForComp.get((K)left).getcState());
-							P rightpriority = (P)iterReducer.setPriority(langForComp.get((K)right).getcState());
-
-							return ((WritableComparable)leftpriority).compareTo(rightpriority);
+							V leftcState = langForComp.get((K)left).getcState();
+							V rightcState = langForComp.get((K)right).getcState();
+							return iterReducer.compare(leftcState, rightcState);
 						}
 					});
 
 			Iterator<K> itr =keys.iterator();
-			PriorityRecord<P, V> record = null;
 			int count = 0;
-			int len = 0;
 			while(itr.hasNext() && count < topk){
 				K k = itr.next();
-				record = stateTable.get(k);	
-				writer.write(record.getPriority() + "\t" + k + "\t" + record.getcState() + "\n");
-				
+				writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");	
 				count++;
 			}
 
