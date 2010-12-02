@@ -8,4 +8,9 @@ public class KVRecord<K extends Object, V extends Object> {
 		this.k = inK;
 		this.v = inV;
 	}
+	
+	@Override
+	public String toString(){
+		return k + "\t" + v;
+	}
 }

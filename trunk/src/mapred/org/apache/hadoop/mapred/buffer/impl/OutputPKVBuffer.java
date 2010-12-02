@@ -19,11 +19,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.DoubleWritable;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.io.WritableFactories;
 import org.apache.hadoop.io.serializer.Serializer;
 import org.apache.hadoop.mapred.FileHandle;
 import org.apache.hadoop.mapred.IFile;
@@ -51,7 +47,8 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 	private final FileSystem localFs;
 	private FileSystem hdfs;
 	private FileHandle outputHandle = null;
-	private String stateTableSnapshot = null;
+	private String stateTableFile = null;
+	private String topkDir = null;
 
     private IterativeReducer iterReducer = null;
 	private Map<K, PriorityRecord<V>> stateTable = new HashMap<K, PriorityRecord<V>>();
@@ -77,6 +74,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 	//for emitsize determination
 	public long sort_time = 0;
 	public long iter_previous_time = 0;
+		;
 	public double iter_time = 0;
 	
 	public int actualEmit = 0;
@@ -97,7 +95,8 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 		this.iterReducer = iterReducer;		
 		this.defaultKey = (K)iterReducer.setDefaultKey();
 		this.defaultiState = (V)iterReducer.setDefaultiState();
-		this.stateTableSnapshot = "tmp/" + taskAttemptID + "-StateTable";
+		this.stateTableFile = "tmp/" + taskAttemptID + "-StateTable";
+		this.topkDir = job.get("mapred.output.dir") + "/" + this.taskAttemptID.getTaskID().getId();
 		this.keyClass = keyClass;
 		this.valClass = valClass;
 		
@@ -105,8 +104,6 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 		this.wearfactor = job.getFloat("mapred.iterative.output.wearfactor", (float)10);
 		this.topk = job.getInt("mapred.iterative.topk", 1000);
 
-		Date start = new Date();
-		
 		this.iterReducer.initStateTable(this);
 	}
 
@@ -309,7 +306,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 	}
 	
 	public void dumpStateTable() throws IOException {
-		FSDataOutputStream ostream = hdfs.create(new Path(stateTableSnapshot), true);
+		FSDataOutputStream ostream = hdfs.create(new Path(stateTableFile), true);
 		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 		
 		Set<Map.Entry<K, PriorityRecord<V>>> entries = this.stateTable.entrySet();
@@ -326,7 +323,10 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 		
 	}
 	
-	public void snapshot(BufferedWriter writer, int snapshot_index) throws IOException {
+	public void snapshot(int index) throws IOException {
+		Path topkFile = new Path(topkDir + "/topKsnapshot-" + index);
+		IFile.Writer<K, V> writer = new IFile.Writer<K, V>(job, hdfs, topkFile, 
+				keyClass, valClass, null, null);
 		synchronized(this.stateTable){
 			final Map<K, PriorityRecord<V>> langForComp = this.stateTable;
 			List<K> keys = new ArrayList<K>(this.stateTable.keySet());
@@ -343,11 +343,11 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			int count = 0;
 			while(itr.hasNext() && count < topk){
 				K k = itr.next();
-				writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");	
+				writer.append(k, stateTable.get(k).getcState());	
 				count++;
 			}
 
-			System.out.println("snapshot index " + snapshot_index + " iterations " + iteration);
+			System.out.println("snapshot index " + index + " iterations " + iteration);
 		}
 	}
 	
