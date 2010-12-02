@@ -11,6 +11,6 @@ public interface IterativeMapper<P, K1, V1, K2, V2> extends Mapper<K1, V1, K2, V
 	 * @param pkvBuffer
 	 * @throws IOException
 	 */
-	void initPKVBuffer(InputPKVBuffer<K1, V1> pkvBuffer) throws IOException;
+	void initStarter(InputPKVBuffer<K1, V1> starter) throws IOException;
 	void iterate();
 }

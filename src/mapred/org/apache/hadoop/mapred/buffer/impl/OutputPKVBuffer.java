@@ -2,6 +2,7 @@ package org.apache.hadoop.mapred.buffer.impl;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -18,6 +19,8 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
+import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableFactories;
@@ -42,44 +45,45 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	
 	//**************************************
 	private static final Log LOG = LogFactory.getLog(OutputPKVBuffer.class.getName());
-	
+
+	private JobConf job = null;
 	private TaskAttemptID taskAttemptID;
-	private int iteration = 0;
-	//private Class<P> priorityClass;
+	private final FileSystem localFs;
+	private FileSystem hdfs;
+	private FileHandle outputHandle = null;
+	private String stateTableSnapshot = null;
+
+    private IterativeReducer iterReducer = null;
+	private Map<K, PriorityRecord<P, V>> stateTable = new HashMap<K, PriorityRecord<P, V>>();
+	private ArrayList<KVRecord<K, V>> priorityQueue = new ArrayList<KVRecord<K, V>>();
+	private K defaultKey;
+    private V defaultiState;
+	
 	private Class<K> keyClass;	
 	private Class<V> valClass;
-	public boolean start = false;
-	
-	private final FileSystem localFs;
-	private FileHandle outputHandle = null;
-	private JobConf job = null;
-	
-	//private boolean bSort;
 	Serializer<P> prioritySerializer;
     Serializer<K> keySerializer;
     Serializer<V> valueSerializer;
     DataOutputBuffer buffer = new DataOutputBuffer();
-    private V defaultiState;
-    private V defaultcState;
     
-    private IterativeReducer iterReducer = null;
-
-	//main part of this class, storing priority-key-value records
-	private Map<K, PriorityRecord<P, V>> stateTable = new HashMap<K, PriorityRecord<P, V>>();
-	private ArrayList<KVRecord<K, V>> priorityQueue = new ArrayList<KVRecord<K, V>>();
+	private float wearfactor;
+	private int topk;
+	private int emitSize;
 	
+
+	private int iteration = 0;
 	public int total_map = 0;
 	public int total_reduce = 0;
+	public boolean start = false;
 	
 	//for emitsize determination
 	public long sort_time = 0;
 	public long iter_previous_time = 0;
 	public double iter_time = 0;
-	public int emitSize;
+	
 	public int actualEmit = 0;
 	public static int WAIT_ITER = 2;
-	private float wearfactor;
-	private int topk;
+
 	
 	public OutputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
 			Reporter reporter, Progress progress, 
@@ -88,23 +92,26 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		
 		LOG.info("OutputPKVBuffer is reset for task " + task.getTaskID());
 
+		this.job = job;
 		this.taskAttemptID = task.getTaskID();
-		//this.priorityClass = priorityClass;
+		this.localFs = FileSystem.getLocal(job);
+		this.hdfs = FileSystem.get(job);
+		this.outputHandle = new FileHandle(taskAttemptID.getJobID());
+		this.outputHandle.setConf(job);
+		this.iterReducer = iterReducer;		
+		this.defaultKey = (K)iterReducer.setDefaultKey();
+		this.defaultiState = (V)iterReducer.setDefaultiState();
+		this.stateTableSnapshot = "tmp/" + taskAttemptID + "-StateTable";
 		this.keyClass = keyClass;
 		this.valClass = valClass;
 		
-		this.job = job;
-		this.localFs = FileSystem.getLocal(job);
-		this.outputHandle = new FileHandle(taskAttemptID.getJobID());
-		this.outputHandle.setConf(job);
 		this.emitSize = job.getInt("mapred.iterative.reduce.emitsize", 100);
 		this.wearfactor = job.getFloat("mapred.iterative.output.wearfactor", (float)10);
 		this.topk = job.getInt("mapred.iterative.topk", 1000);
-		this.iterReducer = iterReducer;		
-		this.defaultiState = (V)iterReducer.setDefaultiState();
-		this.defaultcState = (V)iterReducer.setDefaultcState();
-		
+
 		Date start = new Date();
+		
+		this.iterReducer.initStateTable(this);
 	}
 
 	public Header header() {
@@ -115,6 +122,12 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 		return this.taskAttemptID;
 	}
 
+	public void init(K key, V iState, V cState){
+		P pri = (P)iterReducer.setPriority(iState);
+		PriorityRecord<P, V> newpkvRecord = new PriorityRecord<P, V>(pri, iState, cState);
+		this.stateTable.put(key, newpkvRecord);
+	}
+	
 	private synchronized ArrayList<KVRecord<K, V>> getSortRecords() {
 		synchronized(this.stateTable){	
 			List<K> keys = new ArrayList<K>(this.stateTable.keySet());
@@ -191,16 +204,11 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 
 			if(this.stateTable.containsKey(key)){
 				PriorityRecord<P, V> pkvRecord = this.stateTable.get(key);
-				V newiState = (V)iterReducer.updateState(pkvRecord.getiState(), value);
-				V newcState = (V)iterReducer.updateState(pkvRecord.getcState(), value);
-				pri = (P)iterReducer.setPriority(newiState);
+				iterReducer.updateState(pkvRecord.getiState(), pkvRecord.getcState(), value);
+				pri = (P)iterReducer.setPriority(pkvRecord.getiState());
 				pkvRecord.setPriority(pri);
-				pkvRecord.setiState(newiState);
-				pkvRecord.setcState(newcState);
 			}else{
-				pri = (P)iterReducer.setPriority(value);
-				PriorityRecord<P, V> newpkvRecord = new PriorityRecord<P, V>(pri, value, value);
-				this.stateTable.put(key, newpkvRecord);
+				LOG.error("no such key " + key);
 			}
 		}
 		total_reduce++;
@@ -241,40 +249,37 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 	
 			if (out == null ) throw new IOException("Unable to create spill file " + filename);
 			
-			writer = new IFile.Writer<K, V>(job, out, keyClass, valClass, null, null);
+			ArrayList<KVRecord<K, V>> entries = getSortRecords();
 			
-			ArrayList<KVRecord<K, V>> entries = null;
-			
-			Date current = new Date();
-			iter_time = (current.getTime() - iter_previous_time) / emitSize;
-			entries = getSortRecords();
-			
+			synchronized(this.stateTable){
+				writer = new IFile.Writer<K, V>(job, out, keyClass, valClass, null, null);
 	
-			if(entries != null) this.priorityQueue.addAll(entries);
-			int count = 0;
-					
-			if(priorityQueue.size() == 0){
-				LOG.info("no records to send");
-				K k = (K)WritableFactories.newInstance(keyClass, job);
-				V v = (V)WritableFactories.newInstance(valClass, job);
-				this.iterReducer.defaultKV(k, v);
-				writer.append(k, v);
-			}else{
-				for(KVRecord<K, V> entry : priorityQueue){		
-					writer.append(entry.k, entry.v);
-					//LOG.info("send records: " + entry.k + " : " + entry.v);
-					entry = null;
-					count++;
-				}
-				priorityQueue.clear();
-				total_map += count;
-			}		
-			writer.close();
-			
-			LOG.info("iteration " + this.iteration + " expand " + count + " k-v pairs, " +
-					"total maps " + total_map + " total collected " + total_reduce);
-			writeIndexRecord(indexOut, out, 0, writer);
-			writer = null;
+				Date current = new Date();
+				iter_time = (current.getTime() - iter_previous_time) / emitSize;
+
+				if(entries != null) this.priorityQueue.addAll(entries);
+				int count = 0;
+						
+				if(priorityQueue.size() == 0){
+					LOG.info("no records to send");
+					writer.append(this.defaultKey, this.defaultiState);
+				}else{
+					for(KVRecord<K, V> entry : priorityQueue){		
+						writer.append(entry.k, entry.v);
+						//LOG.info("send records: " + entry.k + " : " + entry.v);
+						entry = null;
+						count++;
+					}
+					priorityQueue.clear();
+					total_map += count;
+				}		
+				writer.close();
+				
+				LOG.info("iteration " + this.iteration + " expand " + count + " k-v pairs, " +
+						"total maps " + total_map + " total collected " + total_reduce);
+				writeIndexRecord(indexOut, out, 0, writer);
+				writer = null;
+			}
 		} catch(IOException e){
 			e.printStackTrace();
 		}finally {
@@ -317,6 +322,24 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 				start + ", " + writer.getRawLength() + ", " + segmentLength);
 	}
 	
+	public void dumpStateTable() throws IOException {
+		FSDataOutputStream ostream = hdfs.create(new Path(stateTableSnapshot), true);
+		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
+		
+		Set<Map.Entry<K, PriorityRecord<P, V>>> entries = this.stateTable.entrySet();
+		for(Map.Entry<K, PriorityRecord<P, V>> entry : entries) {
+		    K key = entry.getKey();
+		    PriorityRecord<P, V> record = entry.getValue();
+		    writer.write(key + "\t" + record + "\n");
+		}
+		writer.close();
+		ostream.close();
+	}
+	
+	public void recoverStateTable() throws IOException {
+		
+	}
+	
 	public void snapshot(BufferedWriter writer, int snapshot_index) throws IOException {
 
 		synchronized(this.stateTable){
@@ -339,9 +362,6 @@ public class OutputPKVBuffer<P extends Writable, K extends Writable, V extends W
 			while(itr.hasNext() && count < topk){
 				K k = itr.next();
 				record = stateTable.get(k);	
-				
-				if(record.getcState().equals(defaultcState)) break;
-				
 				writer.write(record.getPriority() + "\t" + k + "\t" + record.getcState() + "\n");
 				
 				count++;
