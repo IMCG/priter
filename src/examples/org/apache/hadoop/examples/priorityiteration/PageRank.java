@@ -20,12 +20,10 @@ public class PageRank extends Configured implements Tool {
 	private String input;
 	private String output;
 	private String subGraphDir;
-	private String subRankDir;
 	private float wearfactor;
 	private int topk;
 	private int nNodes;
 	private int emitSize;
-	private int sorttype;
 	
 	//damping factor
 	public static final double DAMPINGFAC = 0.8;
@@ -38,7 +36,6 @@ public class PageRank extends Configured implements Tool {
 	    job.setJobName(jobname);
        
 	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
-	    //job.set(MainDriver.SUBRANK_DIR, subRankDir);
 	    job.setInt(MainDriver.PG_TOTAL_PAGES, nNodes);
 	    job.setInt(MainDriver.TOP_K, topk);
 	    job.setBoolean(MainDriver.IN_MEM, true);
@@ -49,22 +46,14 @@ public class PageRank extends Configured implements Tool {
 	    
 	    int ttnum = Util.getTTNum(job);
 	    	    
-	    emitSize = emitSize / ttnum;
-	        
 	    //set for iterative process   
 	    job.setBoolean("mapred.job.iterative", true);
-	    //job.setBoolean("mapred.iterative.reducesync", true);
-	    //job.setBoolean("mapred.iterative.mapsync", false);
-	    //job.setBoolean("mapred.iterative.sort", true);
-	    //job.setInt("mapred.iterative.priority.type", sorttype);
 	    job.setInt("mapred.iterative.ttnum", ttnum);
 	    job.setInt("mapred.iterative.topk", topk);
 	    job.setFloat("mapred.iterative.output.wearfactor", wearfactor);
 	    job.setLong("mapred.iterative.snapshot.interval", 20000);
 	    job.setInt("mapred.iterative.reduce.emitsize", emitSize);
-	    job.setLong("mapred.iterative.reduce.window", -1);	
-	    //job.setInt("mapred.iterative.map.spillsize", 50000000);	//never spill, 
-	    //job.setInt("mapred.iterative.map.bufrecs", Integer.MAX_VALUE);			//parsed input KVs    
+	    job.setLong("mapred.iterative.reduce.window", -1);	  
 	        
 	    job.setJarByClass(PageRank.class);
 	    job.setMapperClass(PageRankMap.class);	
@@ -85,8 +74,8 @@ public class PageRank extends Configured implements Tool {
 	}
 	@Override
 	public int run(String[] args) throws Exception {
-		if (args.length != 8) {
-		      System.err.println("Usage: pagerank <indir> <outdir> <subgraph> <topk> <number of nodes> <reduce output granularity> <sort type> <wear factor>");
+		if (args.length != 7) {
+		      System.err.println("Usage: pagerank <indir> <outdir> <subgraph> <topk> <number of nodes> <reduce output granularity> <wear factor>");
 		      System.exit(2);
 		}
 	    
@@ -96,8 +85,7 @@ public class PageRank extends Configured implements Tool {
 	    topk = Integer.parseInt(args[3]);
 	    nNodes = Integer.parseInt(args[4]);
 	    emitSize = Integer.parseInt(args[5]);
-	    sorttype = Integer.parseInt(args[6]);
-	    wearfactor = Float.parseFloat(args[7]);
+	    wearfactor = Float.parseFloat(args[6]);
     
 	    pagerank();
 	    

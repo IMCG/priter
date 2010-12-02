@@ -25,7 +25,7 @@ import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 //input <node, shortest length and point to list>
 //output <node, shortest length>
-public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWritable, IntWritable, Text, IntWritable, Text> {
+public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWritable, IntWritable, IntWritable, IntWritable, IntWritable> {
 	private JobConf conf;
 	
 	private String subGraphsDir;
@@ -298,30 +298,17 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 	//format node	f:len
 	//       node	v:shortest_length
 	@Override
-	public void map(IntWritable key, Text value,
-			OutputCollector<IntWritable, Text> output, Reporter report)
+	public void map(IntWritable key, IntWritable value,
+			OutputCollector<IntWritable, IntWritable> output, Reporter report)
 			throws IOException {
-		System.out.println("input: " +key + " :" + value);
-		
+		//System.out.println("input: " + key + " :" + value);	
 		report.setStatus(String.valueOf(workload) + ":" + addition);
 			
-		String frontier = value.toString();
-		int index = frontier.indexOf("f");
+		int node = key.get();
+		int distance = value.get();
 		
-		int nnode = key.get();
-		
-		//frontier has f
-		if(index != -1){	
-			/*
-			if(nnode == startnode) {
-				output.collect(new IntWritable(Integer.MAX_VALUE), new Text("nothing"));
-			}
-			*/
-			int base_len = Integer.parseInt(frontier.substring(index+2));
-
-			/*
-			 *
-			 *for disk graph
+		if(distance != Integer.MAX_VALUE){	
+			/*for disk graph
 			ArrayList<String> links = null;
 			try {
 				links = getLinks(nnode);
@@ -347,11 +334,10 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 			*/
 			
 			//for memory graph
-			ArrayList<Link> links = this.linkList.get(nnode);
-			//System.out.println(nnode);
+			ArrayList<Link> links = this.linkList.get(node);
 			if(links == null) {
 				for(int i=0; i<numSubGraph; i++){
-					output.collect(new IntWritable(i), new Text("nothing"));
+					output.collect(new IntWritable(i), new IntWritable(Integer.MAX_VALUE));
 				}
 				return;
 			}
@@ -359,25 +345,24 @@ public class BSearchMap extends MapReduceBase implements IterativeMapper<IntWrit
 			workload++;
 			
 			for(Link l : links){				
-				String f = "f:" + String.valueOf(base_len + l.weight);
 				addition++;
-				output.collect(new IntWritable(l.node), new Text(f));
+				output.collect(new IntWritable(l.node), new IntWritable(distance + l.weight));
 				report.setStatus(String.valueOf(workload) + ":" + addition);
 			}
 			
-			System.out.println("iter " + (iter++) + " workload is " + workload + " addition is " + addition);
-		} else if(value.toString().equals("nothing")){
+			//System.out.println("iter " + (iter++) + " workload is " + workload + " addition is " + addition);
+		} else{
 			//triger reduce to run
 			for(int i=0; i<numSubGraph; i++){
-				output.collect(new IntWritable(i), new Text("nothing"));
+				output.collect(new IntWritable(i), new IntWritable(Integer.MAX_VALUE));
 			}			
 		}
 	}
 
 	@Override
-	public void initPKVBuffer(InputPKVBuffer<IntWritable, Text> buffer)
+	public void initStarter(InputPKVBuffer<IntWritable, IntWritable> starter)
 			throws IOException {
-		buffer.init(new IntWritable(startnode), new Text("f:0"));
+		starter.init(new IntWritable(startnode), new IntWritable(0));
 	}
 
 	@Override

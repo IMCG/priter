@@ -6,7 +6,6 @@ import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -14,9 +13,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.IterativeMapper;
-import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -27,8 +24,7 @@ import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 public class PageRankMap extends MapReduceBase implements
 		IterativeMapper<DoubleWritable, IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
 
-	private int nPages;
-	private JobConf conf;
+	private JobConf job;
 
 	private String subGraphsDir;
 	//private String subRankDir;
@@ -38,20 +34,14 @@ public class PageRankMap extends MapReduceBase implements
 	private FSDataInputStream indexFileIn;
 	private BufferedReader indexReader;
 	private HashMap<Integer, Long> subGraphIndex;
-	private int numSubGraph;
 	private int lookupScale;
 	private boolean inMem = true;
 	private int kvs = 0;
 	private int expand = 0;
-	private int taskid;
-	private boolean init = true;
 	private int iter = 0;
 	
 	//graph in local memory
 	private HashMap<Integer, ArrayList<Integer>> linkList = new HashMap<Integer, ArrayList<Integer>>();
-
-	//initial rank
-	private Map<Integer, Double> baseRank = null;
 	
 	public static int getTaskId(JobConf conf) throws IllegalArgumentException{
        if (conf == null) {
@@ -84,21 +74,8 @@ public class PageRankMap extends MapReduceBase implements
 		assert(hdfs != null);
 		
 		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
-		//numSubGraph = MainDriver.MACHINE_NUM;	
-	    int ttnum = 0;
-		try {
-			JobClient jobclient = new JobClient(conf);
-			ClusterStatus status = jobclient.getClusterStatus();
-		    ttnum = status.getTaskTrackers();
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
-	    
-		numSubGraph = ttnum;		
-		
+
 		Path remote_link = new Path(subGraphsDir + "/subgraph" + n);
-		System.out.println(remote_link);
 		try {
 			FSDataInputStream in = hdfs.open(remote_link);
 			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
@@ -124,55 +101,7 @@ public class PageRankMap extends MapReduceBase implements
 			e.printStackTrace();
 		}
 	}
-	
-	private void loadInitVec(JobConf job, int n) {
-		baseRank = new HashMap<Integer, Double>();
-		/*
-		FileSystem hdfs = null;
-	    try {
-			hdfs = FileSystem.get(job);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		assert(hdfs != null);
-		
-		subRankDir = job.get(MainDriver.SUBRANK_DIR);
 
-		try {	       
-			//read the subgraph file to memory from hdfs, usually locally
-			String rankfilename = subRankDir + "/part-0000" + n;
-			//System.out.println(linkfilename);
-			FSDataInputStream rankFileIn = hdfs.open(new Path(rankfilename));
-			BufferedReader rankReader = new BufferedReader(new InputStreamReader(rankFileIn));
-			
-			String line;
-			while((line = rankReader.readLine()) != null){
-				//System.out.println(line);
-				int index = line.indexOf("\t");
-				if(index != -1){
-					int page = Integer.parseInt(line.substring(0, index));
-					double rank = Double.parseDouble(line.substring(index+1));
-					this.baseRank.put(page, rank);
-				}
-			}
-			
-			rankReader.close();
-			rankFileIn.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		*/
-		for(int i=n; i<nPages; i=i+numSubGraph){
-			double initRank = 0.0;
-			//if(i<100){
-				initRank = 0.2;
-			//}
-			this.baseRank.put(i, initRank);
-		}
-	}
-	
 	private synchronized void loadGraphToDisk(JobConf conf, int n) {
 		FileSystem hdfs = null;
 	    try {
@@ -183,11 +112,9 @@ public class PageRankMap extends MapReduceBase implements
 		}
 		assert(hdfs != null);
 		
-		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
-		//numSubGraph = MainDriver.MACHINE_NUM;	
-		
-		lookupScale = numSubGraph * MainDriver.INDEX_BLOCK_SIZE;
-		//System.out.println(numSubGraph);
+		int ttnum = Util.getTTNum(job);
+		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);		
+		lookupScale = ttnum * MainDriver.INDEX_BLOCK_SIZE;
 		
 		if(subGraphIndex == null){
 			//int n = getTaskId(conf);
@@ -273,7 +200,8 @@ public class PageRankMap extends MapReduceBase implements
 		//System.out.println(offset);
 		//linkReader = new BufferedReader(new InputStreamReader(linkFileIn));
 		
-		int linenum = (node / numSubGraph) % MainDriver.INDEX_BLOCK_SIZE;
+		int ttnum = Util.getTTNum(job);
+		int linenum = (node / ttnum) % MainDriver.INDEX_BLOCK_SIZE;
 		//System.out.println(linenum);
 		String record = new String();
 		while(/*linkReader.ready() && */(linenum-- >= 0)){
@@ -307,54 +235,44 @@ public class PageRankMap extends MapReduceBase implements
 	
 	@Override
 	public void configure(JobConf job) {
-		nPages = job.getInt(MainDriver.PG_TOTAL_PAGES, 0);
-		inMem = job.getBoolean(MainDriver.IN_MEM, true);
-		
-		conf = job;
-		
-	    int ttnum = 0;
-		try {
-			JobClient jobclient = new JobClient(conf);
-			ClusterStatus status = jobclient.getClusterStatus();
-		    ttnum = status.getTaskTrackers();
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
-	    
-		numSubGraph = ttnum;
-		
-		taskid = getTaskId(conf);
-		this.loadInitVec(job, taskid);
-		
+		inMem = job.getBoolean(MainDriver.IN_MEM, true);	
+		this.job = job;
+	
+		int taskid = Util.getTaskId(job);
 		if(inMem){
 			//load graph to memory
 			this.loadGraphToMem(job, taskid);
 		}else{
 			//load graph to local disk
-			loadGraphToDisk(conf, taskid);
+			loadGraphToDisk(job, taskid);
 		}	
 	}
 	
 	@Override
-	public void initPKVBuffer(InputPKVBuffer<IntWritable, DoubleWritable> buffer)
-			throws IOException {
+	public void initStarter(InputPKVBuffer<IntWritable, DoubleWritable> starter)
+			throws IOException {	
+		int ttnum = Util.getTTNum(job);		
+		int n = getTaskId(job);
+		for(int i=n; i<100; i=i+ttnum){
+			starter.init(new IntWritable(i), new DoubleWritable(0.2));
+		}
 		
+		//load from file
+		/*
 		FileSystem hdfs = null;
 	    try {
-			hdfs = FileSystem.get(conf);
+			hdfs = FileSystem.get(job);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		assert(hdfs != null);
-		/*
-		subRankDir = conf.get(MainDriver.SUBRANK_DIR);
+		
+		subRankDir = job.get(MainDriver.SUBRANK_DIR);
 
-		int n = getTaskId(conf);
 		try {	       
 			//read the subgraph file to memory from hdfs, usually locally
-			String rankfilename = subRankDir + "/rank-" + n;
+			String rankfilename = subRankDir + "/part-0000" + n;
 			//System.out.println(linkfilename);
 			FSDataInputStream rankFileIn = hdfs.open(new Path(rankfilename));
 			BufferedReader rankReader = new BufferedReader(new InputStreamReader(rankFileIn));
@@ -365,10 +283,8 @@ public class PageRankMap extends MapReduceBase implements
 				int index = line.indexOf("\t");
 				if(index != -1){
 					int page = Integer.parseInt(line.substring(0, index));
-					double rank = (Double.parseDouble((line.substring(index+1))) - 1.0 * PageRank.RETAINFAC);
-					int priority = (int)Math.round(rank * scaler);
-					
-					buffer.init(priority, new IntWritable(page), new DoubleWritable(rank));
+					double rank = Double.parseDouble(line.substring(index+1));
+					this.baseRank.put(page, rank);
 				}
 			}
 			
@@ -379,43 +295,6 @@ public class PageRankMap extends MapReduceBase implements
 			e.printStackTrace();
 		}
 		*/
-		
-		int n = taskid;
-		for(int i=n; i<nPages; i=i+numSubGraph){
-			double initRank = this.baseRank.get(i);
-			buffer.init(new IntWritable(i), new DoubleWritable(initRank));
-/*
-			double priority = 0.0;
-			if(initRank != 0.0){
-				ArrayList<Integer> links = null;
-				
-				if(inMem){
-					//for in-memory graph
-					links = this.linkList.get(i);
-				}else{
-					//for on-disk graph
-					try {
-						links = getLinks(i);
-					} catch (Exception e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				}
-		
-				if(links == null){
-					priority = 0.0;
-					System.out.println("no initial links for " + i);
-				}else{
-					priority = initRank / links.size();
-				}
-				
-				buffer.init(new DoubleWritable(priority), new IntWritable(i), new DoubleWritable(initRank));
-			}			 
-*/			
-			//System.out.println(priority + "\t" + i + "\t" + initRank);
-			
-		}
-		
 	}
 
 	@Override

@@ -23,6 +23,7 @@ public class MainDriver {
 	
 	//for shortestpath
 	public static final String SP_START_NODE = "shortestpath.start.node";
+	public static final String SP_TOTAL_NODES = "shortestpath.total.nodes";
 	
 	//for pagerank
 	public static final String PG_TOTAL_PAGES = "pagerank.total.pages";
