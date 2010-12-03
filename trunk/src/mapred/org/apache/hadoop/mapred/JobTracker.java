@@ -3059,14 +3059,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		}
 	} 
 	
-	class Merger<K extends Writable, V extends Writable> {
+	class Merger<K extends Writable, V extends WritableComparable> {
 		
 		private JobConf job;
 		private Class<K> keyClass;	
 		private Class<V> valClass;
-		private Deserializer keyDeserializer;	
-		private Deserializer valDeserializer;	
-		private IterativeReducer iterReducer = null;
+		private Deserializer<K> keyDeserializer;	
+		private Deserializer<V> valDeserializer;	
 		
 		public Merger(JobConf job, Class<K> keyclass, Class<V> valclass){
 			this.keyClass = keyclass;
@@ -3074,7 +3073,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			SerializationFactory serializationFactory = new SerializationFactory(job);
 		    this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
 		    this.valDeserializer = serializationFactory.getDeserializer(valClass);
-			this.iterReducer = (IterativeReducer)ReflectionUtils.newInstance(job.getReducerClass(), job);
 		}
 		
 		private void mergeSort(int index) throws IOException {
@@ -3089,6 +3087,41 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			
 			ArrayList<KVRecord<K, V>> list = new ArrayList<KVRecord<K, V>>(topk);
 			
+			//check sort order
+			boolean desendorder = true;
+			Path topKPath_check = new Path(outputDir + "/0/topKsnapshot-" + index);			
+			IFile.Reader<K, V> reader_check = new IFile.Reader<K, V>(job, hdfs, topKPath_check, null, null);
+			DataInputBuffer key_check = new DataInputBuffer();
+			DataInputBuffer value_check = new DataInputBuffer();
+
+			reader_check.next(key_check, value_check);
+			keyDeserializer.open(key_check);
+			valDeserializer.open(value_check);
+			K keyObject1 = null;
+			V valObject1 = null;
+			keyObject1 = keyDeserializer.deserialize(keyObject1);
+			valObject1 = valDeserializer.deserialize(valObject1);
+			reader_check.next(key_check, value_check);
+			keyDeserializer.open(key_check);
+			valDeserializer.open(value_check);
+			K keyObject2 = null;
+			V valObject2 = null;
+			keyObject2 = keyDeserializer.deserialize(keyObject2);
+			valObject2 = valDeserializer.deserialize(valObject2);
+			while(valObject1.compareTo(valObject2)==0){
+				reader_check.next(key_check, value_check);
+				keyDeserializer.open(key_check);
+				valDeserializer.open(value_check);
+				keyObject2 = keyDeserializer.deserialize(keyObject2);
+				valObject2 = valDeserializer.deserialize(valObject2);
+			}
+			if(valObject1.compareTo(valObject2)>0){
+				desendorder = true;
+			}else{
+				desendorder = false;
+			}
+			reader_check.close();
+			
 			for(int i=0; i< totalReduces; i++){
 				ArrayList<KVRecord<K, V>> list_i = new ArrayList<KVRecord<K, V>>(topk);
 				Path topKPath = new Path(outputDir + "/" + i + "/topKsnapshot-" + index);
@@ -3100,13 +3133,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				while (reader.next(key, value)) {
 					keyDeserializer.open(key);
 					valDeserializer.open(value);
-					Object keyObject = null;
-					Object valObject = null;
+					K keyObject = null;
+					V valObject = null;
 					keyObject = keyDeserializer.deserialize(keyObject);
 					valObject = valDeserializer.deserialize(valObject);
 
-					list_i.add(new KVRecord<K, V>((K)keyObject, (V)valObject));
+					list_i.add(new KVRecord<K, V>(keyObject, valObject));
 				}	
+				reader.close();
 						
 				if(list.size() == 0){
 					list.addAll(list_i);
@@ -3124,18 +3158,34 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					if(it2.hasNext()) two = it2.next();
 
 					while((it1.hasNext())&&(it2.hasNext())) {
-						int comres = this.iterReducer.compare(one.v, two.v);
-						if(comres > 0){
-							temp.add(one);
-							one = it1.next();
-						}else if(comres <0){
-							temp.add(two);
-							two = it2.next();
+						if(desendorder){
+							int comres = one.v.compareTo(two.v);
+							if(comres > 0){
+								temp.add(one);
+								one = it1.next();
+							}else if(comres <0){
+								temp.add(two);
+								two = it2.next();
+							}else{
+								temp.add(one);
+								temp.add(two);
+								one = it1.next();
+								two = it2.next();
+							}
 						}else{
-							temp.add(one);
-							temp.add(two);
-							one = it1.next();
-							two = it2.next();
+							int comres = one.v.compareTo(two.v);
+							if(comres < 0){
+								temp.add(one);
+								one = it1.next();
+							}else if(comres > 0){
+								temp.add(two);
+								two = it2.next();
+							}else{
+								temp.add(one);
+								temp.add(two);
+								one = it1.next();
+								two = it2.next();
+							}
 						}
 					}
 					
