@@ -1231,7 +1231,12 @@ public class JOutputBuffer<K extends Object, V extends Object>
 				final int endPosition = (kvend > kvstart)
 				? kvend
 						: kvoffsets.length + kvend;
-				sorter.sort(JOutputBuffer.this, kvstart, endPosition, reporter);
+				
+				//for iterative algorithms, avoid sort, since it is no use
+				if(!job.getBoolean("mapred.job.iterative", false)){
+					sorter.sort(JOutputBuffer.this, kvstart, endPosition, reporter);
+				}
+					
 				int spindex = kvstart;
 				InMemValBytes value = new InMemValBytes();
 				for (int i = 0; i < partitions; ++i) {
