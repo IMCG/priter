@@ -1233,7 +1233,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 						: kvoffsets.length + kvend;
 				
 				//for iterative algorithms, avoid sort, since it is no use
-				if(!job.getBoolean("mapred.job.iterative", false)){
+				if(job.getBoolean("mapred.job.iterative.sort", true)){
 					sorter.sort(JOutputBuffer.this, kvstart, endPosition, reporter);
 				}
 					

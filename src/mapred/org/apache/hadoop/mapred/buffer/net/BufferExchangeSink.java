@@ -525,22 +525,18 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
 					if (collector.read(istream, header)) {
 						updateProgress(header);
+										
+						int recMaps = (syncMapPos.containsKey(position.longValue())) ? syncMapPos.get(position.longValue()) + 1 : 1;
+						LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
+						syncMapPos.put(position.longValue(), recMaps);
 						
-						//if(conf.getBoolean("mapred.iterative.reducesync", false)){
-							int recMaps = (syncMapPos.containsKey(position.longValue())) ? syncMapPos.get(position.longValue()) + 1 : 1;
-
-							LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
-							if(recMaps >= syncMaps){
-								syncMapPos.remove(position.longValue());	
-								((ReduceTask)task).spillIter = true;	
-								task.notifyAll();								
-							}else{
-								syncMapPos.put(position.longValue(), recMaps);
-							}
-						//}else{
-							//((ReduceTask)task).spillIter = true;
-							//task.notifyAll();
-						//}
+						if(recMaps >= syncMaps){
+							syncMapPos.remove(position.longValue());	
+							((ReduceTask)task).spillIter = true;	
+							task.notifyAll();								
+						}else if(!conf.getBoolean("mapred.job.iterative.sort", true)){
+							task.notifyAll();
+						}
 			
 						//task.notifyAll();
 						position.set(header.sequence() + 1);
