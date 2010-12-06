@@ -41,6 +41,7 @@ import org.apache.hadoop.mapred.TaskID;
 import org.apache.hadoop.mapred.IFile.InMemoryReader;
 import org.apache.hadoop.mapred.IFile.Reader;
 import org.apache.hadoop.mapred.IFile.Writer;
+import org.apache.hadoop.mapred.Merger.MergeQueue;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.metrics.MetricsContext;
@@ -539,8 +540,13 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	
 	@Override
 	public ValuesIterator<K, V> valuesIterator() throws IOException {
-		RawKeyValueIterator kvIter = this.createKVIterator(conf, rfs, reporter);
-		return new ValuesIterator<K, V>(kvIter, comparator, keyClass, valClass, conf, reporter);
+		if(conf.getBoolean("mapred.job.iterative.sort", true)){
+			RawKeyValueIterator kvIter = this.createSortKVIterator(conf, rfs, reporter);
+			return new ValuesIterator<K, V>(kvIter, comparator, keyClass, valClass, conf, reporter);
+		}else{
+			RawKeyValueIterator kvIter = this.createUnSortKVIterator(conf, rfs, reporter);
+			return new ValuesIterator<K, V>(kvIter, comparator, keyClass, valClass, conf, reporter);
+		}
 	}
 	
 	@Override
@@ -848,7 +854,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	 */
 	@SuppressWarnings("unchecked")
 	private RawKeyValueIterator 
-	createKVIterator(JobConf job, FileSystem fs, Reporter reporter) throws IOException {
+	createSortKVIterator(JobConf job, FileSystem fs, Reporter reporter) throws IOException {
 		
 		final Path tmpDir = new Path(task.getTaskID().toString());
 		TaskID taskid = null;
@@ -919,7 +925,39 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		
 		if (open && taskid != null) {
 			return new RawKVIteratorWriter(riter, taskid, inMemBytes + onDiskBytes);
+		}		
+		
+		return riter;
+	}
+	
+	private RawKeyValueIterator 
+	createUnSortKVIterator(JobConf job, FileSystem fs, Reporter reporter) throws IOException {
+		
+		if (!open && inputFilesInMemory.size() > 0) {
+			flush(maxInMemMerge);
 		}
+			
+		// Get all segments on disk
+		List<Segment<K,V>> diskSegments = new ArrayList<Segment<K,V>>();
+		long onDiskBytes = 0;
+		synchronized (inputFilesOnDisk) {
+			Path[] onDisk = getFiles(fs);
+			for (Path file : onDisk) {
+				onDiskBytes += fs.getFileStatus(file).getLen();
+				diskSegments.add(new Segment<K, V>(job, fs, file, codec, false));
+			}
+			inputFilesOnDisk.clear();
+		}
+		
+		// Get all in-memory segments
+		List<Segment<K,V>> finalSegments = new ArrayList<Segment<K,V>>();
+					
+		if (0 != onDiskBytes) {
+			// build final list of segments from merged backed by disk + in-mem
+			finalSegments.addAll(diskSegments);
+		}
+		
+		RawKeyValueIterator riter = new UnSortRawKeyValueIterator<K, V>(finalSegments);
 		return riter;
 	}
 	
@@ -948,7 +986,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			this.taskid = taskid;
 			this.outputPath = outputHandle.getInputFileForWrite(task.getTaskID(), taskid, spills++, bytes);
 			this.writer = new IFile.Writer(conf, localFileSys, outputPath,
-					                       keyClass, valClass, codec, null);;
+					                       keyClass, valClass, codec, null);
 		}
 
 		@Override

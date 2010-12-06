@@ -209,8 +209,8 @@ public class Merger {
       }
     }
     
-    DataInputBuffer getKey() { return key; }
-    DataInputBuffer getValue() { return value; }
+    public DataInputBuffer getKey() { return key; }
+    public DataInputBuffer getValue() { return value; }
 
     public long getLength() { 
       return (reader == null) ?
@@ -234,7 +234,7 @@ public class Merger {
     }
   }
   
-  private static class MergeQueue<K extends Object, V extends Object> 
+  public static class MergeQueue<K extends Object, V extends Object> 
   extends PriorityQueue<Segment<K, V>> implements RawKeyValueIterator {
     Configuration conf;
     FileSystem fs;
@@ -303,7 +303,7 @@ public class Merger {
         Collections.sort(segments, segmentComparator);
       }
     }
-
+    
     public MergeQueue(Configuration conf, FileSystem fs,
         List<Segment<K, V>> segments, RawComparator<K> comparator,
         Progressable reporter, boolean sortSegments, CompressionCodec codec) {
