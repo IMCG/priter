@@ -48,6 +48,7 @@ public class PageRank extends Configured implements Tool {
 	    	    
 	    //set for iterative process   
 	    job.setBoolean("mapred.job.iterative", true);
+	    job.setBoolean("mapred.job.iterative.sort", false);
 	    job.setInt("mapred.iterative.ttnum", ttnum);
 	    job.setInt("mapred.iterative.topk", topk);
 	    job.setFloat("mapred.iterative.output.wearfactor", wearfactor);
