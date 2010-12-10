@@ -130,7 +130,9 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			iter_time = (iter_time_per_node <= 0) ? 0.2 : iter_time_per_node;
 			
 			//LOG.info("heap size : " + this.recordsMap.size());
+			
 			final Map<K, PriorityRecord<V>> langForSort = stateTable;
+			LOG.info("sort on " + stateTable.size() + " records in state table");
 			Collections.sort(keys, 
 					new Comparator(){
 						public int compare(Object left, Object right){
@@ -139,6 +141,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 							return -iterReducer.compare(leftiState, rightiState);
 						}
 					});
+			
 			Date end_sort_date = new Date();
 			long end_sort = end_sort_date.getTime();
 			
@@ -164,11 +167,12 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			while(sort_itr.hasNext() && actualEmit<this.emitSize){
 				K k = sort_itr.next();		
 				V v = stateTable.get(k).getiState();
+				//LOG.info("comparing " + v + " and " + defaultiState);
 				if(v.equals(defaultiState)){
 					break;
 				}
 				records.add(new KVRecord<K, V>(k, v));
-				this.stateTable.get(k).setiState(defaultiState);
+				this.stateTable.get(k).setiState((V)iterReducer.setDefaultiState());
 				actualEmit++;
 			}
 			
@@ -194,9 +198,13 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			if(this.stateTable.containsKey(key)){
 				PriorityRecord<V> pkvRecord = this.stateTable.get(key);
 				iterReducer.updateState(pkvRecord.getiState(), pkvRecord.getcState(), value);
-				//LOG.info("updated key: " + key + " istate: " + pkvRecord.getiState() + " cstate: " + pkvRecord.getcState() + " value: " + value);
+				//LOG.info("updated existed key: " + key + " istate: " + pkvRecord.getiState() + " cstate: " + pkvRecord.getcState() + " value: " + value);
 			}else{
-				LOG.error("no such key " + key);
+				//LOG.error("no such key " + key);
+				PriorityRecord<V> newpkvRecord = new PriorityRecord<V>((V)iterReducer.setDefaultiState(), (V)iterReducer.setDefaultcState(key));
+				iterReducer.updateState(newpkvRecord.getiState(), newpkvRecord.getcState(), value);
+				this.stateTable.put(key, newpkvRecord);
+				//LOG.info("updated not existed key: " + key + " istate: " + newpkvRecord.getiState() + " cstate: " + newpkvRecord.getcState() + " value: " + value);
 			}
 		}
 		total_reduce++;
