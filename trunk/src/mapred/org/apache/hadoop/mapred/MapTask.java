@@ -42,8 +42,10 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapred.TaskCompletionEvent.Status;
 import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
+import org.apache.hadoop.mapred.buffer.impl.Buffer;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
+import org.apache.hadoop.mapred.buffer.impl.UnSortOutputBuffer;
 import org.apache.hadoop.mapred.buffer.net.BufferExchange;
 import org.apache.hadoop.mapred.buffer.net.BufferRequest;
 import org.apache.hadoop.mapred.buffer.net.BufferExchangeSink;
@@ -180,6 +182,7 @@ public class MapTask extends Task {
 	
 	protected OutputCollector collector = null;	//the original one uses it
 	protected JOutputBuffer buffer = null;		//iterative mapreduce uses it
+	protected UnSortOutputBuffer nsortBuffer = null;		//no sort uses it
 
 	private BytesWritable split = new BytesWritable();
 	private String splitClass;
@@ -371,10 +374,17 @@ public class MapTask extends Task {
 				if (conf.getCompressMapOutput()) {
 					codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
 				}
-				this.buffer = new JOutputBuffer(bufferUmbilical, this, job, 
-						reporter, getProgress(), false, 
-						this.inputKeyClass, this.inputValClass, codecClass);
-				this.buffer.setIterative(true);
+				
+				if(job.getBoolean("mapred.job.iterative.sort", true)){
+					this.buffer = new JOutputBuffer(bufferUmbilical, this, job, 
+							reporter, getProgress(), false, 
+							this.inputKeyClass, this.inputValClass, codecClass);
+				}else{
+					this.nsortBuffer = new UnSortOutputBuffer(bufferUmbilical, this, job, 
+							reporter, getProgress(), false, 
+							this.inputKeyClass, this.inputValClass, codecClass);
+				}
+	
 			} else { 
 				LOG.info("I didn't consider this");
 			}
@@ -421,66 +431,70 @@ public class MapTask extends Task {
 					
 			try{
 				synchronized(this){		
-					//iteration loop, stop when reduce let it stop	
-					while(!this.iterative_stop || !pkvBuffer.isStop()) {
-						/*
-						if(buffer.bspill){
-							try {
-								this.wait();
-							} catch (InterruptedException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
+					if(job.getBoolean("mapred.job.iterative.sort", true)){
+						//iteration loop, stop when reduce let it stop	
+						while(!this.iterative_stop || !pkvBuffer.isStop()) {
+							while(!pkvBuffer.next()){
+								LOG.info("total workload is " + workload);
+								mapper.iterate();
+								if(counter == 0){
+									LOG.info("no records left, do nothing");
+								}else{		
+									this.buffer.iterate();
+									counter = 0;
+								}
+														
+								LOG.info("no records, I am waiting!");
+								
+								setProgressFlag();
+								try {
+									this.wait();
+								} catch (InterruptedException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
 							}
+											
+							Object keyObject = pkvBuffer.getTopKey();
+							Object valObject = pkvBuffer.getTopValue();
+							mapper.map(keyObject, valObject, this.buffer, reporter);
+							reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
+							workload++;
+							counter++;										
 						}
-						*/
-						while(!pkvBuffer.next()){
-							LOG.info("total workload is " + workload);
-							mapper.iterate();
-							//only when we wait incoming records from reduce, we do this stream.
-							//or when we have collected 100 records. see the following
-							//this.buffer.stream(sequence++, false);
-							//this.buffer.clear();
-							if(counter == 0){
-								LOG.info("no records left, do nothing");
-							}else{
-								this.buffer.iterate();
-								counter = 0;
+					}else{
+						//iteration loop, stop when reduce let it stop	
+						while(!this.iterative_stop || !pkvBuffer.isStop()) {
+							while(!pkvBuffer.next()){
+								LOG.info("total workload is " + workload);
+								mapper.iterate();
+								if(counter == 0){
+									LOG.info("no records left, do nothing");
+								}else{		
+									this.nsortBuffer.iterate();
+									counter = 0;
+								}
+														
+								LOG.info("no records, I am waiting!");
+								
+								setProgressFlag();
+								try {
+									this.wait();
+								} catch (InterruptedException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
 							}
-													
-							LOG.info("no records, I am waiting!");
-							
-							setProgressFlag();
-							try {
-								this.wait();
-							} catch (InterruptedException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
+											
+							Object keyObject = pkvBuffer.getTopKey();
+							Object valObject = pkvBuffer.getTopValue();
+							mapper.map(keyObject, valObject, this.nsortBuffer, reporter);
+							reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
+							workload++;
+							counter++;										
 						}
-										
-						Object keyObject = pkvBuffer.getTopKey();
-						Object valObject = pkvBuffer.getTopValue();
-						mapper.map(keyObject, valObject, this.buffer, reporter);
-						reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
-						workload++;
-						counter++;
-						
-						/*
-						if(++counter >= job.getInt("mapred.iterative.map.bufrecs", 100)){
-						//if(++counter >= job.getInt("mapred.iterative.topk", 100)){
-							//this.buffer.stream(sequence++, false);
-							this.buffer.iterate();
-							
-							//here I made a huge mistake, which takes me a day to debug
-							//stream() method invoke umbilical.output(spill file), but that
-							//is a thread, it hasn't been output, I did the clear() operation
-							//then only the last spill file was sent
-							//this.buffer.clear();
-
-							counter = 0;
-						}	
-						*/											
 					}
+	
 				}
 			}finally {
 				rof.interrupt();

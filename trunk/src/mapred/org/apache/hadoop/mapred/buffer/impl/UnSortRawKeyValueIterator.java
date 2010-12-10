@@ -26,10 +26,11 @@ public class UnSortRawKeyValueIterator<K extends Object, V extends Object>
     private float progPerByte;
     private Progress scanProgress = new Progress();
     
-    public UnSortRawKeyValueIterator(List<Segment<K,V>> inSegments){
-    	LOG.info("Scan " + segments.size() + " segments");
+    public UnSortRawKeyValueIterator(List<Segment<K,V>> inSegments) throws IOException{
+    	LOG.info("Scan " + inSegments.size() + " segments");
 
     	for(Segment<K,V> seg : inSegments){
+    		seg.init(null);
     		segments.add(seg);
     		totalBytes += seg.getLength();
     	}
@@ -65,30 +66,33 @@ public class UnSortRawKeyValueIterator<K extends Object, V extends Object>
 
 	@Override
 	public boolean next() throws IOException {
-	     long startPos = currSegment.getPosition();
-	     boolean hasNext = currSegment.next();
-	     long endPos = currSegment.getPosition();
-	     	      
-	     while (!hasNext) {
+		if(currSegment == null) return false;
+	    long startPos = currSegment.getPosition();
+	    boolean hasNext = currSegment.next();
+	    long endPos = currSegment.getPosition();
+
+	    LOG.info("startPos is " + startPos + " hasNext is " + hasNext + " endPos is " + endPos);
+
+	    while (!hasNext) {
 	    	 currSegment.close();
 	    	 currSegment = segments.poll();
 	    	 if(currSegment == null){
 	    		 return false;
 	    	 }
-	    	 
+
 		     startPos = currSegment.getPosition();
 		     hasNext = currSegment.next();
 		     endPos = currSegment.getPosition();
-	     }
+	    }
 	      
-	     totalBytesProcessed += endPos - startPos;
-	     scanProgress.set(totalBytesProcessed * progPerByte);
+	    totalBytesProcessed += endPos - startPos;
+	    scanProgress.set(totalBytesProcessed * progPerByte);
 	     
 
-	     key = currSegment.getKey();
-	     value = currSegment.getValue();
-
-	     return true;
+	    key = currSegment.getKey();
+	    value = currSegment.getValue();
+	    
+	    return true;
 	}
 
 }

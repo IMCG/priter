@@ -951,11 +951,14 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		
 		// Get all in-memory segments
 		List<Segment<K,V>> finalSegments = new ArrayList<Segment<K,V>>();
+		long inMemBytes = createInMemorySegments(finalSegments, 0);
 					
 		if (0 != onDiskBytes) {
 			// build final list of segments from merged backed by disk + in-mem
 			finalSegments.addAll(diskSegments);
 		}
+		LOG.info("reducing segments..., " + inMemBytes + " bytes in memory and " + 
+				onDiskBytes + " bytes on disk");
 		
 		RawKeyValueIterator riter = new UnSortRawKeyValueIterator<K, V>(finalSegments);
 		return riter;

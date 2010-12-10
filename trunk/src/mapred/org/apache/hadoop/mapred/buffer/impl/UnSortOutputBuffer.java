@@ -1,21 +1,3 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.hadoop.mapred.buffer.impl;
 
 import java.io.DataInputStream;
@@ -23,7 +5,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
@@ -51,15 +35,16 @@ import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
+import org.apache.hadoop.mapred.buffer.impl.Buffer;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.QuickSort;
 import org.apache.hadoop.util.ReflectionUtils;
 
-public class JOutputBuffer<K extends Object, V extends Object> 
-       extends Buffer<K, V>
-	   implements OutputCollector<K, V>, IndexedSortable {
+public class UnSortOutputBuffer<K extends Object, V extends Object> 
+		extends Buffer<K, V> implements
+		OutputCollector<K, V> {
 
 	private class PartitionBufferMerger {
 
@@ -378,7 +363,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 				PartitionBufferFile spill = spills.get(nextPipelineSpill);
 				OutputFile file = new OutputFile(taskid, nextPipelineSpill, spill.progress,
 						                        spill.data, spill.index, spill.eof, partitions);
-				LOG.info(JOutputBuffer.this.taskid + " pipelining " + file);
+				LOG.info(UnSortOutputBuffer.this.taskid + " pipelining " + file);
 				umbilical.output(file);
 				nextPipelineSpill++;
 			}
@@ -388,7 +373,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 						  lastPipelineSpill + " before pipelining. Progress = " + progress.get());
 				SortedSet<OutputFile> files = merger.mergeSpill(nextPipelineSpill, lastPipelineSpill);
 				for (OutputFile file : files) {
-					LOG.info(JOutputBuffer.this.taskid + " pipelining " + file);
+					LOG.info(UnSortOutputBuffer.this.taskid + " pipelining " + file);
 					umbilical.output(file);
 				}
 				nextPipelineSpill = lastPipelineSpill + 1;
@@ -415,17 +400,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 
 					if (open) {
 						try {
-							/*
-						}
-							if(iterative){
-								synchronized(spillLock){
-									spill(-1);
-								}
-							}else{
-								
-							}
-							*/
-							spill(-1);
+							spill(-1);	
 						} catch (Throwable e) {
 							e.printStackTrace();
 							sortSpillException = e;
@@ -556,10 +531,11 @@ public class JOutputBuffer<K extends Object, V extends Object>
 	private int bufmark = 0;           // marks end of record
 	private byte[] kvbuffer;           // main output buffer
 	private long kvbufferSize = 0;
-	private static final int PARTITION = 0; // partition offset in acct
-	private static final int KEYSTART = 1;  // key offset in acct
-	private static final int VALSTART = 2;  // val offset in acct
-	private static final int ACCTSIZE = 3;  // total #fields in acct
+	
+	private Map<Integer, ArrayList<Integer>> partitionMap;
+	private static final int KEYSTART = 0;  // key offset in acct
+	private static final int VALSTART = 1;  // val offset in acct
+	private static final int ACCTSIZE = 2;  // total #fields in acct
 	private static final int RECSIZE =
 		(ACCTSIZE + 1) * 4;  // acct bytes per record
 
@@ -569,7 +545,6 @@ public class JOutputBuffer<K extends Object, V extends Object>
 	private final int softRecordLimit;
 	private final int softBufferLimit;
 	private final int minSpillsForCombine;
-	private final IndexedSorter sorter;
 	private final Object spillLock = new Object();
 	private final Object mergeLock = new Object();
 	private final BlockingBuffer bb = new BlockingBuffer();
@@ -587,10 +562,9 @@ public class JOutputBuffer<K extends Object, V extends Object>
 	
 	private int iterative_spill_bufsize = 0;
 	private int iteration = 0;
-	private boolean iterative = false;
 	
 	@SuppressWarnings("unchecked")
-	public JOutputBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
+	public UnSortOutputBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
 					Reporter reporter, Progress progress, boolean pipeline,
 			       Class<K> keyClass, Class<V> valClass, 
 			       Class<? extends CompressionCodec> codecClass) throws IOException {
@@ -625,9 +599,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 		if ((sortmb & 0x7FF) != sortmb) {
 			throw new IOException("Invalid \"io.sort.mb\": " + sortmb);
 		}
-		sorter = (IndexedSorter)
-		ReflectionUtils.newInstance(
-				job.getClass("map.sort.class", QuickSort.class), job);
+
 		// buffers and accounting
 		int maxMemUsage = sortmb << 20;
 
@@ -667,6 +639,12 @@ public class JOutputBuffer<K extends Object, V extends Object>
 		
 		//just for iterative MapReduce
 		this.iterative_spill_bufsize = job.getInt("mapred.iterative.map.spillsize", 50000);
+		
+		partitionMap = new HashMap<Integer, ArrayList<Integer>>();
+		for(int i=0; i<partitions; i++){
+			ArrayList<Integer> kvoffset = new ArrayList<Integer>();
+			partitionMap.put(i, kvoffset);
+		}
 	}
 
 	public JobConf getJobConf() {
@@ -686,10 +664,6 @@ public class JOutputBuffer<K extends Object, V extends Object>
 	 */
 	public int getBytes() {
 		return ((kvend > kvstart) ? kvend : kvoffsets.length + kvend) - kvstart;
-	}
-	
-	public void setIterative(boolean iterative) {
-		this.iterative = iterative;
 	}
 	
 	public synchronized void force() throws IOException {
@@ -867,7 +841,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 			// update accounting info
 			int ind = kvindex * ACCTSIZE;
 			kvoffsets[kvindex] = ind;
-			kvindices[ind + PARTITION] = 0;
+			partitionMap.get(0).add(kvoffsets[kvindex]);
 			kvindices[ind + KEYSTART] = keystart;
 			kvindices[ind + VALSTART] = valstart;
 			kvindex = (kvindex + 1) % kvoffsets.length;
@@ -926,7 +900,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 			// update accounting info
 			int ind = kvindex * ACCTSIZE;
 			kvoffsets[kvindex] = ind;
-			kvindices[ind + PARTITION] = partition;
+			partitionMap.get(partition).add(kvoffsets[kvindex]);
 			kvindices[ind + KEYSTART] = keystart;
 			kvindices[ind + VALSTART] = valstart;
 			kvindex = (kvindex + 1) % kvoffsets.length;
@@ -938,26 +912,7 @@ public class JOutputBuffer<K extends Object, V extends Object>
 
 	}
 
-	/**
-	 * Compare logical range, st i, j MOD offset capacity.
-	 * Compare by partition, then by key.
-	 * @see IndexedSortable#compare
-	 */
-	public int compare(int i, int j) {
-		final int ii = kvoffsets[i % kvoffsets.length];
-		final int ij = kvoffsets[j % kvoffsets.length];
-		// sort by partition
-		if (kvindices[ii + PARTITION] != kvindices[ij + PARTITION]) {
-			return kvindices[ii + PARTITION] - kvindices[ij + PARTITION];
-		}
-		// sort by key
-		return comparator.compare(kvbuffer,
-				kvindices[ii + KEYSTART],
-				kvindices[ii + VALSTART] - kvindices[ii + KEYSTART],
-				kvbuffer,
-				kvindices[ij + KEYSTART],
-				kvindices[ij + VALSTART] - kvindices[ij + KEYSTART]);
-	}
+
 
 	/**
 	 * Swap logical indices st i, j MOD offset capacity.
@@ -1211,8 +1166,6 @@ public class JOutputBuffer<K extends Object, V extends Object>
 				final int endPosition = (kvend > kvstart)
 				? kvend
 						: kvoffsets.length + kvend;
-				
-				sorter.sort(JOutputBuffer.this, kvstart, endPosition, reporter);
 					
 				int spindex = kvstart;
 				InMemValBytes value = new InMemValBytes();
@@ -1225,34 +1178,20 @@ public class JOutputBuffer<K extends Object, V extends Object>
 						if (null == combinerClass) {
 							// spill directly
 							DataInputBuffer key = new DataInputBuffer();
-							while (spindex < endPosition
-									&& kvindices[kvoffsets[spindex
-									                       % kvoffsets.length]
-									                       + PARTITION] == i) {
-								final int kvoff = kvoffsets[spindex % kvoffsets.length];
+							
+							//spill according to partitionMap, from partition 0 -		
+							ArrayList<Integer> kvoffset = partitionMap.get(i);
+							for(int kvindex : kvoffset){
+								final int kvoff = kvindex;
 								getVBytesForOffset(kvoff, value);
 								key.reset(kvbuffer, kvindices[kvoff + KEYSTART],
 										(kvindices[kvoff + VALSTART] - kvindices[kvoff + KEYSTART]));
 
 								writer.append(key, value);
-								++spindex;
 							}
+							partitionMap.get(i).clear();
 						} else {
-							int spstart = spindex;
-							while (spindex < endPosition
-									&& kvindices[kvoffsets[spindex % kvoffsets.length] + PARTITION] == i) {
-								++spindex;
-							}
-							// Note: we would like to avoid the combiner if
-							// we've fewer
-							// than some threshold of records for a partition
-							if (spstart != spindex) {
-								CombineOutputCollector combineCollector = new CombineOutputCollector();
-								combineCollector.setWriter(writer);
-
-								RawKeyValueIterator kvIter = new MRResultIterator(spstart, spindex);
-								combineAndSpill(combineCollector, kvIter);
-							}
+							throw new IOException("no combiner allowed!");
 						}
 
 						// close the writer

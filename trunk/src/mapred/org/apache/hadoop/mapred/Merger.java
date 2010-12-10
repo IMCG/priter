@@ -201,7 +201,7 @@ public class Merger {
       this.segmentLength = reader.getLength();
     }
 
-    private void init(Counters.Counter readsCounter) throws IOException {
+    public void init(Counters.Counter readsCounter) throws IOException {
       if (reader == null) {
         FSDataInputStream in = fs.open(file);
         in.seek(segmentOffset);
