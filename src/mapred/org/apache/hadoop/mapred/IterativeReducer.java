@@ -18,6 +18,7 @@ public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends Writab
 	void initStateTable(OutputPKVBuffer<K3, V3> stateTable);
 	K3 setDefaultKey();
 	V3 setDefaultiState();
+	V3 setDefaultcState(K3 k);
 	void updateState(V3 iState, V3 cState, V3 value);	
 	int compare(V3 state1, V3 state2);
 	
