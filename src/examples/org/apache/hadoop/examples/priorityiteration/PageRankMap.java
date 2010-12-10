@@ -21,6 +21,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 
+
 public class PageRankMap extends MapReduceBase implements
 		IterativeMapper<DoubleWritable, IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
 
