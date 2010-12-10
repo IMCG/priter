@@ -11,16 +11,19 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 
+
 public class BSearchReduce extends MapReduceBase implements
 		IterativeReducer<IntWritable, IntWritable, IntWritable, IntWritable> {
 	private JobConf job;
 	private int reduce = 0;
 	private int iterate = 0;
+	private int startnode;
 	private int nNodes = 0;
 	
 	public void configure(JobConf job) {
 		this.job = job;
 		nNodes = job.getInt(MainDriver.SP_TOTAL_NODES, 0);
+		startnode = job.getInt(MainDriver.SP_START_NODE, 0);
 	}
 	
 	//format node	f:len
@@ -30,17 +33,19 @@ public class BSearchReduce extends MapReduceBase implements
 			OutputPKVBuffer<IntWritable, IntWritable> output, Reporter report)
 			throws IOException {
 		reduce++;	
-		//System.out.println("input: " + key);
+		//System.out.println("input key: " + key);
 		
 		int min_len = Integer.MAX_VALUE;
 		while(values.hasNext()){
 			int len = values.next().get();
+			//System.out.println("input value: " + len);
 			if(len<min_len){
 				min_len = len;
 			}
 		}
 		
 		output.collect(new IntWritable(key.get()), new IntWritable(min_len));
+		//System.out.println("output " + key + "\t" + min_len);
 	}
 
 	@Override
@@ -66,6 +71,11 @@ public class BSearchReduce extends MapReduceBase implements
 	}
 
 	@Override
+	public IntWritable setDefaultcState(IntWritable key) {
+		return new IntWritable(Integer.MAX_VALUE);
+	}
+	
+	@Override
 	public void updateState(IntWritable iState, IntWritable cState, IntWritable value) {
 		if(value.get() >= cState.get()){
 			iState.set(Integer.MAX_VALUE);
@@ -78,11 +88,7 @@ public class BSearchReduce extends MapReduceBase implements
 	@Override
 	public void initStateTable(
 			OutputPKVBuffer<IntWritable, IntWritable> stateTable) {
-		int n = Util.getTaskId(job);
-		int ttnum = Util.getTTNum(job);
-		for(int i=n; i<nNodes; i=i+ttnum){
-			stateTable.init(new IntWritable(i), new IntWritable(Integer.MAX_VALUE), new IntWritable(Integer.MAX_VALUE));
-		}
+		stateTable.init(new IntWritable(startnode), new IntWritable(0), new IntWritable(0));
 	}
 
 	@Override

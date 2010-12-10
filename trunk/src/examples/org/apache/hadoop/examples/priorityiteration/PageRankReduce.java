@@ -66,8 +66,6 @@ public class PageRankReduce extends MapReduceBase implements
 		for(int i=n; i<nPages; i=i+ttnum){
 			if(i<100){
 				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(0.2));
-			}else{
-				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(0.0));
 			}
 		}
 	}
@@ -80,6 +78,15 @@ public class PageRankReduce extends MapReduceBase implements
 	@Override
 	public DoubleWritable setDefaultiState() {
 		return new DoubleWritable(0.0);
+	}
+	
+	@Override
+	public DoubleWritable setDefaultcState(IntWritable key) {
+		if(key.get() < 100){
+			return new DoubleWritable(0.2);
+		}else{
+			return new DoubleWritable(0.0);
+		}	
 	}
 
 	@Override
