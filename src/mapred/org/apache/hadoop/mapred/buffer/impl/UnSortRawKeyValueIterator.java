@@ -71,7 +71,7 @@ public class UnSortRawKeyValueIterator<K extends Object, V extends Object>
 	    boolean hasNext = currSegment.next();
 	    long endPos = currSegment.getPosition();
 
-	    LOG.info("startPos is " + startPos + " hasNext is " + hasNext + " endPos is " + endPos);
+	    //LOG.info("startPos is " + startPos + " hasNext is " + hasNext + " endPos is " + endPos);
 
 	    while (!hasNext) {
 	    	 currSegment.close();

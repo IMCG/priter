@@ -78,7 +78,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 	public double iter_time = 0;
 	
 	public int actualEmit = 0;
-	public static int WAIT_ITER = 2;
+	public static int WAIT_ITER = 0;
 
 	public OutputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
 			Reporter reporter, Progress progress, Class<K> keyClass, Class<V> valClass, 
@@ -162,8 +162,12 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 						
 			Iterator<K> sort_itr =keys.iterator();
 			while(sort_itr.hasNext() && actualEmit<this.emitSize){
-				K k = sort_itr.next();			
-				records.add(new KVRecord<K, V>(k, stateTable.get(k).getiState()));
+				K k = sort_itr.next();		
+				V v = stateTable.get(k).getiState();
+				if(v.equals(defaultiState)){
+					break;
+				}
+				records.add(new KVRecord<K, V>(k, v));
 				this.stateTable.get(k).setiState(defaultiState);
 				actualEmit++;
 			}
@@ -336,7 +340,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 						public int compare(Object left, Object right){
 							V leftcState = langForComp.get((K)left).getcState();
 							V rightcState = langForComp.get((K)right).getcState();
-							return iterReducer.compare(leftcState, rightcState);
+							return -iterReducer.compare(leftcState, rightcState);
 						}
 					});
 
@@ -348,6 +352,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 				count++;
 			}
 
+			writer.close();
 			System.out.println("snapshot index " + index + " iterations " + iteration);
 		}
 	}
