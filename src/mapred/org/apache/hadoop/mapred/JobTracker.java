@@ -3068,6 +3068,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		private Deserializer<V> valDeserializer;	
 		
 		public Merger(JobConf job, Class<K> keyclass, Class<V> valclass){
+			this.job = job;
 			this.keyClass = keyclass;
 			this.valClass = valclass;
 			SerializationFactory serializationFactory = new SerializationFactory(job);

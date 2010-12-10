@@ -254,10 +254,11 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 				//LOG.info(this + " sending " + header);
 				write(header, file.dataInputStream());
 
+				/*
 				boolean stop = (file.paritions() == -100) ? true : false;
 				ostream.writeBoolean(stop);
 				ostream.flush();
-							
+				*/		
 				file.close();
 				return BufferExchange.Transfer.SUCCESS;
 			}

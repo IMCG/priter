@@ -636,35 +636,6 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 				}
 				position = cursor.get(inputTaskID);
 			}
-
-			/*
-			synchronized (task) {
-				long pos = position.longValue() < 0 ? header.iteration() : position.longValue(); 
-				if (pos <= header.iteration()) {
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
-					ostream.flush();
-					LOG.info("PKVBuffer handler " + hashCode() + " ready to receive -- " + header);
-					
-					if (collector.read(istream, header)) {
-						updateProgress(header);
-						synchronized (task) {
-							task.notifyAll();
-						}
-					}
-					position.set(header.iteration() + 1);
-					LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
-				}
-				else {
-					LOG.debug(this + " ignoring -- " + header);
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
-				}
-
-				pos = position.longValue();
-				LOG.debug("Updating source position to " + pos);
-				ostream.writeLong(pos);
-				ostream.flush();
-			}
-			*/
 			
 			synchronized (task) {			
 				long pos = position.longValue() < 0 ? header.iteration() : position.longValue(); 

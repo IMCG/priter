@@ -136,7 +136,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 						public int compare(Object left, Object right){
 							V leftiState = langForSort.get((K)left).getiState();
 							V rightiState = langForSort.get((K)right).getiState();
-							return iterReducer.compare(leftiState, rightiState);
+							return -iterReducer.compare(leftiState, rightiState);
 						}
 					});
 			Date end_sort_date = new Date();
@@ -190,6 +190,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			if(this.stateTable.containsKey(key)){
 				PriorityRecord<V> pkvRecord = this.stateTable.get(key);
 				iterReducer.updateState(pkvRecord.getiState(), pkvRecord.getcState(), value);
+				//LOG.info("updated key: " + key + " istate: " + pkvRecord.getiState() + " cstate: " + pkvRecord.getcState() + " value: " + value);
 			}else{
 				LOG.error("no such key " + key);
 			}
