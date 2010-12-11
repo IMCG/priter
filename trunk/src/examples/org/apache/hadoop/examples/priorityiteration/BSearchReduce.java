@@ -10,6 +10,7 @@ import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
+import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
 
 public class BSearchReduce extends MapReduceBase implements
@@ -77,9 +78,7 @@ public class BSearchReduce extends MapReduceBase implements
 	
 	@Override
 	public void updateState(IntWritable iState, IntWritable cState, IntWritable value) {
-		if(value.get() >= cState.get()){
-			iState.set(Integer.MAX_VALUE);
-		}else if(value.get() < cState.get()){
+		if(value.get() < cState.get()){
 			iState.set(value.get());
 			cState.set(value.get());
 		}
@@ -88,11 +87,24 @@ public class BSearchReduce extends MapReduceBase implements
 	@Override
 	public void initStateTable(
 			OutputPKVBuffer<IntWritable, IntWritable> stateTable) {
-		stateTable.init(new IntWritable(startnode), new IntWritable(0), new IntWritable(0));
+		//stateTable.init(new IntWritable(startnode), new IntWritable(0), new IntWritable(0));
 	}
 
 	@Override
 	public int compare(IntWritable state1, IntWritable state2) {
 		return -state1.compareTo(state2);
+	}
+
+	@Override
+	public boolean stopCheck(
+			StateTableIterator<IntWritable, IntWritable> stateTable) {
+		boolean stop = true;
+		while(stateTable.next()){
+			if((stateTable.getiState().get() != Integer.MAX_VALUE) && (stateTable.getKey().get() != startnode)){
+				stop = false;
+				break;
+			}
+		}
+		return stop;
 	}
 }

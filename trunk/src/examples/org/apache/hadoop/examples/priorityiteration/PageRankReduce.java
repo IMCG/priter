@@ -11,6 +11,7 @@ import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
+import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
 public class PageRankReduce extends MapReduceBase implements
 		IterativeReducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
@@ -99,5 +100,12 @@ public class PageRankReduce extends MapReduceBase implements
 	@Override
 	public int compare(DoubleWritable state1, DoubleWritable state2) {
 		return state1.compareTo(state2);
+	}
+
+	@Override
+	public boolean stopCheck(
+			StateTableIterator<IntWritable, DoubleWritable> stateTable) {
+		// TODO Auto-generated method stub
+		return false;
 	}
 }
