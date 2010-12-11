@@ -1610,9 +1610,6 @@ public class TaskTracker
           tip.jobHasFinished(false);
           Task t = tip.getTask();
           
-          //stop iterative task
-          t.stopIterate();
-          
           if (t.isMapTask()) {
             indexCache.removeMap(tip.getTask().getTaskID().toString());
           }

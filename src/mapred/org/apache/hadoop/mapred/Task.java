@@ -136,7 +136,6 @@ public abstract class Task implements Writable, Configurable {
   protected TaskAttemptContext taskContext;
   
   protected boolean iterative;
-  protected boolean iterative_stop = false;
 
   ////////////////////////////////////////////
   // Constructors
@@ -394,10 +393,6 @@ public abstract class Task implements Writable, Configurable {
   
   public boolean isIterative() {
 	  return this.iterative;
-  }
-  
-  public void stopIterate(){
-	  this.iterative_stop = true;
   }
   
   public int getNumberOfInputs() {

@@ -157,7 +157,6 @@ public class ReduceTask extends Task {
 	private class snapshotThread extends Thread {
 		
 		private int ttnum = 0;
-		private FileSystem hdfs;
 		private TaskUmbilicalProtocol trackerUmbilical;
 		private Task reduceTask;
 		
@@ -175,13 +174,7 @@ public class ReduceTask extends Task {
 					e.printStackTrace();
 				}			
 			}
-			
-			try {
-				hdfs = FileSystem.get(conf);
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+
 			  		  
 			this.trackerUmbilical = umbilical;
 			this.reduceTask = task;
@@ -195,7 +188,7 @@ public class ReduceTask extends Task {
 	                TaskAttemptID.forName(conf.get("mapred.task.id")));
 		    int id = context.getTaskAttemptID().getTaskID().getId();
 		    
-			while(!iterative_stop) {
+			while(true) {
 				synchronized(this){
 					try{
 						this.wait(conf.getLong("mapred.iterative.snapshot.interval", 20000));
@@ -208,9 +201,14 @@ public class ReduceTask extends Task {
 							this.wait(500);
 						}
 						
+						//snapshot generation
 						pkvBuffer.snapshot(index);
 						
-						SnapshotCompletionEvent event = new SnapshotCompletionEvent(index, id, getJobID());
+						//termination check
+						pkvBuffer.performTerminationCheck();
+						boolean bStop = iterReducer.stopCheck(pkvBuffer);
+						
+						SnapshotCompletionEvent event = new SnapshotCompletionEvent(index, id, getJobID(), bStop);
 						try {
 							this.trackerUmbilical.snapshotCommit(event);
 						} catch (Exception e) {
@@ -224,23 +222,8 @@ public class ReduceTask extends Task {
 						ioe.printStackTrace();
 					}catch (InterruptedException e) {
 						e.printStackTrace();
-						iterative_stop = true;
 					}
 				}
-				//LOG.info("if we stop? " + iterative_stop);
-			}
-			
-			synchronized(this.reduceTask){
-				this.reduceTask.notifyAll();
-			}
-
-			//sent the finish signal to merger
-			SnapshotCompletionEvent event = new SnapshotCompletionEvent(-1, id, getJobID());
-			try {
-				this.trackerUmbilical.snapshotCommit(event);
-			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			}
 		}
 	}
@@ -491,7 +474,7 @@ public class ReduceTask extends Task {
 			sink.open();
 			
 			long windowTimeStamp = System.currentTimeMillis();
-			while(!this.iterative_stop) {
+			while(true) {
 				setProgressFlag();		
 				LOG.info("ReduceTask: " + getTaskID() + " perform iteration snapshot. window = " + 
 						 (System.currentTimeMillis() - windowTimeStamp) + "ms.");
@@ -508,12 +491,6 @@ public class ReduceTask extends Task {
 					} catch (InterruptedException e) { }
 				}
 			}
-			
-			copyPhase.complete();
-			setProgressFlag();
-			LOG.info("ReduceTask " + getTaskID() + " iteration phase completed in " + 
-					 (System.currentTimeMillis() - starttime) + " ms.");
-			sink.close();
 		}	
 	
 	}

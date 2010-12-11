@@ -36,7 +36,7 @@ import org.apache.hadoop.util.Progress;
 
 
 public class OutputPKVBuffer<K extends Writable, V extends Writable> 
-		implements OutputCollector<K, V> {
+		implements OutputCollector<K, V>, StateTableIterator<K, V>{
 	
 	
 	//**************************************
@@ -55,12 +55,18 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 	private ArrayList<KVRecord<K, V>> priorityQueue = new ArrayList<KVRecord<K, V>>();
 	private K defaultKey;
     private V defaultiState;
+    
+	private Iterator<K> iteratedKeys;
+	private K iterKey;
+	private V iteriState;
+	private V itercState;
 	
 	private Class<K> keyClass;	
 	private Class<V> valClass;
     Serializer<K> keySerializer;
     Serializer<V> valueSerializer;
     DataOutputBuffer buffer = new DataOutputBuffer();
+    
     
 	private float wearfactor;
 	private int topk;
@@ -375,4 +381,37 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			return this.stateTable.size();
 		}		
 	}
+
+	@Override
+	public K getKey(){
+		return iterKey;
+	}
+
+	@Override
+	public V getcState(){
+		return itercState;
+	}
+
+	@Override
+	public V getiState(){
+		return iteriState;
+	}
+
+	@Override
+	public boolean next() {
+		if(iteratedKeys.hasNext()){
+			iterKey = iteratedKeys.next();
+			iteriState = stateTable.get(iterKey).getiState();
+			itercState = stateTable.get(iterKey).getcState();
+			return true;
+		}else{
+			return false;
+		}
+	}
+
+	@Override
+	public void performTerminationCheck() {
+		iteratedKeys = stateTable.keySet().iterator();
+	}
+
 }
