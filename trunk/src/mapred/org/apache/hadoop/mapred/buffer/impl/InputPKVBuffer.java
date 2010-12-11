@@ -68,10 +68,6 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 		this.recordsQueue = null;
 	}
 
-	public synchronized boolean isStop() {
-		return this.stopSignal;
-	}
-	
 	//should be called in user-defined IterativeMapper.initPKVBuffer()
 	public synchronized void init(K key, V value) throws IOException {
 		synchronized(this.recordsQueue){

@@ -14,14 +14,16 @@ public class SnapshotCompletionEvent implements Writable {
 	int tasktrackerIndex = 0;
 	//String outputPath = new String();
 	JobID jobID = new JobID();
+	boolean stop = false;
 	
 	public SnapshotCompletionEvent() {};
 	
-	public SnapshotCompletionEvent(int iter, int index, JobID jobid) {
+	public SnapshotCompletionEvent(int iter, int index, JobID jobid, boolean stop) {
 		this.iteration = iter;
 		this.tasktrackerIndex = index;
 		//this.outputPath = output;
 		this.jobID = jobid;
+		this.stop = stop;
 	}
 	
 	public int getIteration() {
@@ -36,12 +38,16 @@ public class SnapshotCompletionEvent implements Writable {
 		return this.jobID;
 	}
 	
+	public boolean getStop() {
+		return this.stop;
+	}
+	
 	@Override
 	public void readFields(DataInput in) throws IOException {
 		this.iteration = in.readInt();
 		this.tasktrackerIndex = in.readInt();
 		this.jobID.readFields(in);
-		//this.outputPath = WritableUtils.readString(in);
+		this.stop = in.readBoolean();
 	}
 
 	@Override
@@ -49,7 +55,7 @@ public class SnapshotCompletionEvent implements Writable {
 		out.writeInt(this.iteration);
 		out.writeInt(this.tasktrackerIndex);
 		this.jobID.write(out);
-		//WritableUtils.writeString(out, this.outputPath);
+		out.writeBoolean(this.stop);
 	}
 
 	@Override

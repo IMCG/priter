@@ -433,7 +433,7 @@ public class MapTask extends Task {
 				synchronized(this){		
 					if(job.getBoolean("mapred.job.iterative.sort", true)){
 						//iteration loop, stop when reduce let it stop	
-						while(!this.iterative_stop || !pkvBuffer.isStop()) {
+						while(true) {
 							while(!pkvBuffer.next()){
 								LOG.info("total workload is " + workload);
 								mapper.iterate();
@@ -464,7 +464,7 @@ public class MapTask extends Task {
 						}
 					}else{
 						//iteration loop, stop when reduce let it stop	
-						while(!this.iterative_stop || !pkvBuffer.isStop()) {
+						while(true) {
 							while(!pkvBuffer.next()){
 								LOG.info("total workload is " + workload);
 								mapper.iterate();
@@ -501,11 +501,6 @@ public class MapTask extends Task {
 				rof = null;
 				sink.close();
 			}
-
-			getProgress().complete();
-			LOG.info("Map task complete. Total workload is " + workload);		
-			
-			mapper.close();
 		}
 		else{
 			boolean pipeline = job.getBoolean("mapred.map.pipeline", false);

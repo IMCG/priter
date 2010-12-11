@@ -6,6 +6,7 @@ import java.util.Iterator;
 
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
+import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
 public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends Writable> extends Reducer<K2, V2, K3, V3> {
 	
@@ -27,4 +28,5 @@ public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends Writab
     				throws IOException;
 	
 	void iterate();
+	boolean stopCheck(StateTableIterator<K3, V3> stateTable);
 }
