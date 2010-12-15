@@ -194,7 +194,7 @@ public class ReduceTask extends Task {
 						this.wait(conf.getLong("mapred.iterative.snapshot.interval", 20000));
 						LOG.info("pkvBuffer size " + pkvBuffer.size() + " index " + index + " total maps is " + pkvBuffer.total_map);
 						
-						while(pkvBuffer == null){
+						while((pkvBuffer == null) || (pkvBuffer.size() == 0)){
 							this.wait(500);
 						}
 						while(!pkvBuffer.start){
@@ -207,6 +207,7 @@ public class ReduceTask extends Task {
 						//termination check
 						pkvBuffer.performTerminationCheck();
 						boolean bStop = iterReducer.stopCheck(pkvBuffer);
+						LOG.info("stop? " + bStop);
 						
 						SnapshotCompletionEvent event = new SnapshotCompletionEvent(index, id, getJobID(), bStop);
 						try {
@@ -239,7 +240,7 @@ public class ReduceTask extends Task {
 	private static final Log LOG = LogFactory.getLog(ReduceTask.class.getName());
 	
 	protected JOutputBuffer outputBuffer = null;
-	protected OutputPKVBuffer pkvBuffer = null;
+	public OutputPKVBuffer pkvBuffer = null;
 	protected int numMaps;
     protected Class inputKeyClass;
     protected Class inputValClass;
@@ -454,9 +455,7 @@ public class ReduceTask extends Task {
 			BufferExchangeSink sink, TaskUmbilicalProtocol taskUmbilical,
 			BufferUmbilicalProtocol umbilical) throws IOException {
 		int window = job.getInt("mapred.iterative.reduce.window", 1000);
-		
-		long starttime = System.currentTimeMillis();
-			
+
 		this.iterReducer = (IterativeReducer)ReflectionUtils.newInstance(job.getReducerClass(), job);
 		if (this.pkvBuffer == null) {
 			Progress progress = sink.getProgress(); 				
