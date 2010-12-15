@@ -51,7 +51,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 	private String topkDir = null;
 
     private IterativeReducer iterReducer = null;
-	private Map<K, PriorityRecord<V>> stateTable = new HashMap<K, PriorityRecord<V>>();
+	public Map<K, PriorityRecord<V>> stateTable = new HashMap<K, PriorityRecord<V>>();
 	private ArrayList<KVRecord<K, V>> priorityQueue = new ArrayList<KVRecord<K, V>>();
 	private K defaultKey;
     private V defaultiState;
@@ -79,8 +79,8 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 	
 	//for emitsize determination
 	public long sort_time = 0;
-	public long iter_previous_time = 0;
-		;
+	public long iter_start_time = 0;
+	public long iter_end_time = 0;
 	public double iter_time = 0;
 	
 	public int actualEmit = 0;
@@ -132,7 +132,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			
 			Date start_sort_date = new Date();
 			long start_sort = start_sort_date.getTime();
-			double iter_time_per_node = (double)(start_sort - iter_previous_time - 500) / actualEmit;
+			double iter_time_per_node = (double)(iter_end_time - iter_start_time - 200) / actualEmit;
 			iter_time = (iter_time_per_node <= 0) ? 0.2 : iter_time_per_node;
 			
 			//LOG.info("heap size : " + this.recordsMap.size());
@@ -151,7 +151,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			Date end_sort_date = new Date();
 			long end_sort = end_sort_date.getTime();
 			
-			sort_time = end_sort - start_sort + 500;
+			sort_time = end_sort - start_sort + 200;
 			
 			if (iteration > WAIT_ITER){
 				emitSize = (int) ((double)(sort_time * wearfactor) / iter_time);
@@ -161,10 +161,10 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			}
 			LOG.info("iteration " + iteration + " outputqueuesize " + emitSize + " wearfactor " + wearfactor 
 					+ " overhead: " + sort_time + 
-					" on " + keys.size() + " nodes, iterationtime " + (start_sort - iter_previous_time) 
+					" on " + keys.size() + " nodes, iterationtime " + (iter_end_time - iter_start_time)
 					+ " and " + iter_time + " per key");
 
-			iter_previous_time = end_sort;
+			iter_start_time = end_sort;
 			
 			ArrayList<KVRecord<K, V>> records = new ArrayList<KVRecord<K, V>>();
 			actualEmit = 0;
@@ -255,9 +255,6 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 			
 			synchronized(this.stateTable){
 				writer = new IFile.Writer<K, V>(job, out, keyClass, valClass, null, null);
-	
-				Date current = new Date();
-				iter_time = (current.getTime() - iter_previous_time) / emitSize;
 
 				if(entries != null) this.priorityQueue.addAll(entries);
 				int count = 0;
@@ -412,6 +409,7 @@ public class OutputPKVBuffer<K extends Writable, V extends Writable>
 	@Override
 	public void performTerminationCheck() {
 		iteratedKeys = stateTable.keySet().iterator();
+		LOG.info("statetable size: " + stateTable.size());
 	}
 
 }

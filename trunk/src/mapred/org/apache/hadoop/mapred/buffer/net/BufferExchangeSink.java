@@ -28,6 +28,7 @@ import java.net.UnknownHostException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -530,6 +531,15 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
 						syncMapPos.put(position.longValue(), recMaps);
 						
+						//record the iter end time for priorityqueue size estimation
+						Date curr = new Date();
+						LOG.info("time is " + curr + " for task " + header.owner().getTaskID().getId() + 
+								" my task is " + task.getTaskID().getId());
+						if(header.owner().getTaskID().getId() == task.getTaskID().getId()){
+							((ReduceTask)task).pkvBuffer.iter_end_time = curr.getTime();
+							LOG.info("time is " + curr + " for task " + task.getTaskID().getId());
+						}
+							
 						if(recMaps >= syncMaps){
 							syncMapPos.remove(position.longValue());	
 							((ReduceTask)task).spillIter = true;	
@@ -537,7 +547,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						}else if(!conf.getBoolean("mapred.job.iterative.sort", true)){
 							task.notifyAll();
 						}
-			
+
 						//task.notifyAll();
 						position.set(header.sequence() + 1);
 						LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());

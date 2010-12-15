@@ -114,7 +114,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
-  private Map<JobID, Boolean> stopCheckMap = new HashMap<JobID, Boolean>();
+  private Map<JobID, Map<Integer, Boolean>> stopCheckMap = new HashMap<JobID, Map<Integer, Boolean>>();
 
   // system directories are world-wide readable and owner readable
   final static FsPermission SYSTEM_DIR_PERMISSION =
@@ -3027,7 +3027,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		    Class valClass = job.getOutputValueClass();
 			Merger merger = new Merger(job, keyClass, valClass);
 			this.mergerMap.put(jobid, merger);
-			this.stopCheckMap.put(jobid, true);
+			
+			Map<Integer, Boolean> stopCheck = new HashMap<Integer, Boolean>();
+			this.stopCheckMap.put(jobid, stopCheck);
 		}
 		
 		if(this.snapshotCompletionMap.get(jobid).containsKey(iterIndex)){
@@ -3041,30 +3043,30 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			//LOG.info("interation index is " + iterIndex + " : task index is " + reduceIndex);
 			//LOG.info("total reduces is " + this.totalReduces);
 			//LOG.info("total received is " + tasks.size());
+			
+			boolean stop = this.stopCheckMap.get(jobid).get(iterIndex) && bStop;
+			LOG.info("stop information of iteration " + iterIndex + " : " + this.stopCheckMap.get(jobid).get(iterIndex) + "\t" + bStop);
 
 			if(tasks.size() == this.totalReduces) {
 				//do merge sort
 				this.mergerMap.get(jobid).mergeSort(iterIndex);
+				
+				//termination check
+				if(stop){
+					LOG.info("OK, let kill job");
+					killJob(jobid);
+					this.snapshotCompletionMap.remove(jobid);
+					this.stopCheckMap.remove(jobid);
+					this.mergerMap.remove(jobid);
+				}
 			}
 		}else{
 			ArrayList<Integer> tasks = new ArrayList<Integer>();
 			
 			this.snapshotCompletionMap.get(jobid).put(iterIndex, tasks);						
 			this.snapshotCompletionMap.get(jobid).get(iterIndex).add(reduceIndex);
-		}
-		
-		//termination check
-		boolean stop = this.stopCheckMap.get(jobid) && bStop;
-		if(this.snapshotCompletionMap.get(jobid).get(iterIndex).size() == this.totalReduces){
-			if(stop){
-				killJob(jobid);
-				this.snapshotCompletionMap.remove(jobid);
-				this.stopCheckMap.remove(jobid);
-				this.mergerMap.remove(jobid);
-			}
-			else{
-				this.stopCheckMap.put(jobid, true);
-			}
+			
+			this.stopCheckMap.get(jobid).put(iterIndex, bStop);
 		}
 	} 
 	
