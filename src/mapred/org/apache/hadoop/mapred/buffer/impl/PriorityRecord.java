@@ -7,8 +7,9 @@ import java.io.IOException;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
-public class PriorityRecord<V extends Object>
-				implements Writable {
+public class PriorityRecord<P extends WritableComparable, V extends Object>
+				implements Writable, Comparable<PriorityRecord<P, V>> {
+	private P priority;
 	private V iState;
 	private V cState;
 		
@@ -16,21 +17,27 @@ public class PriorityRecord<V extends Object>
 		super();
 	}
 	
-	public PriorityRecord(V iniState, V incState) {
+	public PriorityRecord(P inpriority, V iniState, V incState) {
 		super();
+		priority = inpriority;
 		iState = iniState;
 		cState = incState;
 	}
 
-	public PriorityRecord(PriorityRecord<V> record) {
+	public PriorityRecord(PriorityRecord<P, V> record) {
 		super();
+		priority = record.priority;
 		iState = record.iState;
 		cState = record.cState;
 	}
 
 	@Override
 	public int hashCode() {
-		return this.iState.hashCode();
+		return this.priority.hashCode();
+	}
+	
+	public P getPriority(){
+		return this.priority;
 	}
 	
 	public V getiState() {
@@ -39,6 +46,10 @@ public class PriorityRecord<V extends Object>
 	
 	public V getcState() {
 		return this.cState;
+	}
+	
+	public void setPriority(P inpriority) {
+		this.priority = inpriority;
 	}
 	
 	public void setiState(V iniState) {
@@ -51,18 +62,25 @@ public class PriorityRecord<V extends Object>
 
 	@Override
 	public void readFields(DataInput in) throws IOException {
+		((Writable) this.priority).readFields(in);
 		((Writable) this.iState).readFields(in);
 		((Writable) this.cState).readFields(in);
 	}
 
 	@Override
 	public void write(DataOutput out) throws IOException {
+		((Writable)this.priority).write(out);
 		((Writable)this.iState).write(out);
 		((Writable)this.cState).write(out);
 	}
 
 	@Override
 	public String toString(){
-		return new String(iState + "\t" + cState);
+		return new String(priority + "\t" + iState + "\t" + cState);
+	}
+
+	@Override
+	public int compareTo(PriorityRecord<P, V> o) {
+		return this.priority.compareTo(o.priority);
 	}
 }

@@ -31,6 +31,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
+import javax.xml.soap.Text;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -246,6 +248,7 @@ public class ReduceTask extends Task {
     protected Class inputValClass;
     protected Class outputKeyClass;
     protected Class outputValClass;
+    protected Class priorityClass;
 	protected Class<? extends CompressionCodec> codecClass = null;
 
 	protected CompressionCodec codec;
@@ -384,6 +387,8 @@ public class ReduceTask extends Task {
 	    this.outputKeyClass = job.getOutputKeyClass();
 	    this.outputValClass = job.getOutputValueClass();
 	    
+	    this.priorityClass = (job.getPriorityClass() == Text.class) ? this.outputValClass : job.getPriorityClass();
+	    
 		if (job.getCompressMapOutput()) {
 			this.codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
 		}
@@ -460,7 +465,8 @@ public class ReduceTask extends Task {
 		if (this.pkvBuffer == null) {
 			Progress progress = sink.getProgress(); 				
 			this.pkvBuffer = new OutputPKVBuffer(umbilical, this, job, reporter, progress, 
-										outputKeyClass, outputValClass, this.iterReducer);
+										priorityClass, outputKeyClass, outputValClass, 
+										this.iterReducer);
 		}
 		
 		//termination check thread, also do generating snapshot work
