@@ -714,6 +714,24 @@ public class JobConf extends Configuration {
   }
 
   /**
+   * Get the priority class for priority iteration.
+   * 
+   * @return the priority class for priority iteration.
+   */
+  public Class<?> getPriorityClass() {
+    return getClass("mapred.iterative.priority.class", Text.class, Object.class);
+  }
+  
+  /**
+   * Set the priority class for priority iteration.
+   * 
+   * @param theClass the priority class for priority iteration.
+   */
+  public void setPriorityClass(Class<?> theClass) {
+    setClass("mapred.iterative.priority.class", theClass, Object.class);
+  }
+  
+  /**
    * Get the {@link Mapper} class for the job.
    * 
    * @return the {@link Mapper} class for the job.

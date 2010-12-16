@@ -3099,6 +3099,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			
 			ArrayList<KVRecord<K, V>> list = new ArrayList<KVRecord<K, V>>(topk);
 			
+			/*
 			//check sort order
 			boolean desendorder = true;
 			Path topKPath_check = new Path(outputDir + "/0/topKsnapshot-" + index);			
@@ -3133,6 +3134,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				desendorder = false;
 			}
 			reader_check.close();
+			*/
+			
+			boolean descend = job.getBoolean("mapred.iterative.snapshot.descend", true) ? true : false;
 			
 			for(int i=0; i< totalReduces; i++){
 				ArrayList<KVRecord<K, V>> list_i = new ArrayList<KVRecord<K, V>>(topk);
@@ -3170,7 +3174,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					if(it2.hasNext()) two = it2.next();
 
 					while((it1.hasNext())&&(it2.hasNext())) {
-						if(desendorder){
+						if(descend){
 							int comres = one.v.compareTo(two.v);
 							if(comres > 0){
 								temp.add(one);
