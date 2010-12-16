@@ -47,6 +47,7 @@ public class BSearch extends Configured implements Tool {
 	    job.setBoolean("mapred.job.iterative.sort", false);
 	    job.setInt("mapred.iterative.ttnum", ttnum);
 	    job.setInt("mapred.iterative.topk", topk);
+	    job.setBoolean("mapred.iterative.snapshot.descend", false);
 	    job.setFloat("mapred.iterative.output.wearfactor", wearfactor);
 	    job.setLong("mapred.iterative.snapshot.interval", 5000);    
 	    job.setInt("mapred.iterative.reduce.emitsize", emitSize);

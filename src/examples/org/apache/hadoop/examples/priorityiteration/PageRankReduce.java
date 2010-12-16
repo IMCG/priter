@@ -14,7 +14,7 @@ import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
 public class PageRankReduce extends MapReduceBase implements
-		IterativeReducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable> {
+		IterativeReducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable, DoubleWritable> {
 	
 	private JobConf job;
 	private int nPages;
@@ -29,7 +29,7 @@ public class PageRankReduce extends MapReduceBase implements
 	
 	@Override
 	public void reduce(IntWritable key, Iterator<DoubleWritable> values,
-			OutputPKVBuffer<IntWritable, DoubleWritable> output, Reporter report)
+			OutputPKVBuffer<DoubleWritable, IntWritable, DoubleWritable> output, Reporter report)
 			throws IOException {
 		workload++;	
 		int page = key.get();		
@@ -61,7 +61,7 @@ public class PageRankReduce extends MapReduceBase implements
 
 	@Override
 	public void initStateTable(
-			OutputPKVBuffer<IntWritable, DoubleWritable> stateTable) {
+			OutputPKVBuffer<DoubleWritable, IntWritable, DoubleWritable> stateTable) {
 		int n = Util.getTaskId(job);
 		int ttnum = Util.getTTNum(job);
 		for(int i=n; i<nPages; i=i+ttnum){
@@ -98,14 +98,14 @@ public class PageRankReduce extends MapReduceBase implements
 	}
 
 	@Override
-	public int compare(DoubleWritable state1, DoubleWritable state2) {
-		return state1.compareTo(state2);
-	}
-
-	@Override
 	public boolean stopCheck(
 			StateTableIterator<IntWritable, DoubleWritable> stateTable) {
 		// TODO Auto-generated method stub
 		return false;
+	}
+
+	@Override
+	public DoubleWritable setPriority(IntWritable key, DoubleWritable iState) {
+		return new DoubleWritable(iState.get());
 	}
 }
