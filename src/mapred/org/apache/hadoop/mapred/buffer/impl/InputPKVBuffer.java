@@ -8,6 +8,7 @@ import java.util.Queue;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.IFile;
@@ -19,12 +20,11 @@ import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.util.Progress;
 
-public class InputPKVBuffer<K extends Object, V extends Object> implements
+public class InputPKVBuffer<K extends Object, V extends WritableComparable> implements
 		InputCollector<K, V> {
 
 	private static final Log LOG = LogFactory.getLog(InputPKVBuffer.class.getName());
 	
-	private boolean stopSignal = false;	
 	private int iteration = 0;
 	private K savedKey;
 	private V savedValue;			//for get K, V pair
