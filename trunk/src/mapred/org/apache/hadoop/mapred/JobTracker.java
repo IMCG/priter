@@ -37,6 +37,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
@@ -69,6 +70,7 @@ import org.apache.hadoop.mapred.JobHistory.Listener;
 import org.apache.hadoop.mapred.JobHistory.Values;
 import org.apache.hadoop.mapred.JobStatusChangeEvent.EventType;
 import org.apache.hadoop.mapred.buffer.impl.KVRecord;
+import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 import org.apache.hadoop.mapred.monitor.MonitorServer;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.NetUtils;
@@ -3073,71 +3075,90 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	class Merger<K extends Writable, V extends WritableComparable> {
 		
 		private JobConf job;
+		private FileSystem hdfs;
 		private Class<K> keyClass;	
 		private Class<V> valClass;
 		private Deserializer<K> keyDeserializer;	
 		private Deserializer<V> valDeserializer;	
+		private boolean descend;
+		private int topk;
+		private String outputDir;
+		private Comparator<IndexKeyValueRecord> comparator;
 		
-		public Merger(JobConf job, Class<K> keyclass, Class<V> valclass){
+		class IndexKeyValueRecord {
+			public int index;
+			private DataInputBuffer keyBuffer = new DataInputBuffer();
+			private DataInputBuffer valBuffer = new DataInputBuffer();
+			public K key;
+			public V val;
+			private IFile.Reader<K, V> reader;
+			
+			public IndexKeyValueRecord(int snapshotindex, IFile.Reader<K, V> reader) {
+				this.index = snapshotindex;
+				this.reader = reader;
+				try {
+					next();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+				
+			public boolean next() throws IOException{	
+				boolean hasNext = reader.next(keyBuffer, valBuffer);
+				if(!hasNext){
+					return false;
+				}
+				keyDeserializer.open(keyBuffer);
+				valDeserializer.open(valBuffer);
+				key = keyDeserializer.deserialize(key);
+				val = valDeserializer.deserialize(val);
+				return true;
+			}
+		}
+		
+		public Merger(JobConf job, Class<K> keyclass, Class<V> valclass) throws IOException{
 			this.job = job;
+			this.hdfs = FileSystem.get(conf);
 			this.keyClass = keyclass;
 			this.valClass = valclass;
 			SerializationFactory serializationFactory = new SerializationFactory(job);
 		    this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
 		    this.valDeserializer = serializationFactory.getDeserializer(valClass);
+		    
+		    descend = job.getBoolean("mapred.iterative.snapshot.descend", true) ? true : false;			
+			topk = job.getInt("mapred.iterative.topk", 1000);
+			outputDir = job.get("mapred.output.dir");
+			if(outputDir == null) throw new IOException("no output dir");
+			
+			if(descend){
+				comparator = new Comparator<IndexKeyValueRecord>(){
+					@Override
+					public int compare(IndexKeyValueRecord o1,
+							IndexKeyValueRecord o2) {
+						return -o1.val.compareTo(o2.val);
+					}
+				};
+			}else {
+				comparator = new Comparator<IndexKeyValueRecord>(){
+					@Override
+					public int compare(IndexKeyValueRecord o1,
+							IndexKeyValueRecord o2) {
+						return o1.val.compareTo(o2.val);
+					}
+				};
+			}
+			
 		}
 		
 		private void mergeSort(int index) throws IOException {
+
+			
 			LOG.info("doing merge sort");
 			Date start = new Date();
 			
-			FileSystem hdfs = FileSystem.get(conf);
-
-			int topk = job.getInt("mapred.iterative.topk", 1000);
-			String outputDir = job.get("mapred.output.dir");
-			if(outputDir == null) throw new IOException("no output dir");
-			
+/*	
 			ArrayList<KVRecord<K, V>> list = new ArrayList<KVRecord<K, V>>(topk);
-			
-			/*
-			//check sort order
-			boolean desendorder = true;
-			Path topKPath_check = new Path(outputDir + "/0/topKsnapshot-" + index);			
-			IFile.Reader<K, V> reader_check = new IFile.Reader<K, V>(job, hdfs, topKPath_check, null, null);
-			DataInputBuffer key_check = new DataInputBuffer();
-			DataInputBuffer value_check = new DataInputBuffer();
-
-			reader_check.next(key_check, value_check);
-			keyDeserializer.open(key_check);
-			valDeserializer.open(value_check);
-			K keyObject1 = null;
-			V valObject1 = null;
-			keyObject1 = keyDeserializer.deserialize(keyObject1);
-			valObject1 = valDeserializer.deserialize(valObject1);
-			reader_check.next(key_check, value_check);
-			keyDeserializer.open(key_check);
-			valDeserializer.open(value_check);
-			K keyObject2 = null;
-			V valObject2 = null;
-			keyObject2 = keyDeserializer.deserialize(keyObject2);
-			valObject2 = valDeserializer.deserialize(valObject2);
-			while(valObject1.compareTo(valObject2)==0){
-				reader_check.next(key_check, value_check);
-				keyDeserializer.open(key_check);
-				valDeserializer.open(value_check);
-				keyObject2 = keyDeserializer.deserialize(keyObject2);
-				valObject2 = valDeserializer.deserialize(valObject2);
-			}
-			if(valObject1.compareTo(valObject2)>0){
-				desendorder = true;
-			}else{
-				desendorder = false;
-			}
-			reader_check.close();
-			*/
-			
-			boolean descend = job.getBoolean("mapred.iterative.snapshot.descend", true) ? true : false;
-			
+	
 			for(int i=0; i< totalReduces; i++){
 				ArrayList<KVRecord<K, V>> list_i = new ArrayList<KVRecord<K, V>>(topk);
 				Path topKPath = new Path(outputDir + "/" + i + "/topKsnapshot-" + index);
@@ -3203,6 +3224,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 								two = it2.next();
 							}
 						}
+						
+						if(temp.size() >= topk) break;
 					}
 					
 					list.clear();
@@ -3213,9 +3236,34 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			String snapshot = outputDir + "/snapshot-" + index;
 			FSDataOutputStream ostream = hdfs.create(new Path(snapshot), true);
 			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
-
-			for(KVRecord<K, V> rec : list){
-				writer.write(rec + "\n");
+			
+			for(KVRecord<K, V> record : list){
+				writer.write(record + "\n");
+			}
+*/			
+			//optimized selecting sort
+			PriorityQueue<IndexKeyValueRecord> recordQueue = 
+				new PriorityQueue<IndexKeyValueRecord>(totalReduces, comparator);
+			
+			for(int i=0; i< totalReduces; i++){
+				Path topKPath = new Path(outputDir + "/" + i + "/topKsnapshot-" + index);				
+				IFile.Reader<K, V> reader = new IFile.Reader<K, V>(job, hdfs, topKPath, null, null);
+				IndexKeyValueRecord record = new IndexKeyValueRecord(i, reader);
+				
+				recordQueue.add(record);
+			}
+			
+			String snapshot = outputDir + "/snapshot-" + index;
+			FSDataOutputStream ostream = hdfs.create(new Path(snapshot), true);
+			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
+			
+			IndexKeyValueRecord orderedRecord;
+			while(!recordQueue.isEmpty()){
+				orderedRecord = recordQueue.poll();
+				writer.write(orderedRecord.key + "\t" + orderedRecord.val + "\n");
+				if(orderedRecord.next()){
+					recordQueue.add(orderedRecord);
+				}
 			}
 			
 			writer.close();
