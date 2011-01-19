@@ -205,7 +205,7 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 			Random rand = new Random();
 			List<IntWritable> randomkeys = new ArrayList<IntWritable>(1000);
 			//LOG.info("task id is " + this.taskAttemptID.getTaskID().getId() + " tt is " + ttnum);
-			for(int j=0; j<100; j++){
+			for(int j=0; j<1000; j++){
 				int randnode = rand.nextInt(totalkeys);
 				int servefor = randnode % ttnum;
 				
@@ -250,7 +250,7 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 				}			
 			}
 			
-			LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs");
+			LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs" + " threshold is " + threshold);
 			return records;
 		}
 	}
@@ -483,24 +483,22 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 			Collections.sort(randomkeys, 
 					new Comparator(){
 						public int compare(Object left, Object right){
-							PriorityRecord<P, V> leftrecord = langForSort.get((IntWritable)left);
-							PriorityRecord<P, V> rightrecord = langForSort.get((IntWritable)right);
+							V leftrecord = langForSort.get((IntWritable)left).getcState();
+							V rightrecord = langForSort.get((IntWritable)right).getcState();
 							return -leftrecord.compareTo(rightrecord);
 						}
 					});
 			
 			int cutindex = this.topk * 1000 / this.stateTable.size();
-			V threshold = stateTable.get(randomkeys.get(cutindex)).getiState();
+			V threshold = stateTable.get(randomkeys.get(cutindex)).getcState();
 	
 			for(K k : stateTable.keySet()){		
-				V v = stateTable.get(k).getiState();
+				V v = stateTable.get(k).getcState();
 				if(v.compareTo(threshold) > 0){
 					writer.append(k, stateTable.get(k).getcState());
 				}			
-			}
-			
-			LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs");
-		}
+			}		
+		}	
 		writer.close();
 	}
 	
