@@ -27,6 +27,7 @@ import java.net.UnknownHostException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -3014,61 +3015,71 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 
 	@Override
 	public void reportSnapshotCompletionEvent(SnapshotCompletionEvent event) throws IOException {
-		//LOG.info("iam here, total reduces is " + this.totalReduces + " event is " + event);
-		int iterIndex = event.getIteration();
-		int reduceIndex = event.getTaskIndex();
-		JobID jobid = event.getJobID();
-		boolean bStop = event.getStop();
-		
-		if(this.snapshotCompletionMap.get(jobid) == null){
-			Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
-			this.snapshotCompletionMap.put(jobid, snapshotComplete);
+		synchronized(snapshotCompletionMap){
+			//LOG.info("iam here, total reduces is " + this.totalReduces + " event is " + event);
+			int iterIndex = event.getIteration();
+			int reduceIndex = event.getTaskIndex();
+			JobID jobid = event.getJobID();
+			boolean bStop = event.getStop();
 			
-			JobConf job = jobs.get(jobid).getJobConf();
-		    Class keyClass = job.getOutputKeyClass();
-		    Class valClass = job.getOutputValueClass();
-			Merger merger = new Merger(job, keyClass, valClass);
-			this.mergerMap.put(jobid, merger);
-			
-			Map<Integer, Boolean> stopCheck = new HashMap<Integer, Boolean>();
-			this.stopCheckMap.put(jobid, stopCheck);
-		}
-		
-		if(this.snapshotCompletionMap.get(jobid).containsKey(iterIndex)){
-			if(this.snapshotCompletionMap.get(jobid).get(iterIndex).contains(reduceIndex)){
-				throw new IOException("duplicated reduce task index " + reduceIndex);
-			}
-			
-			this.snapshotCompletionMap.get(jobid).get(iterIndex).add(reduceIndex);
-			ArrayList<Integer> tasks = this.snapshotCompletionMap.get(jobid).get(iterIndex);
-			
-			//LOG.info("interation index is " + iterIndex + " : task index is " + reduceIndex);
-			//LOG.info("total reduces is " + this.totalReduces);
-			//LOG.info("total received is " + tasks.size());
-			
-			boolean stop = this.stopCheckMap.get(jobid).get(iterIndex) && bStop;
-			LOG.info("stop information of iteration " + iterIndex + " : " + this.stopCheckMap.get(jobid).get(iterIndex) + "\t" + bStop);
-
-			if(tasks.size() == this.totalReduces) {
-				//do merge sort
-				this.mergerMap.get(jobid).mergeSort(iterIndex);
+			if(this.snapshotCompletionMap.get(jobid) == null){			
+				Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
+				this.snapshotCompletionMap.put(jobid, snapshotComplete);
 				
-				//termination check
-				if(stop){
-					LOG.info("OK, let kill job");
-					killJob(jobid);
-					this.snapshotCompletionMap.remove(jobid);
-					this.stopCheckMap.remove(jobid);
-					this.mergerMap.remove(jobid);
-				}
+				JobConf job = jobs.get(jobid).getJobConf();
+			    Class keyClass = job.getOutputKeyClass();
+			    Class valClass = job.getOutputValueClass();
+				Merger merger = new Merger(job, keyClass, valClass, iterIndex);
+				this.mergerMap.put(jobid, merger);
+				LOG.info("put merger for job " + jobid);
+				
+				Map<Integer, Boolean> stopCheck = new HashMap<Integer, Boolean>();
+				this.stopCheckMap.put(jobid, stopCheck);
 			}
-		}else{
-			ArrayList<Integer> tasks = new ArrayList<Integer>();
 			
-			this.snapshotCompletionMap.get(jobid).put(iterIndex, tasks);						
-			this.snapshotCompletionMap.get(jobid).get(iterIndex).add(reduceIndex);
-			
-			this.stopCheckMap.get(jobid).put(iterIndex, bStop);
+			if(this.snapshotCompletionMap.get(jobid).containsKey(iterIndex)){
+				if(this.snapshotCompletionMap.get(jobid).get(iterIndex).contains(reduceIndex)){
+					throw new IOException("duplicated reduce task index " + reduceIndex);
+				}
+				
+				this.snapshotCompletionMap.get(jobid).get(iterIndex).add(reduceIndex);
+				this.mergerMap.get(jobid).mergeTopKFile(iterIndex, reduceIndex);
+				ArrayList<Integer> tasks = this.snapshotCompletionMap.get(jobid).get(iterIndex);
+				
+				//LOG.info("interation index is " + iterIndex + " : task index is " + reduceIndex);
+				//LOG.info("total reduces is " + this.totalReduces);
+				//LOG.info("total received is " + tasks.size());
+				
+				boolean stop = this.stopCheckMap.get(jobid).get(iterIndex) && bStop;
+				LOG.info("stop information of iteration " + iterIndex + " : " + this.stopCheckMap.get(jobid).get(iterIndex) + "\t" + bStop);
+	
+				if(tasks.size() == this.totalReduces) {
+					//do merge sort
+					this.mergerMap.get(jobid).writeTopK(iterIndex);
+					
+					//termination check
+					if(stop){
+						LOG.info("OK, let kill job");
+						killJob(jobid);
+						this.snapshotCompletionMap.remove(jobid);
+						this.stopCheckMap.remove(jobid);
+						this.mergerMap.remove(jobid);
+					}
+				}
+			}else{
+				ArrayList<Integer> tasks = new ArrayList<Integer>();
+				
+				this.snapshotCompletionMap.get(jobid).put(iterIndex, tasks);						
+				this.snapshotCompletionMap.get(jobid).get(iterIndex).add(reduceIndex);
+				try{
+					this.mergerMap.get(jobid).mergeTopKFile(iterIndex, reduceIndex);
+				}catch(Exception e){
+					e.printStackTrace();
+					LOG.info("jobid is " + jobid + " iteraIndex " + iterIndex + " reduceIndex is " + reduceIndex);
+				}
+						
+				this.stopCheckMap.get(jobid).put(iterIndex, bStop);
+			}
 		}
 	} 
 	
@@ -3078,45 +3089,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		private FileSystem hdfs;
 		private Class<K> keyClass;	
 		private Class<V> valClass;
-		private Deserializer<K> keyDeserializer;	
-		private Deserializer<V> valDeserializer;	
+		private Deserializer keyDeserializer;	
+		private Deserializer valDeserializer;	
+		private DataInputBuffer keyBuffer;
+		private DataInputBuffer valBuffer;
 		private boolean descend;
 		private int topk;
 		private String outputDir;
-		private Comparator<IndexKeyValueRecord> comparator;
+		private Comparator comparator;
+		private Comparator icomparator;
+		private HashMap<Integer, PriorityQueue<KVRecord<K, V>>> topkQueues;
 		
-		class IndexKeyValueRecord {
-			public int index;
-			private DataInputBuffer keyBuffer = new DataInputBuffer();
-			private DataInputBuffer valBuffer = new DataInputBuffer();
-			public K key;
-			public V val;
-			private IFile.Reader<K, V> reader;
-			
-			public IndexKeyValueRecord(int snapshotindex, IFile.Reader<K, V> reader) {
-				this.index = snapshotindex;
-				this.reader = reader;
-				try {
-					next();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-				
-			public boolean next() throws IOException{	
-				boolean hasNext = reader.next(keyBuffer, valBuffer);
-				if(!hasNext){
-					return false;
-				}
-				keyDeserializer.open(keyBuffer);
-				valDeserializer.open(valBuffer);
-				key = keyDeserializer.deserialize(key);
-				val = valDeserializer.deserialize(val);
-				return true;
-			}
-		}
-		
-		public Merger(JobConf job, Class<K> keyclass, Class<V> valclass) throws IOException{
+		public Merger(JobConf job, Class<K> keyclass, Class<V> valclass, int snapshotindex) throws IOException{
 			this.job = job;
 			this.hdfs = FileSystem.get(conf);
 			this.keyClass = keyclass;
@@ -3124,6 +3108,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			SerializationFactory serializationFactory = new SerializationFactory(job);
 		    this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
 		    this.valDeserializer = serializationFactory.getDeserializer(valClass);
+		    this.keyBuffer = new DataInputBuffer();
+		    this.valBuffer = new DataInputBuffer();
 		    
 		    descend = job.getBoolean("mapred.iterative.snapshot.descend", true) ? true : false;			
 			topk = job.getInt("mapred.iterative.topk", 1000);
@@ -3131,146 +3117,87 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			if(outputDir == null) throw new IOException("no output dir");
 			
 			if(descend){
-				comparator = new Comparator<IndexKeyValueRecord>(){
+				comparator = new Comparator<KVRecord<K, V>>(){
 					@Override
-					public int compare(IndexKeyValueRecord o1,
-							IndexKeyValueRecord o2) {
-						return -o1.val.compareTo(o2.val);
+					public int compare(KVRecord<K, V> o1,
+							KVRecord<K, V> o2) {
+						return o1.v.compareTo(o2.v);
+					}
+				};
+				icomparator = new Comparator<KVRecord<K, V>>(){
+					@Override
+					public int compare(KVRecord<K, V> o1,
+							KVRecord<K, V> o2) {
+						return -o1.v.compareTo(o2.v);
 					}
 				};
 			}else {
-				comparator = new Comparator<IndexKeyValueRecord>(){
+				comparator = new Comparator<KVRecord<K, V>>(){
 					@Override
-					public int compare(IndexKeyValueRecord o1,
-							IndexKeyValueRecord o2) {
-						return o1.val.compareTo(o2.val);
+					public int compare(KVRecord<K, V> o1,
+							KVRecord<K, V> o2) {
+						return -o1.v.compareTo(o2.v);
+					}
+				};
+				icomparator = new Comparator<KVRecord<K, V>>(){
+					@Override
+					public int compare(KVRecord<K, V> o1,
+							KVRecord<K, V> o2) {
+						return o1.v.compareTo(o2.v);
 					}
 				};
 			}
 			
+			topkQueues = new HashMap<Integer, PriorityQueue<KVRecord<K, V>>>();
 		}
 		
-		private void mergeSort(int index) throws IOException {
-
+		public void mergeTopKFile(int snapshotindex, int taskid) throws IOException{
+			if(!topkQueues.containsKey(snapshotindex)){
+				PriorityQueue<KVRecord<K, V>> topkQueue = new PriorityQueue<KVRecord<K, V>>(topk, comparator);
+				topkQueues.put(snapshotindex, topkQueue);
+			}
 			
-			LOG.info("doing merge sort");
-			Date start = new Date();
-			
-/*	
-			ArrayList<KVRecord<K, V>> list = new ArrayList<KVRecord<K, V>>(topk);
-	
-			for(int i=0; i< totalReduces; i++){
-				ArrayList<KVRecord<K, V>> list_i = new ArrayList<KVRecord<K, V>>(topk);
-				Path topKPath = new Path(outputDir + "/" + i + "/topKsnapshot-" + index);
+			PriorityQueue<KVRecord<K, V>> topkQueue = topkQueues.get(snapshotindex);
+			Path topKPath = new Path(outputDir + "/" + taskid + "/topKsnapshot-" + snapshotindex);				
+			IFile.Reader<K, V> reader = new IFile.Reader<K, V>(job, hdfs, topKPath, null, null);
+			while(reader.next(keyBuffer, valBuffer)){
+				keyDeserializer.open(keyBuffer);
+				valDeserializer.open(valBuffer);
+				Object key = null;
+				Object val = null;
+				key = keyDeserializer.deserialize(key);
+				val = valDeserializer.deserialize(val);
 				
-				IFile.Reader<K, V> reader = new IFile.Reader<K, V>(job, hdfs, topKPath, null, null);
-				DataInputBuffer key = new DataInputBuffer();
-				DataInputBuffer value = new DataInputBuffer();
-				
-				while (reader.next(key, value)) {
-					keyDeserializer.open(key);
-					valDeserializer.open(value);
-					K keyObject = null;
-					V valObject = null;
-					keyObject = keyDeserializer.deserialize(keyObject);
-					valObject = valDeserializer.deserialize(valObject);
-
-					list_i.add(new KVRecord<K, V>(keyObject, valObject));
-				}	
-				reader.close();
-						
-				if(list.size() == 0){
-					list.addAll(list_i);
-				}else if(list_i.size() == 0){
-					//do nothing
-				}else{	
-					ArrayList<KVRecord<K, V>> temp = new ArrayList<KVRecord<K, V>>(topk);
-					Iterator<KVRecord<K, V>> it1 = list.iterator();
-					Iterator<KVRecord<K, V>> it2 = list_i.iterator();
-					
-					KVRecord<K, V> one = null;
-					KVRecord<K, V> two = null;
-					
-					if(it1.hasNext()) one = it1.next();
-					if(it2.hasNext()) two = it2.next();
-
-					while((it1.hasNext())&&(it2.hasNext())) {
-						if(descend){
-							int comres = one.v.compareTo(two.v);
-							if(comres > 0){
-								temp.add(one);
-								one = it1.next();
-							}else if(comres <0){
-								temp.add(two);
-								two = it2.next();
-							}else{
-								temp.add(one);
-								temp.add(two);
-								one = it1.next();
-								two = it2.next();
-							}
-						}else{
-							int comres = one.v.compareTo(two.v);
-							if(comres < 0){
-								temp.add(one);
-								one = it1.next();
-							}else if(comres > 0){
-								temp.add(two);
-								two = it2.next();
-							}else{
-								temp.add(one);
-								temp.add(two);
-								one = it1.next();
-								two = it2.next();
-							}
-						}
-						
-						if(temp.size() >= topk) break;
+				KVRecord<K, V> kvrecord = new KVRecord<K, V>((K)key, (V)val);
+				if(topkQueue.size() >= topk){
+					//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
+					if(comparator.compare(kvrecord, topkQueue.peek()) > 0){						
+						topkQueue.poll();						
+						topkQueue.add(kvrecord);
 					}
-					
-					list.clear();
-					list.addAll(temp);
+				}else{
+					topkQueue.add(kvrecord);
 				}
 			}
 			
-			String snapshot = outputDir + "/snapshot-" + index;
+			reader.close();
+		}
+		
+		public void writeTopK(int snapshotindex) throws IOException{
+			String snapshot = outputDir + "/snapshot-" + snapshotindex;
 			FSDataOutputStream ostream = hdfs.create(new Path(snapshot), true);
 			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
-			
-			for(KVRecord<K, V> record : list){
-				writer.write(record + "\n");
-			}
-*/			
-			//optimized selecting sort
-			PriorityQueue<IndexKeyValueRecord> recordQueue = 
-				new PriorityQueue<IndexKeyValueRecord>(totalReduces, comparator);
-			
-			for(int i=0; i< totalReduces; i++){
-				Path topKPath = new Path(outputDir + "/" + i + "/topKsnapshot-" + index);				
-				IFile.Reader<K, V> reader = new IFile.Reader<K, V>(job, hdfs, topKPath, null, null);
-				IndexKeyValueRecord record = new IndexKeyValueRecord(i, reader);
-				
-				recordQueue.add(record);
-			}
-			
-			String snapshot = outputDir + "/snapshot-" + index;
-			FSDataOutputStream ostream = hdfs.create(new Path(snapshot), true);
-			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
-			
-			IndexKeyValueRecord orderedRecord;
-			while(!recordQueue.isEmpty()){
-				orderedRecord = recordQueue.poll();
-				writer.write(orderedRecord.key + "\t" + orderedRecord.val + "\n");
-				if(orderedRecord.next()){
-					recordQueue.add(orderedRecord);
-				}
+
+			KVRecord[] recs = topkQueues.get(snapshotindex).toArray(new KVRecord[topk]);
+			Arrays.sort(recs, icomparator);
+			for(KVRecord rec : recs){
+				writer.write(rec.k + "\t" + rec.v + "\n");
 			}
 			
 			writer.close();
 			ostream.close();
-
-			Date end = new Date();
-			LOG.info("merge sort took time " + (end.getTime()-start.getTime()) + "ms");
+			
+			topkQueues.remove(snapshotindex);
 		}
 	}
 
