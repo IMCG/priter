@@ -204,7 +204,7 @@ public class ReduceTask extends Task {
 						}
 						
 						//snapshot generation
-						pkvBuffer.snapshot2(index);
+						pkvBuffer.snapshot(index);
 						
 						//termination check
 						pkvBuffer.performTerminationCheck();
