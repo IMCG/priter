@@ -3,10 +3,12 @@ package org.apache.hadoop.mapred;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Map;
 
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
+import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
 public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends WritableComparable, P extends WritableComparable> extends Reducer<K2, V2, K3, V3> {
@@ -29,5 +31,6 @@ public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends Writab
     				throws IOException;
 	
 	void iterate();
+	V3 setThreshold(Map<K3, PriorityRecord<P, V3>> stateTable);
 	boolean stopCheck(StateTableIterator<K3, V3> stateTable);
 }

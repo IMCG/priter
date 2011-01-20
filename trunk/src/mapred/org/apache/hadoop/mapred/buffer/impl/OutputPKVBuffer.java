@@ -1,6 +1,7 @@
 package org.apache.hadoop.mapred.buffer.impl;
 
 import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
@@ -53,8 +54,6 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	private FileHandle outputHandle = null;
 	private String stateTableFile = null;
 	private String topkDir = null;
-	private int totalkeys = 0;
-	private int ttnum = 0;
 
     private IterativeReducer iterReducer = null;
 	public Map<K, PriorityRecord<P, V>> stateTable = new HashMap<K, PriorityRecord<P, V>>();
@@ -74,9 +73,9 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
     Serializer<V> valueSerializer;
     DataOutputBuffer buffer = new DataOutputBuffer();
       
-	private float wearfactor;
 	private int topk;
-	private int emitSize;
+	private int totalkeys = 0;
+	private int ttnum = 0;
 	
 	private int iteration = 0;
 	public int total_map = 0;
@@ -103,8 +102,6 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 		this.taskid = this.taskAttemptID.getTaskID().getId();
 		this.localFs = FileSystem.getLocal(job);
 		this.hdfs = FileSystem.get(job);
-		this.totalkeys = job.getInt("mapred.iterative.totalkeys", -1);
-		this.ttnum = job.getInt("mapred.iterative.ttnum", 0);
 		this.outputHandle = new FileHandle(taskAttemptID.getJobID());
 		this.outputHandle.setConf(job);
 		this.iterReducer = iterReducer;		
@@ -114,10 +111,10 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 		this.topkDir = job.get("mapred.output.dir") + "/" + this.taskAttemptID.getTaskID().getId();
 		this.keyClass = keyClass;
 		this.valClass = valClass;
-		
-		this.emitSize = job.getInt("mapred.iterative.reduce.emitsize", 100);
-		this.wearfactor = job.getFloat("mapred.iterative.output.wearfactor", (float)10);
+
 		this.topk = job.getInt("mapred.iterative.topk", 1000);
+		this.totalkeys = job.getInt("mapred.iterative.totalkeys", -1);
+		this.ttnum = job.getInt("mapred.iterative.ttnum", 0);
 
 		this.iterReducer.initStateTable(this);
 	}
@@ -137,103 +134,8 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	}
 	
 	private synchronized ArrayList<KVRecord<K, V>> getSortRecords() {
-		synchronized(this.stateTable){	
-			List<K> keys = new ArrayList<K>(this.stateTable.keySet());
-			
-			Date start_sort_date = new Date();
-			long start_sort = start_sort_date.getTime();
-			double iter_time_per_node = (double)(iter_end_time - iter_start_time - 200) / actualEmit;
-			iter_time = (iter_time_per_node <= 0) ? 0.2 : iter_time_per_node;
-			
-			//LOG.info("heap size : " + this.recordsMap.size());
-			
-			final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
-			LOG.info("sort on " + stateTable.size() + " records in state table");
-			Collections.sort(keys, 
-					new Comparator(){
-						public int compare(Object left, Object right){
-							PriorityRecord<P, V> leftrecord = langForSort.get((K)left);
-							PriorityRecord<P, V> rightrecord = langForSort.get((K)right);
-							return -leftrecord.compareTo(rightrecord);
-						}
-					});
-			
-			Date end_sort_date = new Date();
-			long end_sort = end_sort_date.getTime();
-			
-			sort_time = end_sort - start_sort + 200;
-			
-			if (iteration > WAIT_ITER){
-				emitSize = (int) ((double)(sort_time * wearfactor) / iter_time);
-			}
-			if (emitSize == 0){
-				emitSize = 1;
-			}
-			LOG.info("iteration " + iteration + " outputqueuesize " + emitSize + " wearfactor " + wearfactor 
-					+ " overhead: " + sort_time + 
-					" on " + keys.size() + " nodes, iterationtime " + (iter_end_time - iter_start_time)
-					+ " and " + iter_time + " per key");
-
-			iter_start_time = end_sort;
-			
-			ArrayList<KVRecord<K, V>> records = new ArrayList<KVRecord<K, V>>();
-			actualEmit = 0;
-						
-			Iterator<K> sort_itr =keys.iterator();
-			while(sort_itr.hasNext() && actualEmit<this.emitSize){
-				K k = sort_itr.next();		
-				V v = stateTable.get(k).getiState();
-				//LOG.info("comparing " + v + " and " + defaultiState);
-				if(v.equals(defaultiState)){
-					break;
-				}
-				records.add(new KVRecord<K, V>(k, v));
-				V iState = (V)iterReducer.setDefaultiState();
-				this.stateTable.get(k).setiState(iState);
-				P pri = (P) iterReducer.setPriority(k, iState);
-				this.stateTable.get(k).setPriority(pri);
-				actualEmit++;
-			}
-			
-			LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs");
-			return records;
-		}
-	}
-	
-	private synchronized ArrayList<KVRecord<K, V>> getSortRecords2() {
-		synchronized(this.stateTable){	
-			Random rand = new Random();
-			List<IntWritable> randomkeys = new ArrayList<IntWritable>(1000);
-			//LOG.info("task id is " + this.taskAttemptID.getTaskID().getId() + " tt is " + ttnum);
-			for(int j=0; j<1000; j++){
-				int randnode = rand.nextInt(totalkeys);
-				int servefor = randnode % ttnum;
-				
-				//LOG.info("init rand is " + randnode);
-				if(servefor == taskid){
-					randomkeys.add(new IntWritable(randnode));
-					//LOG.info("random int is " + randnode);
-				}else{
-					int randn = randnode + taskid - servefor;
-					if(randn >= totalkeys){
-						randn -= taskid;
-					}
-					randomkeys.add(new IntWritable(randn));
-					//LOG.info("random int is " + randn);
-				}
-			}
-			
-			final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
-			Collections.sort(randomkeys, 
-					new Comparator(){
-						public int compare(Object left, Object right){
-							PriorityRecord<P, V> leftrecord = langForSort.get((IntWritable)left);
-							PriorityRecord<P, V> rightrecord = langForSort.get((IntWritable)right);
-							return -leftrecord.compareTo(rightrecord);
-						}
-					});
-			int cutindex = this.emitSize * 1000 / this.stateTable.size();
-			V threshold = stateTable.get(randomkeys.get(cutindex)).getiState();
+		synchronized(this.stateTable){				
+			V threshold = (V) iterReducer.setThreshold(stateTable);
 
 			ArrayList<KVRecord<K, V>> records = new ArrayList<KVRecord<K, V>>();
 			actualEmit = 0;
@@ -326,7 +228,7 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	
 			if (out == null ) throw new IOException("Unable to create spill file " + filename);
 			
-			ArrayList<KVRecord<K, V>> entries = getSortRecords2();
+			ArrayList<KVRecord<K, V>> entries = getSortRecords();
 			
 			synchronized(this.stateTable){
 				writer = new IFile.Writer<K, V>(job, out, keyClass, valClass, null, null);
@@ -415,50 +317,6 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	}
 	
 	public void snapshot(int index) throws IOException {
-		Path topkFile = new Path(topkDir + "/topKsnapshot-" + index);
-		IFile.Writer<K, V> writer = new IFile.Writer<K, V>(job, hdfs, topkFile, 
-				keyClass, valClass, null, null);
-		synchronized(this.stateTable){
-			final Map<K, PriorityRecord<P, V>> langForComp = this.stateTable;
-			List<K> keys = new ArrayList<K>(this.stateTable.keySet());
-			
-			boolean descend = job.getBoolean("mapred.iterative.snapshot.descend", true) ? true : false;
-			
-			if(descend){
-				Collections.sort(keys, 
-						new Comparator(){
-							public int compare(Object left, Object right){
-								V leftcState = langForComp.get((K)left).getcState();
-								V rightcState = langForComp.get((K)right).getcState();
-								return -leftcState.compareTo(rightcState);
-							}
-						});
-			}else{
-				Collections.sort(keys, 
-						new Comparator(){
-							public int compare(Object left, Object right){
-								V leftcState = langForComp.get((K)left).getcState();
-								V rightcState = langForComp.get((K)right).getcState();
-								return leftcState.compareTo(rightcState);
-							}
-						});
-			}
-
-
-			Iterator<K> itr =keys.iterator();
-			int count = 0;
-			while(itr.hasNext() && count < topk){
-				K k = itr.next();
-				writer.append(k, stateTable.get(k).getcState());	
-				count++;
-			}
-
-			writer.close();
-			System.out.println("snapshot index " + index + " iterations " + iteration);
-		}
-	}
-	
-	public void snapshot2(int index) throws IOException {
 		Path topkFile = new Path(topkDir + "/topKsnapshot-" + index);
 		IFile.Writer<K, V> writer = new IFile.Writer<K, V>(job, hdfs, topkFile, 
 				keyClass, valClass, null, null);
