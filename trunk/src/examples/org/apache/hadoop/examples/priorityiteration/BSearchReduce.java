@@ -2,6 +2,7 @@ package org.apache.hadoop.examples.priorityiteration;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Map;
 
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapred.IterativeReducer;
@@ -10,6 +11,7 @@ import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
+import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
 
@@ -106,5 +108,12 @@ public class BSearchReduce extends MapReduceBase implements
 	@Override
 	public IntWritable setPriority(IntWritable key, IntWritable iState) {
 		return new IntWritable(-iState.get());
+	}
+
+	@Override
+	public IntWritable setThreshold(
+			Map<IntWritable, PriorityRecord<IntWritable, IntWritable>> stateTable) {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }

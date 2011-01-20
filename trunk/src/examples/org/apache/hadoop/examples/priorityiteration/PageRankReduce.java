@@ -2,6 +2,7 @@ package org.apache.hadoop.examples.priorityiteration;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Map;
 
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
@@ -11,6 +12,7 @@ import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
+import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
 public class PageRankReduce extends MapReduceBase implements
@@ -107,5 +109,12 @@ public class PageRankReduce extends MapReduceBase implements
 	@Override
 	public DoubleWritable setPriority(IntWritable key, DoubleWritable iState) {
 		return new DoubleWritable(iState.get());
+	}
+
+	@Override
+	public DoubleWritable setThreshold(
+			Map<IntWritable, PriorityRecord<DoubleWritable, DoubleWritable>> stateTable) {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }
