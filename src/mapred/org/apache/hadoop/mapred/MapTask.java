@@ -27,6 +27,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -463,10 +464,13 @@ public class MapTask extends Task {
 							counter++;										
 						}
 					}else{
-						//iteration loop, stop when reduce let it stop	
+						//iteration loop, stop when reduce let it stop
+						
+						//for processing time measurement
+						long processstart = new Date().getTime();
+						long processend;
 						while(true) {
 							while(!pkvBuffer.next()){
-								LOG.info("total workload is " + workload);
 								mapper.iterate();
 								if(counter == 0){
 									LOG.info("no records left, do nothing");
@@ -474,7 +478,13 @@ public class MapTask extends Task {
 									this.nsortBuffer.iterate();
 									counter = 0;
 								}
-														
+								
+								//measure process time
+								processend = new Date().getTime();
+								long processtime = processend - processstart;
+									
+								LOG.info("total workload is " + workload + " use time " + processtime);
+								
 								LOG.info("no records, I am waiting!");
 								
 								setProgressFlag();
@@ -484,6 +494,9 @@ public class MapTask extends Task {
 									// TODO Auto-generated catch block
 									e.printStackTrace();
 								}
+								
+								processstart = new Date().getTime();
+								workload = 0;
 							}
 											
 							Object keyObject = pkvBuffer.getTopKey();

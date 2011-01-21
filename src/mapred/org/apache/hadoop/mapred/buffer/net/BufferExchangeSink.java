@@ -132,9 +132,10 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	private Map<Long, Integer> syncMapPos;
 	private int syncMaps;
 	
-	private Map<Long, Integer> syncReducePos;
-	private int syncReduces;
-	
+	public long processlast;
+	public long processnow;
+	public long syncstart;
+	public long syncend;
 
 	/* The task that owns this sink and is receiving the input. */
 	private Task task;
@@ -157,8 +158,6 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	    this.cursor = new HashMap<TaskID, Position>();
 	    this.syncMapPos = new HashMap<Long, Integer>();
 	    this.syncMaps = conf.getInt("mapred.iterative.ttnum", 1);
-	    this.syncReducePos = new HashMap<Long, Integer>();
-	    this.syncReduces = conf.getInt("mapred.iterative.ttnum", 1);
 	    
 		this.executor = Executors.newFixedThreadPool(Math.min(maxConnections, Math.max(numInputs, 5)));
 		this.handlers = Collections.synchronizedSet(new HashSet<Handler>());

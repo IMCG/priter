@@ -7,6 +7,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -105,15 +106,18 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 	
 	public final Transfer send(OutputFile file) {
 		synchronized (this) {
+			long sendstart = System.currentTimeMillis();
 			try {
-
-				return transfer(file);
+				Transfer t = transfer(file);
+				long sendend = System.currentTimeMillis();
+				LOG.info("send file " + file + " use time " + (sendend-sendstart));
 				
+				return t;
 			} catch (Exception e) {
 				System.err.println("FILE " + file);
 				e.printStackTrace();
 				return Transfer.IGNORE;
-			}
+			}		
 		}
 	}
 	/*

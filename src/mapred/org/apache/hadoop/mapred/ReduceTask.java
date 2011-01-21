@@ -27,6 +27,7 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -268,6 +269,8 @@ public class ReduceTask extends Task {
 	private MapOutputFetcher fetcher = null;
 	private Thread termCheckThread = null;
 	
+	public int lastProcessedKeys;
+	
 	private Reporter reporter;
 
 
@@ -460,6 +463,8 @@ public class ReduceTask extends Task {
 			BufferExchangeSink sink, TaskUmbilicalProtocol taskUmbilical,
 			BufferUmbilicalProtocol umbilical) throws IOException {
 		int window = job.getInt("mapred.iterative.reduce.window", 1000);
+		
+		lastProcessedKeys = job.getInt("mapred.iterative.totalkeys", -1);
 
 		this.iterReducer = (IterativeReducer)ReflectionUtils.newInstance(job.getReducerClass(), job);
 		if (this.pkvBuffer == null) {
@@ -565,11 +570,11 @@ public class ReduceTask extends Task {
 		}
 	}
 	
-	private void reduce(JobConf job, InputCollector input, OutputCollector output, Reporter reporter, Progress progress) throws IOException {
+	private int reduce(JobConf job, InputCollector input, OutputCollector output, Reporter reporter, Progress progress) throws IOException {
 		
 		// apply reduce function
+		int count = 0;
 		try {
-			int count = 0;
 			ValuesIterator values = input.valuesIterator();
 			while (values.more()) {	
 				count++;
@@ -595,12 +600,12 @@ public class ReduceTask extends Task {
 		}
 		finally {
 			//Clean up: repeated in catch block below
-			if(iterative){
-				iterReducer.iterate();
-			}else{
+			if(!iterative){
 				reducer.close();
 			}
 		}
+		
+		return count;
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -613,13 +618,14 @@ public class ReduceTask extends Task {
 			inputCollector.flush();
 			
 			//LOG.info("ReduceTask: " + getTaskID() + " start iterative reduce phase.");
-			reduce(job, inputCollector, pkvBuffer, reporter, reduceProgress);		
+			int count = reduce(job, inputCollector, pkvBuffer, reporter, reduceProgress);	
 
 			if(this.spillIter){
 				//retrieve the top records, and generate a file
 				OutputFile outputFile = pkvBuffer.spillTops();
 				if(outputFile != null){
 					umbilical.output(outputFile);
+					iterReducer.iterate();
 					LOG.info("output file " + outputFile);
 				}else{
 					LOG.info("no record is reduced, so wait!");
