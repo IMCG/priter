@@ -5,6 +5,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,9 +38,7 @@ import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.mapred.buffer.impl.Buffer;
 import org.apache.hadoop.util.IndexedSortable;
-import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.Progress;
-import org.apache.hadoop.util.QuickSort;
 import org.apache.hadoop.util.ReflectionUtils;
 
 public class UnSortOutputBuffer<K extends Object, V extends Object> 
@@ -495,7 +494,7 @@ public class UnSortOutputBuffer<K extends Object, V extends Object>
 		}
 	}
 
-	private static final Log LOG = LogFactory.getLog(JOutputBuffer.class.getName());
+	private static final Log LOG = LogFactory.getLog(UnSortOutputBuffer.class.getName());
 
 	/**
 	 * The size of each record in the index file for the map-outputs.
@@ -748,10 +747,14 @@ public class UnSortOutputBuffer<K extends Object, V extends Object>
 			iteration++;
 			
 			if (stream != null ) {
+				long outputstart = new Date().getTime();
 				umbilical.output(stream);
+				long outputend = new Date().getTime();
+				LOG.info("output use time " + (outputend-outputstart));
 			}
 		}
 
+		long resetstart = new Date().getTime();
 		//reset
 		eof = false;
 		bufindex = 0;
@@ -771,6 +774,8 @@ public class UnSortOutputBuffer<K extends Object, V extends Object>
 
 		kvbuffer = null;
 		kvbuffer = new byte[(int)kvbufferSize];
+		long resetend = new Date().getTime();
+		LOG.info("reset use time " + (resetend-resetstart));
 	}
 	
 	

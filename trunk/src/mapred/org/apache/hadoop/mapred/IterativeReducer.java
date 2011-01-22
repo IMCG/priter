@@ -11,7 +11,8 @@ import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
-public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends WritableComparable, P extends WritableComparable> extends Reducer<K2,V2,K3,V3> {
+public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends WritableComparable, P extends WritableComparable> 
+	extends Reducer<K2, V2, K3, V3> {
 	
 	/**
 	 * generate snapshot, and also judge if we should stop
