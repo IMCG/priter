@@ -376,7 +376,7 @@ public class MapTask extends Task {
 					codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
 				}
 				
-				if(job.getBoolean("mapred.job.iterative.sort", true)){
+				if(job.getBoolean("mapred.job.iterative.sort", false)){
 					this.buffer = new JOutputBuffer(bufferUmbilical, this, job, 
 							reporter, getProgress(), false, 
 							this.inputKeyClass, this.inputValClass, codecClass);
@@ -432,14 +432,14 @@ public class MapTask extends Task {
 					
 			try{
 				synchronized(this){		
-					if(job.getBoolean("mapred.job.iterative.sort", true)){
+					if(job.getBoolean("mapred.job.iterative.sort", false)){
 						//iteration loop, stop when reduce let it stop	
 						while(true) {
 							while(!pkvBuffer.next()){
 								LOG.info("total workload is " + workload);
 								mapper.iterate();
 								if(counter == 0){
-									LOG.info("no records left, do nothing");
+									LOG.info("sort no records left, do nothing");
 								}else{		
 									this.buffer.iterate();
 									counter = 0;
@@ -483,7 +483,7 @@ public class MapTask extends Task {
 								processend = new Date().getTime();
 								long processtime = processend - processstart;
 									
-								LOG.info("total workload is " + workload + " use time " + processtime);
+								LOG.info("unsort total workload is " + workload + " use time " + processtime);
 								
 								LOG.info("no records, I am waiting!");
 								

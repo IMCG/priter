@@ -27,8 +27,6 @@ public class UnSortRawKeyValueIterator<K extends Object, V extends Object>
     private Progress scanProgress = new Progress();
     
     public UnSortRawKeyValueIterator(List<Segment<K,V>> inSegments) throws IOException{
-    	LOG.info("Scan " + inSegments.size() + " segments");
-
     	for(Segment<K,V> seg : inSegments){
     		seg.init(null);
     		segments.add(seg);
@@ -39,6 +37,8 @@ public class UnSortRawKeyValueIterator<K extends Object, V extends Object>
     	
         if (totalBytes != 0) //being paranoid
             progPerByte = 1.0f / (float)totalBytes;
+        
+    	LOG.info("Scan " + inSegments.size() + " segments");
     }
     
 	@Override

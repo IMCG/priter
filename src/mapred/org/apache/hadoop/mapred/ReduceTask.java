@@ -269,8 +269,6 @@ public class ReduceTask extends Task {
 	private MapOutputFetcher fetcher = null;
 	private Thread termCheckThread = null;
 	
-	public int lastProcessedKeys;
-	
 	private Reporter reporter;
 
 
@@ -463,8 +461,6 @@ public class ReduceTask extends Task {
 			BufferExchangeSink sink, TaskUmbilicalProtocol taskUmbilical,
 			BufferUmbilicalProtocol umbilical) throws IOException {
 		int window = job.getInt("mapred.iterative.reduce.window", 1000);
-		
-		lastProcessedKeys = job.getInt("mapred.iterative.totalkeys", -1);
 
 		this.iterReducer = (IterativeReducer)ReflectionUtils.newInstance(job.getReducerClass(), job);
 		if (this.pkvBuffer == null) {
@@ -486,7 +482,7 @@ public class ReduceTask extends Task {
 			long windowTimeStamp = System.currentTimeMillis();
 			while(true) {
 				setProgressFlag();		
-				LOG.info("ReduceTask: " + getTaskID() + " perform iteration snapshot. window = " + 
+				LOG.info("ReduceTask: " + getTaskID() + " perform reduce. window = " + 
 						 (System.currentTimeMillis() - windowTimeStamp) + "ms.");
 				windowTimeStamp = System.currentTimeMillis();
 				reduce(job, reporter, inputCollector, umbilical, sink.getProgress(), null);
@@ -615,12 +611,18 @@ public class ReduceTask extends Task {
 		boolean snapshot = snapshotFreq < 1f;
 		
 		if(iterative) {
+			long processstart = new Date().getTime();
 			inputCollector.flush();
 			
+
 			//LOG.info("ReduceTask: " + getTaskID() + " start iterative reduce phase.");
 			int count = reduce(job, inputCollector, pkvBuffer, reporter, reduceProgress);	
+			long processend = new Date().getTime();
+			long processtime = processend - processstart;
+			LOG.info("processed " + count + " use time " + processtime);
 
 			if(this.spillIter){
+				long sortstart = new Date().getTime();
 				//retrieve the top records, and generate a file
 				OutputFile outputFile = pkvBuffer.spillTops();
 				if(outputFile != null){
@@ -631,10 +633,12 @@ public class ReduceTask extends Task {
 					LOG.info("no record is reduced, so wait!");
 				}
 				this.spillIter = false;
+				long sortend = new Date().getTime();
+				long sorttime = sortend - sortstart;
+				LOG.info("emit " + pkvBuffer.actualEmit + " use time " + sorttime);
 			}
 			
-			LOG.debug("Reduce phase complete.");
-			
+			LOG.debug("Reduce phase complete.");			
 		} else if (reducePipeline) {
 			inputCollector.flush();
 			if (outputBuffer == null) {
