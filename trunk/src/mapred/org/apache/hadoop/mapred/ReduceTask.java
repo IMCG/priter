@@ -400,6 +400,8 @@ public class ReduceTask extends Task {
 		inputSnapshots  = job.getBoolean("mapred.job.input.snapshots", false);
 		iterative = job.getBoolean("mapred.job.iterative", false);
 		
+		timeOvhd = 600;
+		
 		InputCollector inputCollector = null;
 		if (inputSnapshots) {
 			LOG.info("Task " + getTaskID() + " creating input snapshot buffer.");
