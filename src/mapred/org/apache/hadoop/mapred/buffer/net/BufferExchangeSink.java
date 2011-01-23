@@ -132,10 +132,8 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	private Map<Long, Integer> syncMapPos;
 	private int syncMaps;
 	
-	public long processlast;
-	public long processnow;
-	public long syncstart;
-	public long syncend;
+	private long compStart;
+	private long syncStart;
 
 	/* The task that owns this sink and is receiving the input. */
 	private Task task;
@@ -167,6 +165,9 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		this.server = ServerSocketChannel.open();
 		this.server.configureBlocking(true);
 		this.server.socket().bind(new InetSocketAddress(0));
+		
+		/* recording the time */
+		this.compStart = System.currentTimeMillis();
 	}
 
 	public InetSocketAddress getAddress() {
@@ -525,23 +526,31 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
 					if (collector.read(istream, header)) {
 						updateProgress(header);
-										
-						int recMaps = (syncMapPos.containsKey(position.longValue())) ? syncMapPos.get(position.longValue()) + 1 : 1;
+									
+						int recMaps = 0;
+						if(!syncMapPos.containsKey(position.longValue())){
+							recMaps = 1;
+							syncStart = System.currentTimeMillis();
+						}else{
+							recMaps = syncMapPos.get(position.longValue()) + 1;
+						}
+						
 						LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
 						syncMapPos.put(position.longValue(), recMaps);
 						
-						//record the iter end time for priorityqueue size estimation
-						Date curr = new Date();
-						LOG.info("time is " + curr + " for task " + header.owner().getTaskID().getId() + 
-								" my task is " + task.getTaskID().getId());
 						if(header.owner().getTaskID().getId() == task.getTaskID().getId()){
-							((ReduceTask)task).pkvBuffer.iter_end_time = curr.getTime();
-							LOG.info("time is " + curr + " for task " + task.getTaskID().getId());
+							long current = System.currentTimeMillis();
+							((ReduceTask)task).pkvBuffer.timeComp = current - compStart;
+							((ReduceTask)task).pkvBuffer.timeSync = current - syncStart;
+							LOG.info("iteration " + pos + 
+									" compute time " + (current - compStart) +
+									" synchronization time " + (current - syncStart));
 						}
 							
 						if(recMaps >= syncMaps){
 							syncMapPos.remove(position.longValue());	
 							((ReduceTask)task).spillIter = true;	
+							compStart = System.currentTimeMillis();
 							task.notifyAll();								
 						}else if(!conf.getBoolean("mapred.job.iterative.sort", true)){
 							// no need to be synchronized, the state is stored in hashmap

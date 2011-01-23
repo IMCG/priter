@@ -82,14 +82,9 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	public int total_reduce = 0;
 	public boolean start = false;
 	
-	//for emitsize determination
-	public long sort_time = 0;
-	public long iter_start_time = 0;
-	public long iter_end_time = 0;
-	public double iter_time = 0;
-	
-	private long sorttime;
-	private long processtime;
+	//for expanding size determination
+	public long timeComp;
+	public long timeSync;
 	
 	public int actualEmit = 0;
 	public static int WAIT_ITER = 0;
@@ -118,9 +113,6 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 		this.topk = job.getInt("mapred.iterative.topk", 1000);
 		this.totalkeys = job.getInt("mapred.iterative.totalkeys", -1);
 		this.ttnum = job.getInt("mapred.iterative.ttnum", 0);
-		
-		this.processtime = (long)(0.03 * totalkeys / ttnum);
-		this.sorttime = 100;
 
 		this.iterReducer.initStateTable(this);
 	}
@@ -141,7 +133,7 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	
 	private synchronized ArrayList<KVRecord<K, V>> getSortRecords() {
 		synchronized(this.stateTable){				
-			V threshold = (V) iterReducer.setThreshold(stateTable, processtime, sorttime);
+			V threshold = (V) iterReducer.setThreshold(stateTable, timeComp, timeSync);
 
 			ArrayList<KVRecord<K, V>> records = new ArrayList<KVRecord<K, V>>();
 			actualEmit = 0;
@@ -408,9 +400,5 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	public void performTerminationCheck() {
 		iteratedKeys = stateTable.keySet().iterator();
 		LOG.info("statetable size: " + stateTable.size());
-	}
-
-	public void setPrevEmitTime(long inTime){
-		this.sorttime = inTime;
 	}
 }
