@@ -571,22 +571,25 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		// Check if this map-output can be saved in-memory
 		boolean shuffleInMemory = ramManager.canFitInMemory(decompressedLength); 
 
+		long start = System.currentTimeMillis();
 		// Shuffle
 		if (shuffleInMemory &&
 			shuffleInMemory(taskid, istream,
 					(int)decompressedLength,
 					(int)compressedLength)) {
+			long end = System.currentTimeMillis();
 			LOG.info("Shuffeled " + decompressedLength + " bytes (" + 
 					compressedLength + " raw bytes) " + 
-					"into RAM from " + taskid);
+					"into RAM from " + taskid + " reduce read use time " + (end-start));
 		} else {
-			LOG.info("Shuffling " + decompressedLength + " bytes (" + 
-					compressedLength + " raw bytes) " + 
-					"into Local-FS from " + taskid);
-
 			Path filename = outputHandle.getInputFileForWrite(task.getTaskID(), taskid, spills++, decompressedLength);
 
 			shuffleToDisk(taskid, istream, filename, compressedLength);
+			
+			long end = System.currentTimeMillis();
+			LOG.info("Shuffling " + decompressedLength + " bytes (" + 
+					compressedLength + " raw bytes) " + 
+					"into Local-FS from " + taskid + " reduce read use time " + (end-start));
 		}
 		return true;
 	}
