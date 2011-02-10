@@ -52,13 +52,6 @@ public class BSearchReduce extends MapReduceBase implements
 	}
 
 	@Override
-	public void reduce(IntWritable arg0, Iterator<IntWritable> arg1,
-			OutputCollector<IntWritable, IntWritable> arg2, Reporter arg3) throws IOException {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
 	public void iterate() {
 		iterate++;
 	}
@@ -111,9 +104,11 @@ public class BSearchReduce extends MapReduceBase implements
 	}
 
 	@Override
-	public IntWritable setThreshold(
-			Map<IntWritable, PriorityRecord<IntWritable, IntWritable>> stateTable) {
+	public void reduce(IntWritable key, Iterator<IntWritable> values,
+			OutputCollector<IntWritable, IntWritable> output, Reporter reporter)
+			throws IOException {
 		// TODO Auto-generated method stub
-		return null;
+		
 	}
+
 }

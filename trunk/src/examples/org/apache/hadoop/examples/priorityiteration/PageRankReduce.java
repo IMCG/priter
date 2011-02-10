@@ -49,14 +49,6 @@ public class PageRankReduce extends MapReduceBase implements
 	}
 
 	@Override
-	public void reduce(IntWritable arg0, Iterator<DoubleWritable> arg1,
-			OutputCollector<IntWritable, DoubleWritable> arg2, Reporter arg3)
-			throws IOException {
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
 	public void iterate() {
 		iterate++;
 	}
@@ -112,9 +104,10 @@ public class PageRankReduce extends MapReduceBase implements
 	}
 
 	@Override
-	public DoubleWritable setThreshold(
-			Map<IntWritable, PriorityRecord<DoubleWritable, DoubleWritable>> stateTable) {
+	public void reduce(IntWritable key, Iterator<DoubleWritable> values,
+			OutputCollector<IntWritable, DoubleWritable> output,
+			Reporter reporter) throws IOException {
 		// TODO Auto-generated method stub
-		return null;
+		
 	}
 }
