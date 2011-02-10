@@ -32,6 +32,5 @@ public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends Writab
     				throws IOException;
 	
 	void iterate();
-	V3 setThreshold(Map<K3, PriorityRecord<P, V3>> stateTable, long processTime, long overheadTime);
 	boolean stopCheck(StateTableIterator<K3, V3> stateTable);
 }

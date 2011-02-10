@@ -530,7 +530,6 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						int recMaps = 0;
 						if(!syncMapPos.containsKey(position.longValue())){
 							recMaps = 1;
-							syncStart = System.currentTimeMillis();
 						}else{
 							recMaps = syncMapPos.get(position.longValue()) + 1;
 						}
@@ -538,16 +537,23 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
 						syncMapPos.put(position.longValue(), recMaps);
 						
-						if(header.owner().getTaskID().getId() == task.getTaskID().getId()){
+						if(header.owner().getTaskID().getId() == task.getTaskID().getTaskID().getId()){
 							long current = System.currentTimeMillis();
 							((ReduceTask)task).pkvBuffer.timeComp = current - compStart;
-							((ReduceTask)task).pkvBuffer.timeSync = current - syncStart;
-							LOG.info("iteration " + pos + 
-									" compute time " + (current - compStart) +
-									" synchronization time " + (current - syncStart));
+							syncStart = System.currentTimeMillis();
+							LOG.info("synchronization start. " + syncStart +
+									"task id " + header.owner().getTaskID().getId() +
+									" and " + task.getTaskID().getTaskID().getId());
 						}
 							
-						if(recMaps >= syncMaps){
+						if(recMaps == syncMaps){
+							long current = System.currentTimeMillis();
+							((ReduceTask)task).pkvBuffer.timeSync = current - syncStart;
+							
+							LOG.info("iteration " + pos + 
+									" compute time " + ((ReduceTask)task).pkvBuffer.timeComp +
+									" synchronization time " + (current - syncStart));
+							
 							syncMapPos.remove(position.longValue());	
 							((ReduceTask)task).spillIter = true;	
 							compStart = System.currentTimeMillis();

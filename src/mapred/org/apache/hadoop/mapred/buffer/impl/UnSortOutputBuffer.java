@@ -742,15 +742,15 @@ public class UnSortOutputBuffer<K extends Object, V extends Object>
 	public synchronized void iterate() throws IOException {
 		synchronized(spillLock){
 			//spillThread.forceSpill(iteration);
+			long outputstart = new Date().getTime();
 			spillThread.forceSpill(-1);
 			OutputFile stream = merger.mergeStream(iteration);
 			iteration++;
 			
-			if (stream != null ) {
-				long outputstart = new Date().getTime();
+			if (stream != null ) {				
 				umbilical.output(stream);
 				long outputend = new Date().getTime();
-				LOG.info("output use time " + (outputend-outputstart));
+				LOG.info("map output use time " + (outputend-outputstart));
 			}
 		}
 

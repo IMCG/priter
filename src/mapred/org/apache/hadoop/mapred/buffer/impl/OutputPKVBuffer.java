@@ -42,7 +42,7 @@ import org.apache.hadoop.util.Progress;
 public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V extends WritableComparable> 
 		implements OutputCollector<K, V>, StateTableIterator<K, V>{
 	
-	
+	public static final int SAMPLESIZE = 1000;
 	//**************************************
 	private static final Log LOG = LogFactory.getLog(OutputPKVBuffer.class.getName());
 
@@ -76,6 +76,7 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	private int topk;
 	private int totalkeys = 0;
 	private int ttnum = 0;
+	private int queuelen = 0;
 	
 	private int iteration = 0;
 	public int total_map = 0;
@@ -111,8 +112,9 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 		this.valClass = valClass;
 
 		this.topk = job.getInt("mapred.iterative.topk", 1000);
-		this.totalkeys = job.getInt("mapred.iterative.totalkeys", -1);
 		this.ttnum = job.getInt("mapred.iterative.ttnum", 0);
+		this.totalkeys = job.getInt("mapred.iterative.totalkeys", -1) / ttnum;
+		this.queuelen = (int) (totalkeys * job.getFloat("mapred.iterative.alpha", 1));
 
 		this.iterReducer.initStateTable(this);
 	}
@@ -131,26 +133,63 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 		this.stateTable.put(key, newpkvRecord);
 	}
 	
-	private synchronized ArrayList<KVRecord<K, V>> getSortRecords() {
-		synchronized(this.stateTable){				
-			V threshold = (V) iterReducer.setThreshold(stateTable, timeComp, timeSync);
-
-			ArrayList<KVRecord<K, V>> records = new ArrayList<KVRecord<K, V>>();
+	private synchronized ArrayList<KVRecord<K, V>> getTopRecords() {
+		synchronized(this.stateTable){	
+			if(actualEmit == 0){
+				actualEmit = job.getInt("mapred.iterative.startkeys", 0) / this.ttnum;
+				actualEmit = (actualEmit == 0) ? 1 : actualEmit;
+			}
+			
 			actualEmit = 0;
-						
-			for(K k : stateTable.keySet()){		
-				V v = stateTable.get(k).getiState();
-				if(v.compareTo(threshold) >= 0){
+			ArrayList<KVRecord<K, V>> records = new ArrayList<KVRecord<K, V>>();
+			
+			if((stateTable.size() <= queuelen) || (stateTable.size() <= SAMPLESIZE)){
+				for(K k : stateTable.keySet()){		
+					V v = stateTable.get(k).getiState();
 					records.add(new KVRecord<K, V>(k, v));
 					V iState = (V)iterReducer.setDefaultiState();
 					this.stateTable.get(k).setiState(iState);
 					P pri = (P) iterReducer.setPriority(k, iState);
 					this.stateTable.get(k).setPriority(pri);
 					actualEmit++;
-				}			
+							
+				}
+			}else{
+				Random rand = new Random();
+				List<K> randomkeys = new ArrayList<K>(SAMPLESIZE);
+				List<K> keys = new ArrayList<K>(stateTable.keySet());
+				
+				for(int j=0; j<SAMPLESIZE; j++){
+					K randnode = keys.get(rand.nextInt(stateTable.size()));
+					randomkeys.add(randnode);
+				}
+				
+				final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
+				Collections.sort(randomkeys, 
+						new Comparator(){
+							public int compare(Object left, Object right){
+								PriorityRecord<P, V> leftrecord = langForSort.get(left);
+								PriorityRecord<P, V> rightrecord = langForSort.get(right);
+								return -leftrecord.compareTo(rightrecord);
+							}
+						});
+				
+				int cutindex = queuelen * SAMPLESIZE / this.stateTable.size();
+				V threshold = stateTable.get(randomkeys.get(cutindex)).getcState();
+				
+				for(K k : stateTable.keySet()){		
+					V v = stateTable.get(k).getiState();
+					if(v.compareTo(threshold) > 0){
+						records.add(new KVRecord<K, V>(k, v));
+						V iState = (V)iterReducer.setDefaultiState();
+						this.stateTable.get(k).setiState(iState);
+						P pri = (P) iterReducer.setPriority(k, iState);
+						this.stateTable.get(k).setPriority(pri);
+						actualEmit++;
+					}			
+					LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs" + " threshold is " + threshold);
+				}
 			}
-			
-			LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs" + " threshold is " + threshold);
 			return records;
 		}
 	}
@@ -226,7 +265,7 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 	
 			if (out == null ) throw new IOException("Unable to create spill file " + filename);
 			
-			ArrayList<KVRecord<K, V>> entries = getSortRecords();
+			ArrayList<KVRecord<K, V>> entries = getTopRecords();
 			
 			synchronized(this.stateTable){
 				writer = new IFile.Writer<K, V>(job, out, keyClass, valClass, null, null);
@@ -318,42 +357,41 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 		Path topkFile = new Path(topkDir + "/topKsnapshot-" + index);
 		IFile.Writer<K, V> writer = new IFile.Writer<K, V>(job, hdfs, topkFile, 
 				keyClass, valClass, null, null);
-		synchronized(this.stateTable){	
-			Random rand = new Random();
-			List<IntWritable> randomkeys = new ArrayList<IntWritable>(1000);
-			for(int j=0; j<1000; j++){
-				int randnode = rand.nextInt(totalkeys);
-				int servefor = randnode % ttnum;
-				if(servefor == taskid){
-					randomkeys.add(new IntWritable(randnode));
-				}else{
-					int randn = randnode + taskid - servefor;
-					if(randn >= totalkeys){
-						randn -= taskid;
-					}
-					randomkeys.add(new IntWritable(randn));
+		synchronized(this.stateTable){		
+			if(stateTable.size() <= topk){
+				for(K k : stateTable.keySet()){		
+					writer.append(k, stateTable.get(k).getcState());			
 				}
+			}else{
+				Random rand = new Random();
+				List<K> randomkeys = new ArrayList<K>(SAMPLESIZE);
+				List<K> keys = new ArrayList<K>(stateTable.keySet());
+				
+				for(int j=0; j<SAMPLESIZE; j++){
+					K randnode = keys.get(rand.nextInt(stateTable.size()));
+					randomkeys.add(randnode);
+				}
+				
+				final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
+				Collections.sort(randomkeys, 
+						new Comparator(){
+							public int compare(Object left, Object right){
+								V leftrecord = langForSort.get(left).getcState();
+								V rightrecord = langForSort.get(right).getcState();
+								return -leftrecord.compareTo(rightrecord);
+							}
+						});
+				
+				int cutindex = this.topk * SAMPLESIZE / this.stateTable.size();
+				V threshold = stateTable.get(randomkeys.get(cutindex)).getcState();
+		
+				for(K k : stateTable.keySet()){		
+					V v = stateTable.get(k).getcState();
+					if(v.compareTo(threshold) > 0){
+						writer.append(k, stateTable.get(k).getcState());
+					}			
+				}	
 			}
-			
-			final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
-			Collections.sort(randomkeys, 
-					new Comparator(){
-						public int compare(Object left, Object right){
-							V leftrecord = langForSort.get((IntWritable)left).getcState();
-							V rightrecord = langForSort.get((IntWritable)right).getcState();
-							return -leftrecord.compareTo(rightrecord);
-						}
-					});
-			
-			int cutindex = this.topk * 1000 / this.stateTable.size();
-			V threshold = stateTable.get(randomkeys.get(cutindex)).getcState();
-	
-			for(K k : stateTable.keySet()){		
-				V v = stateTable.get(k).getcState();
-				if(v.compareTo(threshold) > 0){
-					writer.append(k, stateTable.get(k).getcState());
-				}			
-			}		
 		}	
 		writer.close();
 	}

@@ -127,6 +127,8 @@ public class InputPKVBuffer<K extends Object, V extends WritableComparable> impl
 					}
 				}
 				*/
+				long start = System.currentTimeMillis();
+				
 				this.iteration = ((OutputFile.PKVBufferHeader)header).iteration();
 				
 				IFile.Reader reader = new IFile.Reader(job, istream, header.compressed(), null, null);
@@ -144,6 +146,8 @@ public class InputPKVBuffer<K extends Object, V extends WritableComparable> impl
 					this.recordsQueue.add(new KVRecord<K, V>((K)keyObject, (V)valObject));
 				}
 				
+				long end = System.currentTimeMillis();
+				LOG.info("map read use time " + (end-start));
 				this.notifyAll();			//notify MapTask's pkvBuffer.wait()				
 				return true;
 			}

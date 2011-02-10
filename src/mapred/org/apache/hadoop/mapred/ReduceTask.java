@@ -269,6 +269,8 @@ public class ReduceTask extends Task {
 	private MapOutputFetcher fetcher = null;
 	private Thread termCheckThread = null;
 	
+	private long lasttime;
+	
 	private Reporter reporter;
 
 
@@ -480,6 +482,7 @@ public class ReduceTask extends Task {
 			sink.open();
 			
 			long windowTimeStamp = System.currentTimeMillis();
+			lasttime = System.currentTimeMillis();
 			while(true) {
 				setProgressFlag();		
 				LOG.info("ReduceTask: " + getTaskID() + " perform reduce. window = " + 
@@ -612,8 +615,9 @@ public class ReduceTask extends Task {
 		
 		if(iterative) {
 			long processstart = new Date().getTime();
-			inputCollector.flush();
-			
+			inputCollector.flush();		
+			long flushend = System.currentTimeMillis();
+			LOG.info("reduce read flush use time " + (flushend-processstart));
 
 			//LOG.info("ReduceTask: " + getTaskID() + " start iterative reduce phase.");
 			int count = reduce(job, inputCollector, pkvBuffer, reporter, reduceProgress);	
@@ -623,6 +627,10 @@ public class ReduceTask extends Task {
 
 			if(this.spillIter){
 				long sortstart = new Date().getTime();
+				
+				LOG.info("average processing " + pkvBuffer.actualEmit + " takes time " + (sortstart-lasttime));
+				lasttime = sortstart;
+				
 				//retrieve the top records, and generate a file
 				OutputFile outputFile = pkvBuffer.spillTops();
 				if(outputFile != null){
@@ -635,7 +643,7 @@ public class ReduceTask extends Task {
 				this.spillIter = false;
 				long sortend = new Date().getTime();
 				long sorttime = sortend - sortstart;
-				LOG.info("emit " + pkvBuffer.actualEmit + " use time " + sorttime);
+				LOG.info("emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
 			}
 			
 			LOG.debug("Reduce phase complete.");			
