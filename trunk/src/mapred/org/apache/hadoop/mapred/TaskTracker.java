@@ -925,9 +925,8 @@ public class TaskTracker
           queryJobTracker(fromEventId, jobId, jobClient);
         synchronized (allEvents) {
         	for (TaskCompletionEvent e : recentEvents) {
-        		//LOG.info("recent events is : " + e + e.getTaskAttemptId().getId() + ":" + runningJobs.get(jobId).jobConf.getInt("mapred.iterative.ttnum", 0));
         		if ((e.isMap == isMap) && 
-        				(e.getTaskAttemptId().getId() <= runningJobs.get(jobId).jobConf.getInt("mapred.iterative.ttnum", 0))){
+        				(e.getTaskAttemptId().getId() <= runningJobs.get(jobId).jobConf.getInt("mapred.iterative.partitions", 0))){
         			//LOG.info("add event : " + e + " is map? " + isMap);
         			allEvents.add(e);
         		}

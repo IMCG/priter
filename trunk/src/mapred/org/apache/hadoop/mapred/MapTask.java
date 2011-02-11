@@ -223,15 +223,6 @@ public class MapTask extends Task {
 	
 	@Override
 	public int getNumberOfInputs() { 	
-		/*
-		if(job != null && job.getBoolean("mapred.iterative.mapsync", false)){
-			return job.getInt("mapred.iterative.ttnum", 0);
-		}else if(this.isIterative()){
-			return 1;
-		}else{
-			return super.getNumberOfInputs();
-		}	
-		*/
 		return 1;
 	}
 	
