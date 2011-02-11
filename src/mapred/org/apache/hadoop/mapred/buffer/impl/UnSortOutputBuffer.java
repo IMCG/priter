@@ -399,7 +399,9 @@ public class UnSortOutputBuffer<K extends Object, V extends Object>
 
 					if (open) {
 						try {
-							spill(-1);	
+							synchronized (spillLock) {
+								spill(-1);	
+							}
 						} catch (Throwable e) {
 							e.printStackTrace();
 							sortSpillException = e;
@@ -874,47 +876,49 @@ public class UnSortOutputBuffer<K extends Object, V extends Object>
 			throw (IOException)new IOException("Spill failed"
 			).initCause(sortSpillException);
 		}
-		try {
-			// serialize key bytes into buffer
-			int keystart = bufindex;
-			keySerializer.serialize(key);
-			if (bufindex < keystart) {
-				// wrapped the key; reset required
-				bb.reset();
-				keystart = 0;
-			}
-			// serialize value bytes into buffer
-			int valstart = bufindex;
-			valSerializer.serialize(value);
-			int valend = bb.markRecord();
+		
+		synchronized(spillLock){
+			try {
+				// serialize key bytes into buffer
+				int keystart = bufindex;
+				keySerializer.serialize(key);
+				if (bufindex < keystart) {
+					// wrapped the key; reset required
+					bb.reset();
+					keystart = 0;
+				}
+				// serialize value bytes into buffer
+				int valstart = bufindex;
+				valSerializer.serialize(value);
+				int valend = bb.markRecord();
 
-			if (keystart == bufindex) {
-				// if emitted records make no writes, it's possible to wrap
-				// accounting space without notice
-				bb.write(new byte[0], 0, 0);
-			}
+				if (keystart == bufindex) {
+					// if emitted records make no writes, it's possible to wrap
+					// accounting space without notice
+					bb.write(new byte[0], 0, 0);
+				}
 
-			//LOG.info("map out: " + key + " : " + value);
-			
-			int partition = partitioner.getPartition(key, value, partitions);
-			if (partition < 0 || partition >= partitions) {
-				throw new IOException("Illegal partition for " + key + " (" +
-						partition + ")");
-			}
+				//LOG.info("map out: " + key + " : " + value);
+				
+				int partition = partitioner.getPartition(key, value, partitions);
+				if (partition < 0 || partition >= partitions) {
+					throw new IOException("Illegal partition for " + key + " (" +
+							partition + ")");
+				}
 
-			// update accounting info
-			int ind = kvindex * ACCTSIZE;
-			kvoffsets[kvindex] = ind;
-			partitionMap.get(partition).add(kvoffsets[kvindex]);
-			kvindices[ind + KEYSTART] = keystart;
-			kvindices[ind + VALSTART] = valstart;
-			kvindex = (kvindex + 1) % kvoffsets.length;
-		} catch (MapBufferTooSmallException e) {
-			LOG.info("Record too large for in-memory buffer: " + e.getMessage());
-			spillSingleRecord(key, value);
-			return;
+				// update accounting info
+				int ind = kvindex * ACCTSIZE;
+				kvoffsets[kvindex] = ind;
+				partitionMap.get(partition).add(kvoffsets[kvindex]);
+				kvindices[ind + KEYSTART] = keystart;
+				kvindices[ind + VALSTART] = valstart;
+				kvindex = (kvindex + 1) % kvoffsets.length;
+			} catch (MapBufferTooSmallException e) {
+				LOG.info("Record too large for in-memory buffer: " + e.getMessage());
+				spillSingleRecord(key, value);
+				return;
+			}
 		}
-
 	}
 
 

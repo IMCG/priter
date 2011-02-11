@@ -57,6 +57,9 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.FloatWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
@@ -117,8 +120,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
-  private Map<JobID, Map<Integer, Boolean>> stopCheckMap = new HashMap<JobID, Map<Integer, Boolean>>();
-
+  private Map<JobID, WritableComparable> lastTotal = new HashMap<JobID, WritableComparable>();
+  
   // system directories are world-wide readable and owner readable
   final static FsPermission SYSTEM_DIR_PERMISSION =
     FsPermission.createImmutable((short) 0733); // rwx-wx-wx
@@ -3034,7 +3037,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				LOG.info("put merger for job " + jobid);
 				
 				Map<Integer, Boolean> stopCheck = new HashMap<Integer, Boolean>();
-				this.stopCheckMap.put(jobid, stopCheck);
+				
+				if(valClass == IntWritable.class){
+					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
+				}else if(valClass == DoubleWritable.class){
+					lastTotal.put(jobid, new DoubleWritable(Double.MAX_VALUE));
+				}else if(valClass == FloatWritable.class){
+					lastTotal.put(jobid, new FloatWritable(Float.MAX_VALUE));
+				}else{
+					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
+				}	
 			}
 			
 			if(this.snapshotCompletionMap.get(jobid).containsKey(iterIndex)){
@@ -3049,21 +3061,80 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				//LOG.info("interation index is " + iterIndex + " : task index is " + reduceIndex);
 				//LOG.info("total reduces is " + this.totalReduces);
 				//LOG.info("total received is " + tasks.size());
-				
-				boolean stop = this.stopCheckMap.get(jobid).get(iterIndex) && bStop;
-				LOG.info("stop information of iteration " + iterIndex + " : " + this.stopCheckMap.get(jobid).get(iterIndex) + "\t" + bStop);
 	
 				if(tasks.size() == this.totalReduces) {
 					//do merge sort
-					this.mergerMap.get(jobid).writeTopK(iterIndex);
+					WritableComparable total = this.mergerMap.get(jobid).writeTopK(iterIndex);
 					
-					//termination check
-					if(stop){
-						LOG.info("OK, let kill job");
-						killJob(jobid);
-						this.snapshotCompletionMap.remove(jobid);
-						this.stopCheckMap.remove(jobid);
-						this.mergerMap.remove(jobid);
+					//stopcheck	
+					int maxiter = jobs.get(jobid).getJobConf().getInt("mapred.iterative.stop.maxiter", Integer.MAX_VALUE);
+					long maxtime = jobs.get(jobid).getJobConf().getLong("mapred.iterative.stop.timelimit", Long.MAX_VALUE);
+					if(maxiter != Integer.MAX_VALUE){
+						//1. max iteration
+						if(iterIndex > maxiter){
+							LOG.info("OK, max iteration reached, let kill job");
+							killJob(jobid);
+							this.snapshotCompletionMap.remove(jobid);
+							this.mergerMap.remove(jobid);
+						}
+					}else if(maxtime != Long.MAX_VALUE){
+						//2. max time
+						long currtime = iterIndex * jobs.get(jobid).getJobConf().getInt("mapred.iterative.snapshot.interval", 10000);
+						
+						if(currtime > maxtime){
+							LOG.info("OK, max time reached, let kill job");
+							killJob(jobid);
+							this.snapshotCompletionMap.remove(jobid);
+							this.mergerMap.remove(jobid);
+						}
+					}else{
+						//3. max difference
+						if(this.mergerMap.get(jobid).valClass == IntWritable.class){
+							int curr = ((IntWritable)total).get();
+							int last = ((IntWritable)lastTotal.get(jobid)).get();
+							int diff = Math.abs(last - curr);
+							LOG.info("iteration " + iterIndex + " diff is " + diff);
+							
+							int threshold = jobs.get(jobid).getJobConf().getInt("mapred.iterative.stop.threshold", 0);
+							if(diff <= threshold){
+								LOG.info("OK, let kill job");
+								killJob(jobid);
+								this.snapshotCompletionMap.remove(jobid);
+								this.mergerMap.remove(jobid);
+							}
+							
+							lastTotal.put(jobid, new IntWritable(curr));
+						}else if(this.mergerMap.get(jobid).valClass == DoubleWritable.class){
+							double curr = ((DoubleWritable)total).get();
+							double last = ((DoubleWritable)lastTotal.get(jobid)).get();
+							double diff = Math.abs(last - curr);
+							LOG.info("iteration " + iterIndex + " diff is " + diff);
+							
+							double threshold = jobs.get(jobid).getJobConf().getFloat("mapred.iterative.stop.threshold", 0);
+							if(diff <= threshold){
+								LOG.info("OK, let kill job");
+								killJob(jobid);
+								this.snapshotCompletionMap.remove(jobid);
+								this.mergerMap.remove(jobid);
+							}
+							
+							lastTotal.put(jobid, new DoubleWritable(curr));
+						}else if(this.mergerMap.get(jobid).valClass == FloatWritable.class){
+							float curr = ((FloatWritable)total).get();
+							float last = ((FloatWritable)lastTotal.get(jobid)).get();
+							float diff = Math.abs(last - curr);
+							LOG.info("iteration " + iterIndex + " diff is " + diff);
+							
+							float threshold = jobs.get(jobid).getJobConf().getFloat("mapred.iterative.stop.threshold", 0);
+							if(diff <= threshold){
+								LOG.info("OK, let kill job");
+								killJob(jobid);
+								this.snapshotCompletionMap.remove(jobid);
+								this.mergerMap.remove(jobid);
+							}
+							
+							lastTotal.put(jobid, new FloatWritable(curr));
+						}
 					}
 				}
 			}else{
@@ -3077,8 +3148,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					e.printStackTrace();
 					LOG.info("jobid is " + jobid + " iteraIndex " + iterIndex + " reduceIndex is " + reduceIndex);
 				}
-						
-				this.stopCheckMap.get(jobid).put(iterIndex, bStop);
 			}
 		}
 	} 
@@ -3088,7 +3157,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		private JobConf job;
 		private FileSystem hdfs;
 		private Class<K> keyClass;	
-		private Class<V> valClass;
+		public Class<V> valClass;
 		private Deserializer keyDeserializer;	
 		private Deserializer valDeserializer;	
 		private DataInputBuffer keyBuffer;
@@ -3183,21 +3252,48 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			reader.close();
 		}
 		
-		public void writeTopK(int snapshotindex) throws IOException{
+		public WritableComparable writeTopK(int snapshotindex) throws IOException{
 			String snapshot = outputDir + "/snapshot-" + snapshotindex;
 			FSDataOutputStream ostream = hdfs.create(new Path(snapshot), true);
 			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 
 			KVRecord[] recs = topkQueues.get(snapshotindex).toArray(new KVRecord[topk]);
 			Arrays.sort(recs, icomparator);
-			for(KVRecord rec : recs){
-				writer.write(rec.k + "\t" + rec.v + "\n");
-			}
+			topkQueues.remove(snapshotindex);	
 			
-			writer.close();
-			ostream.close();
-			
-			topkQueues.remove(snapshotindex);
+			if(valClass == IntWritable.class){
+				int total = 0;
+				for(KVRecord rec : recs){
+					writer.write(rec.k + "\t" + rec.v + "\n");
+					total += ((IntWritable)rec.v).get();
+				}				
+				writer.close();
+				ostream.close();
+				
+				return new IntWritable(total);
+			}else if(valClass == DoubleWritable.class){
+				double total = 0;
+				for(KVRecord rec : recs){
+					writer.write(rec.k + "\t" + rec.v + "\n");
+					total += ((DoubleWritable)rec.v).get();
+				}
+				writer.close();
+				ostream.close();
+				
+				return new DoubleWritable(total);
+			}else if(valClass == FloatWritable.class){
+				float total = 0;
+				for(KVRecord rec : recs){
+					writer.write(rec.k + "\t" + rec.v + "\n");
+					total += ((FloatWritable)rec.v).get();
+				}
+				writer.close();
+				ostream.close();
+				
+				return new FloatWritable(total);
+			}else{
+				return new IntWritable(-1);
+			}			
 		}
 	}
 
