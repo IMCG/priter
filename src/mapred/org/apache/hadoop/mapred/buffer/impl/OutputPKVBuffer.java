@@ -74,8 +74,6 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
     DataOutputBuffer buffer = new DataOutputBuffer();
       
 	private int topk;
-	private int totalkeys = 0;
-	private int ttnum = 0;
 	private int queuelen = 0;
 	
 	private int iteration = 0;
@@ -115,8 +113,8 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 		this.valClass = valClass;
 
 		this.topk = job.getInt("mapred.iterative.topk", 1000);
-		this.ttnum = job.getInt("mapred.iterative.ttnum", 0);
-		this.totalkeys = job.getInt("mapred.iterative.totalkeys", -1) / ttnum;
+		int partitions = job.getInt("mapred.iterative.partitions", 0);
+		int totalkeys = job.getInt("mapred.iterative.totalkeys", -1) / partitions;
 		this.queuelen = (int) (totalkeys * job.getFloat("mapred.iterative.alpha", 1));
 
 		this.iterReducer.initStateTable(this);
@@ -321,7 +319,6 @@ public class OutputPKVBuffer<P extends WritableComparable, K extends Writable, V
 		
 		this.iteration++;
 		
-		//int partitions = job.getBoolean("mapred.iterative.mapsync", false) ? job.getInt("mapred.iterative.ttnum", 1) : 1;
 		int partitions = 1;
 		return new OutputFile(this.taskAttemptID, this.iteration, filename, indexFilename, partitions);
 		

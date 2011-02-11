@@ -159,25 +159,22 @@ public class ReduceTask extends Task {
 
 	private class snapshotThread extends Thread {
 		
-		private int ttnum = 0;
+		private int partitions = 0;
 		private TaskUmbilicalProtocol trackerUmbilical;
 		private Task reduceTask;
 		
 		public snapshotThread(TaskUmbilicalProtocol umbilical, Task task) {
 			//topk = conf.getInt("mapred.iterative.topk", 1000);
 			//get number of tasktrackers
-			ttnum = conf.getInt("mapred.iterative.ttnum", -1);
-			if(ttnum == -1){
-				JobClient jobclient;
+			partitions = conf.getInt("mapred.iterative.partitions", -1);
+			if(partitions == -1){
 				try {
-					jobclient = new JobClient(conf);
-					ClusterStatus status = jobclient.getClusterStatus();
-					ttnum = status.getTaskTrackers();
-				} catch (IOException e) {
+					throw new Exception("should specify the number of partitions");
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
 					e.printStackTrace();
-				}			
+				}		
 			}
-
 			  		  
 			this.trackerUmbilical = umbilical;
 			this.reduceTask = task;

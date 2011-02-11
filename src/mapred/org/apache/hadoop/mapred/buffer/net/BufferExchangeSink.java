@@ -155,7 +155,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	    
 	    this.cursor = new HashMap<TaskID, Position>();
 	    this.syncMapPos = new HashMap<Long, Integer>();
-	    this.syncMaps = conf.getInt("mapred.iterative.ttnum", 1);
+	    this.syncMaps = conf.getInt("mapred.iterative.partitions", 1);
 	    
 		this.executor = Executors.newFixedThreadPool(Math.min(maxConnections, Math.max(numInputs, 5)));
 		this.handlers = Collections.synchronizedSet(new HashSet<Handler>());
