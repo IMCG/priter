@@ -1995,6 +1995,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
       if (taskTrackerStatus == null) {
         LOG.warn("Unknown task tracker polling; ignoring: " + trackerName);
       } else {
+    	  LOG.info("try to assign task");
         List<Task> tasks = getSetupAndCleanupTasks(taskTrackerStatus);
         if (tasks == null ) {
           tasks = taskScheduler.assignTasks(taskTrackerStatus);

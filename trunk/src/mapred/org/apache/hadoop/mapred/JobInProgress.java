@@ -1266,6 +1266,27 @@ class JobInProgress {
     return result;
   }
   
+  public synchronized Task obtainNewReduceTask(TaskTrackerStatus tts,
+          int clusterSize,
+          int numUniqueHosts, int targetnum
+         ) throws IOException {
+	if (status.getRunState() != JobStatus.RUNNING) {
+		LOG.info("Cannot create task split for " + profile.getJobID());
+		return null;
+	}
+	
+	int  target = targetnum;
+	if (target == -1) {
+		return null;
+	}
+	
+	Task result = reduces[target].getTaskToRun(tts.getTrackerName());
+	if (result != null) {
+		addRunningTaskToTIP(reduces[target], result.getTaskID(), tts, true);
+	}
+
+	return result;
+  }
   // returns the (cache)level at which the nodes matches
   private int getMatchingLevelForNodes(Node n1, Node n2) {
     int count = 0;
