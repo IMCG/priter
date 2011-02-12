@@ -399,6 +399,189 @@ public class IFile {
     }
   }
 
+  public static class StateTableWriter<K extends Object, P extends Object, V extends Object> {
+	    FSDataOutputStream out;
+	    boolean ownOutputStream = false;
+	    long start = 0;
+	    FSDataOutputStream rawOut;
+	    
+	    CompressionOutputStream compressedOut;
+	    Compressor compressor;
+	    boolean compressOutput = false;
+	    
+	    long decompressedBytesWritten = 0;
+	    long compressedBytesWritten = 0;
+
+	    // Count records written to disk
+	    private long numRecordsWritten = 0;
+	    private final Counters.Counter writtenRecordsCounter;
+
+	    IFileOutputStream checksumOut;
+
+	    Class<K> keyClass;
+	    Class<P> priorityClass;	    
+	    Class<V> valueClass;
+	    Serializer<K> keySerializer;
+	    Serializer<P> prioritySerializer;    
+	    Serializer<V> iStateSerializer;
+	    Serializer<V> cStateSerializer;
+	    
+	    DataOutputBuffer buffer = new DataOutputBuffer();
+	    
+	    public StateTableWriter(Configuration conf, FSDataOutputStream out, 
+	    		Class<K> keyClass,
+	    		Class<P> priorityClass,
+	            Class<V> valueClass,
+	            CompressionCodec codec, Counters.Counter writesCounter)
+	            throws IOException {
+	          this.writtenRecordsCounter = writesCounter;
+	          this.checksumOut = new IFileOutputStream(out);
+	          this.rawOut = out;
+	          this.start = this.rawOut.getPos();
+	          
+	          if (codec != null) {
+	            this.compressor = CodecPool.getCompressor(codec);
+	            this.compressor.reset();
+	            this.compressedOut = codec.createOutputStream(checksumOut, compressor);
+	            this.out = new FSDataOutputStream(this.compressedOut,  null);
+	            this.compressOutput = true;
+	          } else {
+	            this.out = new FSDataOutputStream(checksumOut,null);
+	          }
+	          
+	          this.priorityClass = priorityClass;
+	          this.keyClass = keyClass;
+	          this.valueClass = valueClass;
+	          SerializationFactory serializationFactory = new SerializationFactory(conf);
+	          this.prioritySerializer = serializationFactory.getSerializer(priorityClass);
+	          this.prioritySerializer.open(buffer);
+	          this.keySerializer = serializationFactory.getSerializer(keyClass);
+	          this.keySerializer.open(buffer);
+	          this.iStateSerializer = serializationFactory.getSerializer(valueClass);
+	          this.iStateSerializer.open(buffer);
+	          this.cStateSerializer = serializationFactory.getSerializer(valueClass);
+	          this.cStateSerializer.open(buffer);
+	        }
+	    
+	    public void close() throws IOException {
+		      // Close the serializers
+		      keySerializer.close();
+		      prioritySerializer.close();
+		      iStateSerializer.close();
+		      cStateSerializer.close();
+
+		      WritableUtils.writeVInt(out, EOF_MARKER);
+		      WritableUtils.writeVInt(out, EOF_MARKER);
+		      WritableUtils.writeVInt(out, EOF_MARKER);
+		      WritableUtils.writeVInt(out, EOF_MARKER);
+		      decompressedBytesWritten += 4 * WritableUtils.getVIntSize(EOF_MARKER);
+	      
+	      //Flush the stream
+	      out.flush();
+	  
+	      if (compressOutput) {
+	        // Flush
+	        compressedOut.finish();
+	        compressedOut.resetState();
+	      }
+	      
+	      // Close the underlying stream iff we own it...
+	      if (ownOutputStream) {
+	        out.close();
+	      }
+	      else {
+	        // Write the checksum
+	        checksumOut.finish();
+	      }
+
+	      compressedBytesWritten = rawOut.getPos() - start;
+
+	      if (compressOutput) {
+	        // Return back the compressor
+	        CodecPool.returnCompressor(compressor);
+	        compressor = null;
+	      }
+
+	      out = null;
+	      if(writtenRecordsCounter != null) {
+	        writtenRecordsCounter.increment(numRecordsWritten);
+	      }
+	    }
+
+	    //add for supporting priority
+	    public void append(K key, P pri, V iState, V cState) throws IOException {
+	        if (pri.getClass() != priorityClass)
+	            throw new IOException("wrong priority class: "+ pri.getClass()
+	                                  +" is not "+ priorityClass);
+	        if (key.getClass() != keyClass)
+	          throw new IOException("wrong key class: "+ key.getClass()
+	                                +" is not "+ keyClass);
+	        if ((iState.getClass() != valueClass) || (cState.getClass() != valueClass))
+	          throw new IOException("wrong value class: "+ iState.getClass()
+	                                +" is not "+ valueClass);
+
+	        // Append the 'key'
+	        keySerializer.serialize(key);
+	        int keyLength = buffer.getLength();
+	        if (keyLength < 0) {
+	          throw new IOException("Negative key-length not allowed: " + keyLength + 
+	                                " for " + key);
+	        }
+	        
+	        //Append the 'priority'
+	        prioritySerializer.serialize(pri);
+	        int priorityLength = buffer.getLength() - keyLength;
+	        if (priorityLength < 0) {
+	          throw new IOException("Negative priority-length not allowed: " + priorityLength + 
+	                                " for " + pri);
+	        }
+	        
+	        // Append the 'iState'
+	        iStateSerializer.serialize(iState);
+	        int iStateLength = buffer.getLength() - keyLength - priorityLength;
+	        if (iStateLength < 0) {
+	          throw new IOException("Negative value-length not allowed: " + 
+	        		  iStateLength + " for " + iState);
+	        }
+	        
+	        // Append the 'cState'
+	        cStateSerializer.serialize(cState);
+	        int cStateLength = buffer.getLength() - keyLength - priorityLength;
+	        if (iStateLength < 0) {
+	          throw new IOException("Negative value-length not allowed: " + 
+	        		  iStateLength + " for " + iState);
+	        }
+	        
+	        // Write the record out
+	        WritableUtils.writeVInt(out, keyLength);                  // key length
+	        WritableUtils.writeVInt(out, priorityLength);				// priority
+	        WritableUtils.writeVInt(out, iStateLength);                // iState length
+	        WritableUtils.writeVInt(out, cStateLength);                // cState length
+	        out.write(buffer.getData(), 0, buffer.getLength());       // data
+
+	        out.flush();
+	        
+	        // Reset
+	        buffer.reset();
+	        
+	        // Update bytes written
+	        decompressedBytesWritten += keyLength + priorityLength + iStateLength + cStateLength +
+	                                    WritableUtils.getVIntSize(keyLength) + 
+	        							WritableUtils.getVIntSize(priorityLength) + 
+	                                    WritableUtils.getVIntSize(iStateLength);
+	        							WritableUtils.getVIntSize(cStateLength);
+	        ++numRecordsWritten;
+	      }
+	    
+	    public long getRawLength() {
+	      return decompressedBytesWritten;
+	    }
+	    
+	    public long getCompressedLength() {
+	      return compressedBytesWritten;
+	    }
+	  }
+  
   public static class Reader<K extends Object, V extends Object> {
 	    private static final int DEFAULT_BUFFER_SIZE = 128*1024;
 	    private static final int MAX_VINT_SIZE = 9;

@@ -3,13 +3,11 @@ package org.apache.hadoop.mapred;
 
 import java.io.IOException;
 import java.util.Iterator;
-import java.util.Map;
 
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
-import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
-import org.apache.hadoop.mapred.buffer.impl.StateTableIterator;
 
 public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends WritableComparable, P extends WritableComparable> 
 	extends Reducer<K2, V2, K3, V3> {
@@ -20,17 +18,12 @@ public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends Writab
 	 * @param records
 	 * @return stop signal, true: going on, false: stop
 	 */	
-	void initStateTable(OutputPKVBuffer<P, K3, V3> stateTable);
-	K3 setDefaultKey();
+	void initStateTable(OutputPKVBuffer<P, V3> stateTable);
+	IntWritable setDefaultKey();
 	V3 setDefaultiState();
-	V3 setDefaultcState(K3 k);
-	P setPriority(K3 key, V3 iState);
-	void updateState(V3 iState, V3 cState, V3 value);	
-	
-	void reduce(K2 key, Iterator<V2> values,
-			OutputPKVBuffer<P, K3, V3> output, Reporter reporter)
-    				throws IOException;
+	V3 setDefaultcState(IntWritable k);
+	P setPriority(IntWritable key, V3 iState);
+	void updateState(K2 key, Iterator<V2> values, OutputPKVBuffer<P, V3> stateTable, Reporter reporter) throws IOException;	
 	
 	void iterate();
-	boolean stopCheck(StateTableIterator<K3, V3> stateTable);
 }

@@ -1,13 +1,21 @@
 package org.apache.hadoop.mapred.buffer.impl;
 
+import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.LinkedList;
 import java.util.Queue;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.FloatWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
@@ -26,28 +34,35 @@ public class InputPKVBuffer<K extends Object, V extends WritableComparable> impl
 	private static final Log LOG = LogFactory.getLog(InputPKVBuffer.class.getName());
 	
 	private int iteration = 0;
+	private FileSystem hdfs;
 	private K savedKey;
 	private V savedValue;			//for get K, V pair
 	private OutputFile.Header savedHeader = null;	
+	private Class<V> valClass;
 	private Deserializer keyDeserializer;	
 	private Deserializer valDeserializer;	
 	private JobConf job;
 	private Queue<KVRecord<K, V>> recordsQueue = null;
+	public String exeQueueFile;
 
 	public InputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
 			Reporter reporter, Progress progress, 
-			Class<K> keyClass, Class<V> valClass){	
+			Class<K> keyClass, Class<V> valClass) throws IOException{	
 		
 		LOG.info("InputPKVBuffer is created for task " + task.getTaskID());
 		this.iteration = 0;
 		
 		this.job = job;
-		
+		this.hdfs = FileSystem.get(job);
+
+		this.valClass = valClass;
 		SerializationFactory serializationFactory = new SerializationFactory(job);
 	    this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
 	    this.valDeserializer = serializationFactory.getDeserializer(valClass);
 	    
 	    this.recordsQueue = new LinkedList<KVRecord<K, V>>();
+	    this.exeQueueFile = job.get("mapred.output.dir") + "/_ExeQueueTemp/" + 
+	    					task.getTaskID().getTaskID().getId() + "-exequeue";
 	}
 	
 	@Override
@@ -75,6 +90,37 @@ public class InputPKVBuffer<K extends Object, V extends WritableComparable> impl
 			this.recordsQueue.add(rec);
 		}
 	}
+	
+	//load execution queue, for load balancing and fault tolerance
+	public synchronized int loadExeQueue() throws IOException{
+		FSDataInputStream istream = hdfs.open(new Path(exeQueueFile));
+		BufferedReader reader = new BufferedReader(new InputStreamReader(istream));
+		
+		int count = 0;
+		while(reader.ready()){
+			String line = reader.readLine();
+			String[] field = line.split("\t", 4);
+			
+			IntWritable key = new IntWritable(Integer.parseInt(field[0]));
+			if(valClass == IntWritable.class){
+				IntWritable val = new IntWritable(Integer.parseInt(field[1]));
+				this.recordsQueue.add(new KVRecord(key, val));
+			}else if(valClass == DoubleWritable.class){
+				DoubleWritable val = new DoubleWritable(Double.parseDouble((field[1])));
+				this.recordsQueue.add(new KVRecord(key, val));
+			}else if(valClass == FloatWritable.class){
+				FloatWritable val = new FloatWritable(Float.parseFloat((field[1])));
+				this.recordsQueue.add(new KVRecord(key, val));
+			}else{
+				throw new IOException(valClass + " not type matched");
+			}
+			count++;
+		}
+		
+		reader.close();		
+		return count;
+	}
+	
 	/*
 	@SuppressWarnings("unchecked")
 	private void squeezeBuffer(){		
@@ -183,6 +229,7 @@ public class InputPKVBuffer<K extends Object, V extends WritableComparable> impl
 			}
 		}
 	}
+	
 	
 	public K getTopKey() {
 		return this.savedKey;

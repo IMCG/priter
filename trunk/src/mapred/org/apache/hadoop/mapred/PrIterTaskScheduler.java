@@ -8,11 +8,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 
 public class PrIterTaskScheduler extends TaskScheduler {
 
 	  private static final int MIN_CLUSTER_SIZE_FOR_PADDING = 3;
+	  public static final Log LOG = LogFactory.getLog(PrIterTaskScheduler.class);
 	  
 	  protected JobQueueJobInProgressListener jobQueueJobInProgressListener;
 	  private EagerTaskInitializationListener eagerTaskInitializationListener;
@@ -20,6 +23,7 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	  
 	  public Map<JobID, Map<String, ArrayList<Integer>>> taskTrackerMap = new HashMap<JobID, Map<String, ArrayList<Integer>>>();
 	  public Map<JobID, Map<Integer, Boolean>> reduceTakenMap = new HashMap<JobID, Map<Integer, Boolean>>();
+	  public Map<JobID, Map<Integer, String>> taskidTTMap = new HashMap<JobID, Map<Integer, String>>();
 	  
 	  public PrIterTaskScheduler() {
 	    this.jobQueueJobInProgressListener = new JobQueueJobInProgressListener();
@@ -84,15 +88,22 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	    synchronized (jobQueue) {
 	      for (JobInProgress job : jobQueue) {
 	        if (job.getStatus().getRunState() == JobStatus.RUNNING) {
-	          if(!taskTrackerMap.containsKey(job.getJobID())){
-	        	  Map<String, ArrayList<Integer>> taskmap = new HashMap<String, ArrayList<Integer>>();
-	        	  taskTrackerMap.put(job.getJobID(), taskmap);
-	          }
-	          
-	          if(!reduceTakenMap.containsKey(job.getJobID())){
-	        	  Map<Integer, Boolean> reduceTaken = new HashMap<Integer, Boolean>();
-	        	  reduceTakenMap.put(job.getJobID(), reduceTaken);
-	          }
+	        	if(job.getJobConf().getBoolean("mapred.job.iterative", false)){
+	  	          if(!taskTrackerMap.containsKey(job.getJobID())){
+		        	  Map<String, ArrayList<Integer>> taskmap = new HashMap<String, ArrayList<Integer>>();
+		        	  taskTrackerMap.put(job.getJobID(), taskmap);
+		          }
+		          
+		          if(!reduceTakenMap.containsKey(job.getJobID())){
+		        	  Map<Integer, Boolean> reduceTaken = new HashMap<Integer, Boolean>();
+		        	  reduceTakenMap.put(job.getJobID(), reduceTaken);
+		          }
+		          
+		          if(!taskidTTMap.containsKey(job.getJobID())){
+		        	  Map<Integer, String> tidTTMap = new HashMap<Integer, String>();
+		        	  taskidTTMap.put(job.getJobID(), tidTTMap);
+		          }
+	        	}
 	          
 	          int totalMapTasks = job.desiredMaps();
 	          int totalReduceTasks = job.desiredReduces();
@@ -145,18 +156,21 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	          Task t = job.obtainNewMapTask(taskTracker, numTaskTrackers,
 	              taskTrackerManager.getNumberOfUniqueHosts());
 	          if (t != null) {
-	        	  ArrayList<Integer> maps = null;
-	        	  if(!taskTrackerMap.get(job.getJobID()).containsKey((taskTracker.trackerName))){		  
-	        		  maps = new ArrayList<Integer>();
-	        		  taskTrackerMap.get(job.getJobID()).put(taskTracker.trackerName, maps);
-	        	  }else{
-	        		  maps = taskTrackerMap.get(job.getJobID()).get(taskTracker.trackerName);
+	        	  if(job.getJobConf().getBoolean("mapred.job.iterative", false)){
+		        	  ArrayList<Integer> maps = null;
+		        	  if(!taskTrackerMap.get(job.getJobID()).containsKey((taskTracker.trackerName))){		  
+		        		  maps = new ArrayList<Integer>();
+		        		  taskTrackerMap.get(job.getJobID()).put(taskTracker.trackerName, maps);
+		        	  }else{
+		        		  maps = taskTrackerMap.get(job.getJobID()).get(taskTracker.trackerName);
+		        	  }
+		        	  
+		        	  int mapid = t.getTaskID().getTaskID().getId();
+		        	  maps.add(mapid);
+		        	  reduceTakenMap.get(job.getJobID()).put(mapid, true);
+		        	  taskidTTMap.get(job.getJobID()).put(mapid, taskTracker.trackerName);
 	        	  }
-	        	  
-	        	  int mapid = t.getTaskID().getTaskID().getId();
-	        	  maps.add(mapid);
-	        	  reduceTakenMap.get(job.getJobID()).put(mapid, true);
-	        	  
+        	  
 	            return Collections.singletonList(t);
 	          }
 
@@ -191,26 +205,37 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	            continue;
 	          }
 
-	          int reducetasknum = -1;
-	          for(int participate : taskTrackerMap.get(job.getJobID()).get(taskTracker.trackerName)){
-	        	  if(reduceTakenMap.get(job.getJobID()).get(participate)){
-	        		  reducetasknum = participate;
-	        		  reduceTakenMap.get(job.getJobID()).put(participate, false);
-	        	  }
-	          }
-	          if(reducetasknum == -1){
-	        	  try {
-					throw new Exception("reduce didn't match to map");
-				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-	          }
-	          
-	          Task t = job.obtainNewReduceTask(taskTracker, numTaskTrackers, 
-	              taskTrackerManager.getNumberOfUniqueHosts(), reducetasknum);
-	          if (t != null) {
-	            return Collections.singletonList(t);
+	          if(job.getJobConf().getBoolean("mapred.job.iterative", false)){
+		          int reducetasknum = -1;
+		          for(int participate : taskTrackerMap.get(job.getJobID()).get(taskTracker.trackerName)){
+		        	  if(reduceTakenMap.get(job.getJobID()).get(participate)){
+		        		  reducetasknum = participate;
+		        		  reduceTakenMap.get(job.getJobID()).put(participate, false);
+		        		  break;
+		        	  }
+		          }
+		          if(reducetasknum == -1){
+		        	  try {
+						throw new Exception("reduce didn't match to map");
+					} catch (Exception e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+		          }
+		          
+		          Task t = job.obtainNewReduceTask(taskTracker, numTaskTrackers, 
+			              taskTrackerManager.getNumberOfUniqueHosts(), reducetasknum);
+		          
+		          if (t != null) {
+			            return Collections.singletonList(t);
+			          }
+	          }else{
+		          Task t = job.obtainNewReduceTask(taskTracker, numTaskTrackers, 
+			              taskTrackerManager.getNumberOfUniqueHosts());
+		          
+		          if (t != null) {
+			            return Collections.singletonList(t);
+		          }
 	          }
 
 	          //
