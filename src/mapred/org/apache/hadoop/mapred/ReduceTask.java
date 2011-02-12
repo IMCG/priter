@@ -204,12 +204,7 @@ public class ReduceTask extends Task {
 						//snapshot generation
 						pkvBuffer.snapshot(index);
 						
-						//termination check
-						pkvBuffer.performTerminationCheck();
-						boolean bStop = iterReducer.stopCheck(pkvBuffer);
-						LOG.info("stop? " + bStop);
-						
-						SnapshotCompletionEvent event = new SnapshotCompletionEvent(index, id, getJobID(), bStop);
+						SnapshotCompletionEvent event = new SnapshotCompletionEvent(index, id, getJobID());
 						try {
 							this.trackerUmbilical.snapshotCommit(event);
 						} catch (Exception e) {
@@ -265,6 +260,7 @@ public class ReduceTask extends Task {
 	
 	private MapOutputFetcher fetcher = null;
 	private Thread termCheckThread = null;
+	private int iterindex = 0;
 	
 	private long lasttime;
 	
@@ -424,10 +420,10 @@ public class ReduceTask extends Task {
 			iteration(job, inputCollector, sink, umbilical, bufferUmbilical);
 		}
 		else if (stream) {
-			stream(job, inputCollector, sink, reporter, bufferUmbilical);
+			stream(job, inputCollector, sink, reporter, umbilical, bufferUmbilical);
 		}
 		else {
-			copy(job, inputCollector, sink, reporter, bufferUmbilical);
+			copy(job, inputCollector, sink, reporter, umbilical, bufferUmbilical);
 		}
 		this.fetcher.interrupt();
 		this.fetcher = null;
@@ -445,7 +441,7 @@ public class ReduceTask extends Task {
 		long begin = System.currentTimeMillis();
 		try {
 			setPhase(TaskStatus.Phase.REDUCE); 
-			reduce(job, reporter, inputCollector, bufferUmbilical, sink.getProgress(), reducePhase);
+			reduce(job, reporter, inputCollector, umbilical, bufferUmbilical, sink.getProgress(), reducePhase);
 		} finally {
 			reducePhase.complete();
 			setProgressFlag();
@@ -465,7 +461,7 @@ public class ReduceTask extends Task {
 		if (this.pkvBuffer == null) {
 			Progress progress = sink.getProgress(); 				
 			this.pkvBuffer = new OutputPKVBuffer(umbilical, this, job, reporter, progress, 
-										priorityClass, outputKeyClass, outputValClass, 
+										priorityClass, outputValClass, 
 										this.iterReducer);
 		}
 		
@@ -485,7 +481,7 @@ public class ReduceTask extends Task {
 				LOG.info("ReduceTask: " + getTaskID() + " perform reduce. window = " + 
 						 (System.currentTimeMillis() - windowTimeStamp) + "ms.");
 				windowTimeStamp = System.currentTimeMillis();
-				reduce(job, reporter, inputCollector, umbilical, sink.getProgress(), null);
+				reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
 				inputCollector.free(); // Free current data
 				
 
@@ -502,7 +498,7 @@ public class ReduceTask extends Task {
 	}
 	
 	protected void stream(JobConf job, InputCollector inputCollector,
-			BufferExchangeSink sink, Reporter reporter, BufferUmbilicalProtocol umbilical) throws IOException {
+			BufferExchangeSink sink, Reporter reporter, TaskUmbilicalProtocol taskUmbilical, BufferUmbilicalProtocol umbilical) throws IOException {
 		int window = job.getInt("mapred.reduce.window", 1000);
 		long starttime = System.currentTimeMillis();
 		synchronized (this) {
@@ -516,7 +512,7 @@ public class ReduceTask extends Task {
 					LOG.info("ReduceTask: " + getTaskID() + " perform stream window snapshot. window = " + 
 							 (System.currentTimeMillis() - windowTimeStamp) + "ms.");
 					windowTimeStamp = System.currentTimeMillis();
-					reduce(job, reporter, inputCollector, umbilical, sink.getProgress(), null);
+					reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
 					inputCollector.free(); // Free current data
 				}
 				
@@ -532,7 +528,7 @@ public class ReduceTask extends Task {
 	}
 	
 	protected void copy(JobConf job, InputCollector inputCollector, 
-			BufferExchangeSink sink, Reporter reporter, 
+			BufferExchangeSink sink, Reporter reporter, TaskUmbilicalProtocol taskUmbilical, 
 			BufferUmbilicalProtocol bufferUmbilical) 
 	throws IOException {
 		float maxSnapshotProgress = job.getFloat("mapred.snapshot.max.progress", 0.9f);
@@ -552,7 +548,7 @@ public class ReduceTask extends Task {
 						 sink.getProgress().get() < maxSnapshotProgress) {
 						snapshotThreshold += snapshotFreq;
 						LOG.info("ReduceTask: " + getTaskID() + " perform snapshot. progress " + (snapshotThreshold - snapshotFreq));
-						reduce(job, reporter, inputCollector, bufferUmbilical, sink.getProgress(), null);
+						reduce(job, reporter, inputCollector, taskUmbilical, bufferUmbilical, sink.getProgress(), null);
 						LOG.info("ReduceTask: " + getTaskID() + " done with snapshot. progress " + (snapshotThreshold - snapshotFreq));
 				}
 				try { this.wait();
@@ -566,30 +562,44 @@ public class ReduceTask extends Task {
 		}
 	}
 	
-	private int reduce(JobConf job, InputCollector input, OutputCollector output, Reporter reporter, Progress progress) throws IOException {
-		
+	private int reduce(JobConf job, InputCollector input, OutputCollector output, Reporter reporter, Progress progress) throws IOException {		
 		// apply reduce function
 		int count = 0;
 		try {
-			ValuesIterator values = input.valuesIterator();
-			while (values.more()) {	
-				count++;
-				if(iterative){
-					iterReducer.reduce(values.getKey(), values, ((OutputPKVBuffer)output), reporter);
-					reporter.incrCounter(Counter.REDUCE_OUTPUT_RECORDS, 1);
-				}else{
-					reducer.reduce(values.getKey(), values, output, reporter);
+			if(iterative){
+				synchronized(((OutputPKVBuffer)output).stateTable){
+					ValuesIterator values = input.valuesIterator();
+					while (values.more()) {	
+						count++;
+						iterReducer.updateState(values.getKey(), values, (OutputPKVBuffer)output, reporter);
+
+						values.nextKey();
+						
+				        if (progress != null) {
+				        	progress.set(values.getProgress().get());
+				        }
+				        if (reporter != null) reporter.progress();
+				        setProgressFlag();
+					}
+					values.close();
 				}
-				
-				values.nextKey();
-				
-		        if (progress != null) {
-		        	progress.set(values.getProgress().get());
-		        }
-		        if (reporter != null) reporter.progress();
-		        setProgressFlag();
+			}else{
+				ValuesIterator values = input.valuesIterator();
+				while (values.more()) {	
+					count++;
+					reducer.reduce(values.getKey(), values, output, reporter);
+					
+					values.nextKey();
+					
+			        if (progress != null) {
+			        	progress.set(values.getProgress().get());
+			        }
+			        if (reporter != null) reporter.progress();
+			        setProgressFlag();
+				}
+				values.close();
 			}
-			values.close();
+
 			//LOG.info("Reducer called on " + count + " records.");
 		} catch (Throwable t) {
 			t.printStackTrace();
@@ -606,7 +616,7 @@ public class ReduceTask extends Task {
 	
 	@SuppressWarnings("unchecked")
 	private void reduce(JobConf job, final Reporter reporter, InputCollector inputCollector, 
-			            BufferUmbilicalProtocol umbilical, 
+						TaskUmbilicalProtocol taskUmbilical, BufferUmbilicalProtocol umbilical, 
 			            Progress inputProgress,  Progress reduceProgress) throws IOException {
 		boolean snapshot = snapshotFreq < 1f;
 		
@@ -640,7 +650,20 @@ public class ReduceTask extends Task {
 				this.spillIter = false;
 				long sortend = new Date().getTime();
 				long sorttime = sortend - sortstart;
-				LOG.info("emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
+				
+				if(iterindex > 5){
+					//after the system is stable
+					IterationCompletionEvent event = new IterationCompletionEvent(iterindex, this.getTaskID().getTaskID().getId(), getJobID());
+					try {
+						taskUmbilical.afterIterCommit(event);
+					} catch (Exception e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+				
+				LOG.info("iteration " + iterindex + "emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
+				iterindex++;
 			}
 			
 			LOG.debug("Reduce phase complete.");			

@@ -1418,7 +1418,7 @@ public class TaskTracker
       askForNewTask = enoughFreeSpace(localMinSpaceStart);
       status.getResourceStatus().setAvailableSpace( getFreeSpace() );
       long freeVirtualMem = findFreeVirtualMemory();
-      LOG.debug("Setting amount of free virtual memory for the new task: " +
+      LOG.info("Setting amount of free virtual memory for the new task: " +
                     freeVirtualMem);
       status.getResourceStatus().setFreeVirtualMemory(freeVirtualMem);
       status.getResourceStatus().setTotalMemory(maxVirtualMemoryForTasks);
@@ -3344,5 +3344,11 @@ public class TaskTracker
 	public void snapshotCommit(SnapshotCompletionEvent event) throws IOException {
 		LOG.info("get snapshot event " + event);
 		this.jobClient.reportSnapshotCompletionEvent(event);
+	}
+
+	@Override
+	public void afterIterCommit(IterationCompletionEvent event) throws IOException {
+		LOG.info("get snapshot event " + event);
+		this.jobClient.reportIterationCompletionEvent(event);
 	} 
 }

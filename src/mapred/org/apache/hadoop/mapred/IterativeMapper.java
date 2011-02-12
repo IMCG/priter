@@ -2,6 +2,7 @@ package org.apache.hadoop.mapred;
 
 import java.io.IOException;
 
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
@@ -13,6 +14,6 @@ public interface IterativeMapper<P, K1, V1 extends WritableComparable, K2, V2>
 	 * @param pkvBuffer
 	 * @throws IOException
 	 */
-	void initStarter(InputPKVBuffer<K1, V1> starter) throws IOException;
+	void initStarter(InputPKVBuffer<IntWritable, V1> starter) throws IOException;
 	void iterate();
 }

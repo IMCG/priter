@@ -153,4 +153,5 @@ interface TaskUmbilicalProtocol extends VersionedProtocol {
   TaskID getReduceTaskID();
   
   void snapshotCommit(SnapshotCompletionEvent event) throws IOException;
+  void afterIterCommit(IterationCompletionEvent event) throws IOException;
 }

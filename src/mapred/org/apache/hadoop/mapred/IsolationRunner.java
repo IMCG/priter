@@ -127,6 +127,13 @@ public class IsolationRunner {
 		// TODO Auto-generated method stub
 		
 	}
+
+	@Override
+	public void afterIterCommit(IterationCompletionEvent event)
+			throws IOException {
+		// TODO Auto-generated method stub
+		
+	}
   }
   
   private static ClassLoader makeClassLoader(JobConf conf, 

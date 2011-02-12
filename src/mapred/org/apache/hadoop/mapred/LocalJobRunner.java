@@ -305,6 +305,13 @@ class LocalJobRunner implements JobSubmissionProtocol {
 		// TODO Auto-generated method stub
 		
 	}
+
+	@Override
+	public void afterIterCommit(IterationCompletionEvent event)
+			throws IOException {
+		// TODO Auto-generated method stub
+		
+	}
   }
 
   public LocalJobRunner(JobConf conf) throws IOException {

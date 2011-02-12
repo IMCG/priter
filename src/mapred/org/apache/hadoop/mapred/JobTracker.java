@@ -18,8 +18,10 @@
 package org.apache.hadoop.mapred;
 
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.BindException;
 import java.net.InetSocketAddress;
@@ -121,6 +123,30 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
   private Map<JobID, WritableComparable> lastTotal = new HashMap<JobID, WritableComparable>();
+  
+  //for task migration
+  class TaskMigrate{
+	  int taskid;
+	  String from;
+	  String to;
+	  
+	  public TaskMigrate(int id, String f, String t){
+		  taskid = id;
+		  from = f;
+		  to = t;
+	  }
+  }
+  private List<TaskMigrate> taskMigrateList = new ArrayList<TaskMigrate>();
+  class TimeSeq{
+	  public int taskid;
+	  public long time;
+	  
+	  public TimeSeq(int id, long t){
+		  taskid = id;
+		  time = t;
+	  }
+  }
+  private Map<JobID, Map<Integer, List<TimeSeq>>> recTimeSeq = new HashMap<JobID, Map<Integer, List<TimeSeq>>>();
   
   // system directories are world-wide readable and owner readable
   final static FsPermission SYSTEM_DIR_PERMISSION =
@@ -1995,7 +2021,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
       if (taskTrackerStatus == null) {
         LOG.warn("Unknown task tracker polling; ignoring: " + trackerName);
       } else {
-    	  LOG.info("try to assign task");
+    	  LOG.info("try to assign task for " + trackerName);
         List<Task> tasks = getSetupAndCleanupTasks(taskTrackerStatus);
         if (tasks == null ) {
           tasks = taskScheduler.assignTasks(taskTrackerStatus);
@@ -2014,6 +2040,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
       }
     }
       
+    // Task migration for load balancing
+    if(!this.taskMigrateList.isEmpty()){
+    	TaskMigrate tm = taskMigrateList.get(0);
+    }
+    
     // Check for tasks to be killed
     List<TaskTrackerAction> killTasksList = getTasksToKill(trackerName);
     if (killTasksList != null) {
@@ -2477,6 +2508,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     checkAccess(job, QueueManager.QueueOperation.ADMINISTER_JOBS);
     job.kill();
     
+	this.snapshotCompletionMap.remove(jobid);
+	this.mergerMap.remove(jobid);
+	this.recTimeSeq.remove(jobid);
+	this.taskMigrateList.clear();
+	
     // Inform the listeners if the job is killed
     // Note : 
     //   If the job is killed in the PREP state then the listeners will be 
@@ -3024,7 +3060,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			int iterIndex = event.getIteration();
 			int reduceIndex = event.getTaskIndex();
 			JobID jobid = event.getJobID();
-			boolean bStop = event.getStop();
 			
 			if(this.snapshotCompletionMap.get(jobid) == null){			
 				Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
@@ -3033,11 +3068,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				JobConf job = jobs.get(jobid).getJobConf();
 			    Class keyClass = job.getOutputKeyClass();
 			    Class valClass = job.getOutputValueClass();
-				Merger merger = new Merger(job, keyClass, valClass, iterIndex);
+				Merger merger = new Merger(job, valClass, iterIndex);
 				this.mergerMap.put(jobid, merger);
 				LOG.info("put merger for job " + jobid);
-				
-				Map<Integer, Boolean> stopCheck = new HashMap<Integer, Boolean>();
 				
 				if(valClass == IntWritable.class){
 					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
@@ -3075,8 +3108,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						if(iterIndex > maxiter){
 							LOG.info("OK, max iteration reached, let kill job");
 							killJob(jobid);
-							this.snapshotCompletionMap.remove(jobid);
-							this.mergerMap.remove(jobid);
 						}
 					}else if(maxtime != Long.MAX_VALUE){
 						//2. max time
@@ -3085,8 +3116,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						if(currtime > maxtime){
 							LOG.info("OK, max time reached, let kill job");
 							killJob(jobid);
-							this.snapshotCompletionMap.remove(jobid);
-							this.mergerMap.remove(jobid);
 						}
 					}else{
 						//3. max difference
@@ -3100,8 +3129,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							if(diff <= threshold){
 								LOG.info("OK, let kill job");
 								killJob(jobid);
-								this.snapshotCompletionMap.remove(jobid);
-								this.mergerMap.remove(jobid);
 							}
 							
 							lastTotal.put(jobid, new IntWritable(curr));
@@ -3115,8 +3142,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							if(diff <= threshold){
 								LOG.info("OK, let kill job");
 								killJob(jobid);
-								this.snapshotCompletionMap.remove(jobid);
-								this.mergerMap.remove(jobid);
 							}
 							
 							lastTotal.put(jobid, new DoubleWritable(curr));
@@ -3130,8 +3155,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							if(diff <= threshold){
 								LOG.info("OK, let kill job");
 								killJob(jobid);
-								this.snapshotCompletionMap.remove(jobid);
-								this.mergerMap.remove(jobid);
 							}
 							
 							lastTotal.put(jobid, new FloatWritable(curr));
@@ -3153,11 +3176,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		}
 	} 
 	
-	class Merger<K extends Writable, V extends WritableComparable> {
+	class Merger<V extends WritableComparable> {
 		
 		private JobConf job;
 		private FileSystem hdfs;
-		private Class<K> keyClass;	
 		public Class<V> valClass;
 		private Deserializer keyDeserializer;	
 		private Deserializer valDeserializer;	
@@ -3168,18 +3190,17 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		private String outputDir;
 		private Comparator comparator;
 		private Comparator icomparator;
-		private HashMap<Integer, PriorityQueue<KVRecord<K, V>>> topkQueues;
+		private HashMap<Integer, PriorityQueue<KVRecord<IntWritable, V>>> topkQueues;
 		
-		public Merger(JobConf job, Class<K> keyclass, Class<V> valclass, int snapshotindex) throws IOException{
+		public Merger(JobConf job, Class<V> valclass, int snapshotindex) throws IOException{
 			this.job = job;
 			this.hdfs = FileSystem.get(conf);
-			this.keyClass = keyclass;
 			this.valClass = valclass;
 			SerializationFactory serializationFactory = new SerializationFactory(job);
-		    this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
-		    this.valDeserializer = serializationFactory.getDeserializer(valClass);
-		    this.keyBuffer = new DataInputBuffer();
-		    this.valBuffer = new DataInputBuffer();
+		    //this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
+		    //this.valDeserializer = serializationFactory.getDeserializer(valClass);
+		    //this.keyBuffer = new DataInputBuffer();
+		    //this.valBuffer = new DataInputBuffer();
 		    
 		    descend = job.getBoolean("mapred.iterative.snapshot.descend", true) ? true : false;			
 			topk = job.getInt("mapred.iterative.topk", 1000);
@@ -3187,47 +3208,48 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			if(outputDir == null) throw new IOException("no output dir");
 			
 			if(descend){
-				comparator = new Comparator<KVRecord<K, V>>(){
+				comparator = new Comparator<KVRecord<IntWritable, V>>(){
 					@Override
-					public int compare(KVRecord<K, V> o1,
-							KVRecord<K, V> o2) {
+					public int compare(KVRecord<IntWritable, V> o1,
+							KVRecord<IntWritable, V> o2) {
 						return o1.v.compareTo(o2.v);
 					}
 				};
-				icomparator = new Comparator<KVRecord<K, V>>(){
+				icomparator = new Comparator<KVRecord<IntWritable, V>>(){
 					@Override
-					public int compare(KVRecord<K, V> o1,
-							KVRecord<K, V> o2) {
+					public int compare(KVRecord<IntWritable, V> o1,
+							KVRecord<IntWritable, V> o2) {
 						return -o1.v.compareTo(o2.v);
 					}
 				};
 			}else {
-				comparator = new Comparator<KVRecord<K, V>>(){
+				comparator = new Comparator<KVRecord<IntWritable, V>>(){
 					@Override
-					public int compare(KVRecord<K, V> o1,
-							KVRecord<K, V> o2) {
+					public int compare(KVRecord<IntWritable, V> o1,
+							KVRecord<IntWritable, V> o2) {
 						return -o1.v.compareTo(o2.v);
 					}
 				};
-				icomparator = new Comparator<KVRecord<K, V>>(){
+				icomparator = new Comparator<KVRecord<IntWritable, V>>(){
 					@Override
-					public int compare(KVRecord<K, V> o1,
-							KVRecord<K, V> o2) {
+					public int compare(KVRecord<IntWritable, V> o1,
+							KVRecord<IntWritable, V> o2) {
 						return o1.v.compareTo(o2.v);
 					}
 				};
 			}
 			
-			topkQueues = new HashMap<Integer, PriorityQueue<KVRecord<K, V>>>();
+			topkQueues = new HashMap<Integer, PriorityQueue<KVRecord<IntWritable, V>>>();
 		}
 		
 		public void mergeTopKFile(int snapshotindex, int taskid) throws IOException{
 			if(!topkQueues.containsKey(snapshotindex)){
-				PriorityQueue<KVRecord<K, V>> topkQueue = new PriorityQueue<KVRecord<K, V>>(topk, comparator);
+				PriorityQueue<KVRecord<IntWritable, V>> topkQueue = new PriorityQueue<KVRecord<IntWritable, V>>(topk, comparator);
 				topkQueues.put(snapshotindex, topkQueue);
 			}
 			
-			PriorityQueue<KVRecord<K, V>> topkQueue = topkQueues.get(snapshotindex);
+			PriorityQueue<KVRecord<IntWritable, V>> topkQueue = topkQueues.get(snapshotindex);
+			/*
 			Path topKPath = new Path(outputDir + "/" + taskid + "/topKsnapshot-" + snapshotindex);				
 			IFile.Reader<K, V> reader = new IFile.Reader<K, V>(job, hdfs, topKPath, null, null);
 			while(reader.next(keyBuffer, valBuffer)){
@@ -3247,6 +3269,55 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					}
 				}else{
 					topkQueue.add(kvrecord);
+				}
+			}
+			*/
+			FSDataInputStream istream = hdfs.open(new Path(outputDir + "/" + taskid + "/topKsnapshot-" + snapshotindex));
+			BufferedReader reader = new BufferedReader(new InputStreamReader(istream));		
+			
+			while(reader.ready()){
+				String line = reader.readLine();
+				String[] field = line.split("\t", 2);
+				
+				IntWritable key = new IntWritable(Integer.parseInt(field[0]));
+				if(valClass == IntWritable.class){
+					IntWritable cState = new IntWritable(Integer.parseInt(field[3]));
+					KVRecord<IntWritable, IntWritable> kvrecord = new KVRecord<IntWritable, IntWritable>(key, cState);
+					if(topkQueue.size() >= topk){
+						//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
+						if(comparator.compare(kvrecord, topkQueue.peek()) > 0){						
+							topkQueue.poll();						
+							topkQueue.add((KVRecord<IntWritable, V>)kvrecord);
+						}
+					}else{
+						topkQueue.add((KVRecord<IntWritable, V>)kvrecord);
+					}
+				}else if(valClass == DoubleWritable.class){
+					DoubleWritable cState = new DoubleWritable(Double.parseDouble((field[3])));
+					KVRecord<IntWritable, DoubleWritable> kvrecord = new KVRecord<IntWritable, DoubleWritable>(key, cState);
+					if(topkQueue.size() >= topk){
+						//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
+						if(comparator.compare(kvrecord, topkQueue.peek()) > 0){						
+							topkQueue.poll();						
+							topkQueue.add((KVRecord<IntWritable, V>)kvrecord);
+						}
+					}else{
+						topkQueue.add((KVRecord<IntWritable, V>)kvrecord);
+					}
+				}else if(valClass == FloatWritable.class){
+					FloatWritable cState = new FloatWritable(Float.parseFloat((field[3])));
+					KVRecord<IntWritable, FloatWritable> kvrecord = new KVRecord<IntWritable, FloatWritable>(key, cState);
+					if(topkQueue.size() >= topk){
+						//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
+						if(comparator.compare(kvrecord, topkQueue.peek()) > 0){						
+							topkQueue.poll();						
+							topkQueue.add((KVRecord<IntWritable, V>)kvrecord);
+						}
+					}else{
+						topkQueue.add((KVRecord<IntWritable, V>)kvrecord);
+					}
+				}else{
+					throw new IOException(valClass + " not type matched");
 				}
 			}
 			
@@ -3295,6 +3366,56 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			}else{
 				return new IntWritable(-1);
 			}			
+		}
+	}
+
+	@Override
+	public void reportIterationCompletionEvent(IterationCompletionEvent event)
+			throws IOException {
+		synchronized(taskMigrateList){
+			int iterIndex = event.getIteration();
+			int taskid = event.gettaskID();
+			JobID jobid = event.getJob();
+			
+			if(this.recTimeSeq.get(jobid) == null){			
+				Map<Integer, List<TimeSeq>> jobiterComplete = new HashMap<Integer, List<TimeSeq>>();
+				this.recTimeSeq.put(jobid, jobiterComplete);
+				List<TaskMigrate> tmList = new ArrayList<TaskMigrate>();
+				this.taskMigrateList.clear();
+			}
+			
+			if(this.recTimeSeq.get(jobid).get(iterIndex) == null){
+				List<TimeSeq> taskiterComplete = new ArrayList<TimeSeq>();
+				this.recTimeSeq.get(jobid).put(iterIndex, taskiterComplete);
+			}
+			
+			long currtime = System.currentTimeMillis();
+			recTimeSeq.get(jobid).get(iterIndex).add(new TimeSeq(taskid, currtime));
+			LOG.info("get iteration complete report for " + taskid + " at " + currtime);
+			
+			if(recTimeSeq.get(jobid).get(iterIndex).size() == totalReduces){
+				//perform load measurement
+				//simple version
+				List<TimeSeq> seq = recTimeSeq.get(jobid).get(iterIndex);
+				
+				//if time dif larger than 10 seconds, migrate task
+				TimeSeq com1 = seq.get(seq.size()-1);
+				TimeSeq com2 = seq.get(0);
+				if(com1.time - com2.time > 10000){
+					String fromTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com1.taskid);
+					String toTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com2.taskid);
+					
+					if(fromTT.equals(toTT)){
+						recTimeSeq.get(jobid).remove(iterIndex);
+						return;
+					}
+					
+					this.taskMigrateList.add(new TaskMigrate(com1.taskid, fromTT, toTT));
+					LOG.info("do task migration from " + fromTT + " to " + toTT + " for task " + com1.taskid);
+				}
+								
+				recTimeSeq.get(jobid).remove(iterIndex);
+			}
 		}
 	}
 
