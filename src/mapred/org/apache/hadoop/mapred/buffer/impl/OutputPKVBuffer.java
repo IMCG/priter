@@ -55,6 +55,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 	public String exeQueueFile;
 	public String stateTableFile;
 	private int dumpFrequency;
+	private boolean ftSupport;
 	private String topkDir = null;
 
     private IterativeReducer iterReducer = null;
@@ -107,11 +108,14 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 		this.iterReducer = iterReducer;		
 		this.defaultKey = iterReducer.setDefaultKey();
 		this.defaultiState = (V)iterReducer.setDefaultiState();
+		
+		this.ftSupport = job.getBoolean("mapred.iterative.ftsupport", true);
 		this.exeQueueFile = job.get("mapred.output.dir") + "/_ExeQueueTemp/" + 
 							taskAttemptID.getTaskID().getId() + "-exequeue";
 		this.stateTableFile = job.get("mapred.output.dir") + "/_StateTableTempDir/"
 								+ taskAttemptID.getTaskID().getId() + "-statetable";
 		this.dumpFrequency = job.getInt("mapred.dump.frequency", 20);
+
 		this.topkDir = job.get("mapred.output.dir") + "/" + this.taskAttemptID.getTaskID().getId();
 		this.valClass = valClass;
 
@@ -307,7 +311,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 				
 				this.iteration++;
 				//periodically dump statetable and execution queue
-				if(iteration % dumpFrequency == 0){
+				if(ftSupport && (iteration % dumpFrequency == 0)){
 					dumpExeQueue();
 					dumpStateTable();
 				}
@@ -421,16 +425,16 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 	}
 	
 	public void snapshot(int index) throws IOException {
-		//Path topkFile = new Path(topkDir + "/topKsnapshot-" + index);
-		//IFile.Writer<IntWritable, V> writer = new IFile.Writer<IntWritable, V>(job, hdfs, topkFile, IntWritable.class, valClass, null, null);
-		FSDataOutputStream ostream = hdfs.create(new Path(topkDir + "/topKsnapshot-" + index), true);
-		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
+		Path topkFile = new Path(topkDir + "/topKsnapshot-" + index);
+		IFile.Writer<IntWritable, V> writer = new IFile.Writer<IntWritable, V>(job, hdfs, topkFile, IntWritable.class, valClass, null, null);
+		//FSDataOutputStream ostream = hdfs.create(new Path(topkDir + "/topKsnapshot-" + index), true);
+		//BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 
 		synchronized(this.stateTable){		
 			if(stateTable.size() <= topk){
 				for(IntWritable k : stateTable.keySet()){		
-					//writer.append(k, stateTable.get(k).getcState());	
-					writer.write(k + "\t" + stateTable.get(k).getcState());
+					writer.append(k, stateTable.get(k).getcState());	
+					//writer.write(k + "\t" + stateTable.get(k).getcState());
 				}
 			}else{
 				Random rand = new Random();
@@ -461,8 +465,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 					V v = stateTable.get(k).getcState();
 					P pri = (P) iterReducer.setPriority(k, v);
 					if(pri.compareTo(threshold) > 0){
-						//writer.append(k, stateTable.get(k).getcState());
-						writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");
+						writer.append(k, stateTable.get(k).getcState());
+						//writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");
 					}			
 				}	
 			}

@@ -51,7 +51,10 @@ abstract class TaskTrackerAction implements Writable {
     REINIT_TRACKER,
 
     /** Ask a task to save its output. */
-    COMMIT_TASK
+    COMMIT_TASK,
+    
+    /** Redo a task for ft/lb. */
+    REDO_TASK
   };
   
   /**

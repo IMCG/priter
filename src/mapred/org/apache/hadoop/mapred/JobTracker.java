@@ -124,22 +124,11 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
   private Map<JobID, WritableComparable> lastTotal = new HashMap<JobID, WritableComparable>();
   
-  //for task migration
-  class TaskMigrate{
-	  int taskid;
-	  String from;
-	  String to;
-	  
-	  public TaskMigrate(int id, String f, String t){
-		  taskid = id;
-		  from = f;
-		  to = t;
-	  }
-  }
-  private List<TaskMigrate> taskMigrateList = new ArrayList<TaskMigrate>();
+  private boolean taskReAssign = false;
   
   private JobInProgress currJob;
   private Map<String, List<Integer>> taskReAssignMap = new HashMap<String, List<Integer>>();
+  private long lastIterTime = 0;
   
   class TimeSeq{
 	  public int taskid;
@@ -2020,7 +2009,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     List<TaskTrackerAction> actions = new ArrayList<TaskTrackerAction>();
       
     // Check for new tasks to be executed on the tasktracker
-    if (acceptNewTasks) {
+    if (!taskReAssign && acceptNewTasks) {
       TaskTrackerStatus taskTrackerStatus = getTaskTracker(trackerName);
       if (taskTrackerStatus == null) {
         LOG.warn("Unknown task tracker polling; ignoring: " + trackerName);
@@ -2043,10 +2032,66 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         }
       }
     }
-      
-    // Task migration for load balancing
-    if(!this.taskMigrateList.isEmpty()){
-    	TaskMigrate tm = taskMigrateList.get(0);
+    
+    //task migration
+    if(taskReAssign && acceptNewTasks){
+    	JobInProgress currjob = null;
+    	
+    	//another method
+        for(int taskid : taskReAssignMap.get(trackerName)){
+        	Task task = currjob.obtainNewMapTask(taskTrackerStatus, numTaskTrackers, this.getNumberOfUniqueHosts(), taskid);
+        	newTasksList.add(task);
+        }
+        
+    	//kill old task
+    	List<TaskTrackerAction> killTasksList = new ArrayList<TaskTrackerAction>();
+        for (TaskAttemptID killTaskId : trackerToTaskMap.get(trackerName)) {
+        	if(currjob == null){
+        		currjob = getJob(killTaskId.getJobID());
+        	}
+        	
+          TaskInProgress tip = taskidToTIPMap.get(killTaskId);
+          if (tip == null) {
+            continue;
+          }
+          
+          
+	        if (!tip.getJob().isComplete()) {
+	        	killTasksList.add(new RedoTaskAction(killTaskId));
+	          LOG.info("task reassign: " + trackerName + " -> KillTaskAction: " + killTaskId);
+	        }
+        }
+        trackerToTaskMap.clear();
+        if (killTasksList != null) {
+            actions.addAll(killTasksList);
+        }
+        
+        //create new task
+        List<Task> newTasksList= new ArrayList<Task>();
+    	TaskTrackerStatus taskTrackerStatus = getTaskTracker(trackerName);
+	    ClusterStatus clusterStatus = this.getClusterStatus();
+	    int numTaskTrackers = clusterStatus.getTaskTrackers();
+	    
+        if (taskTrackerStatus == null) {
+          LOG.warn("Unknown task tracker so zyf; ignoring: " + trackerName);
+        }else{
+            for(int taskid : taskReAssignMap.get(trackerName)){
+            	Task task = currjob.obtainNewMapTask(taskTrackerStatus, numTaskTrackers, this.getNumberOfUniqueHosts(), taskid);
+            	newTasksList.add(task);
+            }
+        }
+     
+          if (newTasksList != null) {
+            for (Task task : newTasksList) {
+              expireLaunchingTasks.addNewTask(task.getTaskID());
+              LOG.info("task reassign: " + trackerName + " -> LaunchTask: " + task.getTaskID());
+              actions.add(new LaunchTaskAction(task));
+              if (task.isMapTask() || task.isPipeline()) {
+                  JobInProgress job = getJob(task.getJobID());
+                  job.fastUpdateTaskRunningStatus(task, taskTrackerStatus);
+              }
+            }
+          }
     }
     
     // Check for tasks to be killed
@@ -2515,7 +2560,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	this.snapshotCompletionMap.remove(jobid);
 	this.mergerMap.remove(jobid);
 	this.recTimeSeq.remove(jobid);
-	this.taskMigrateList.clear();
+	this.taskReAssign = false;
+	this.taskReAssignMap.clear();
 	
     // Inform the listeners if the job is killed
     // Note : 
@@ -3057,6 +3103,22 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     return conf.getInt("mapred.jobtracker.maxtasks.per.job", -1);
   }
 
+  private void completeJob(JobID job) throws IOException{
+	  /*
+      synchronized (trackerToJobsToCleanup) {
+    	  for(String trackerName : trackerToTaskMap.keySet()){
+              Set<JobID> jobs = trackerToJobsToCleanup.get(trackerName);
+              if (jobs == null) {
+                jobs = new HashSet<JobID>();
+                trackerToJobsToCleanup.put(trackerName, jobs);
+              }
+              jobs.add(job);
+    	  }
+        }
+        */
+	  killJob(job);
+  }
+  
 	@Override
 	public void reportSnapshotCompletionEvent(SnapshotCompletionEvent event) throws IOException {
 		synchronized(snapshotCompletionMap){
@@ -3111,7 +3173,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						//1. max iteration
 						if(iterIndex > maxiter){
 							LOG.info("OK, max iteration reached, let kill job");
-							killJob(jobid);
+							completeJob(jobid);
 						}
 					}else if(maxtime != Long.MAX_VALUE){
 						//2. max time
@@ -3119,7 +3181,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						
 						if(currtime > maxtime){
 							LOG.info("OK, max time reached, let kill job");
-							killJob(jobid);
+							completeJob(jobid);
 						}
 					}else{
 						//3. max difference
@@ -3132,7 +3194,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							int threshold = jobs.get(jobid).getJobConf().getInt("mapred.iterative.stop.threshold", 0);
 							if(diff <= threshold){
 								LOG.info("OK, let kill job");
-								killJob(jobid);
+								completeJob(jobid);
 							}
 							
 							lastTotal.put(jobid, new IntWritable(curr));
@@ -3145,7 +3207,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							double threshold = jobs.get(jobid).getJobConf().getFloat("mapred.iterative.stop.threshold", 0);
 							if(diff <= threshold){
 								LOG.info("OK, let kill job");
-								killJob(jobid);
+								completeJob(jobid);
 							}
 							
 							lastTotal.put(jobid, new DoubleWritable(curr));
@@ -3158,7 +3220,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							float threshold = jobs.get(jobid).getJobConf().getFloat("mapred.iterative.stop.threshold", 0);
 							if(diff <= threshold){
 								LOG.info("OK, let kill job");
-								killJob(jobid);
+								completeJob(jobid);
 							}
 							
 							lastTotal.put(jobid, new FloatWritable(curr));
@@ -3201,10 +3263,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			this.hdfs = FileSystem.get(conf);
 			this.valClass = valclass;
 			SerializationFactory serializationFactory = new SerializationFactory(job);
-		    //this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
-		    //this.valDeserializer = serializationFactory.getDeserializer(valClass);
-		    //this.keyBuffer = new DataInputBuffer();
-		    //this.valBuffer = new DataInputBuffer();
+		    this.keyDeserializer = serializationFactory.getDeserializer(IntWritable.class);
+		    this.valDeserializer = serializationFactory.getDeserializer(valClass);
+		    this.keyBuffer = new DataInputBuffer();
+		    this.valBuffer = new DataInputBuffer();
 		    
 		    descend = job.getBoolean("mapred.iterative.snapshot.descend", true) ? true : false;			
 			topk = job.getInt("mapred.iterative.topk", 1000);
@@ -3253,9 +3315,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			}
 			
 			PriorityQueue<KVRecord<IntWritable, V>> topkQueue = topkQueues.get(snapshotindex);
-			/*
+			
 			Path topKPath = new Path(outputDir + "/" + taskid + "/topKsnapshot-" + snapshotindex);				
-			IFile.Reader<K, V> reader = new IFile.Reader<K, V>(job, hdfs, topKPath, null, null);
+			IFile.Reader<IntWritable, V> reader = new IFile.Reader<IntWritable, V>(job, hdfs, topKPath, null, null);
 			while(reader.next(keyBuffer, valBuffer)){
 				keyDeserializer.open(keyBuffer);
 				valDeserializer.open(valBuffer);
@@ -3264,7 +3326,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				key = keyDeserializer.deserialize(key);
 				val = valDeserializer.deserialize(val);
 				
-				KVRecord<K, V> kvrecord = new KVRecord<K, V>((K)key, (V)val);
+				KVRecord<IntWritable, V> kvrecord = new KVRecord<IntWritable, V>((IntWritable)key, (V)val);
 				if(topkQueue.size() >= topk){
 					//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
 					if(comparator.compare(kvrecord, topkQueue.peek()) > 0){						
@@ -3275,13 +3337,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					topkQueue.add(kvrecord);
 				}
 			}
-			*/
+			/*
 			FSDataInputStream istream = hdfs.open(new Path(outputDir + "/" + taskid + "/topKsnapshot-" + snapshotindex));
 			BufferedReader reader = new BufferedReader(new InputStreamReader(istream));		
 			
 			while(reader.ready()){
 				String line = reader.readLine();
 				String[] field = line.split("\t", 2);
+				if(field == null) continue;
 				
 				IntWritable key = new IntWritable(Integer.parseInt(field[0]));
 				if(valClass == IntWritable.class){
@@ -3323,7 +3386,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				}else{
 					throw new IOException(valClass + " not type matched");
 				}
+				
 			}
+			*/
 			
 			reader.close();
 		}
@@ -3376,7 +3441,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	@Override
 	public void reportIterationCompletionEvent(IterationCompletionEvent event)
 			throws IOException {
-		synchronized(taskMigrateList){
+		synchronized(taskReAssignMap){
 			int iterIndex = event.getIteration();
 			int taskid = event.gettaskID();
 			JobID jobid = event.getJob();
@@ -3384,8 +3449,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			if(this.recTimeSeq.get(jobid) == null){			
 				Map<Integer, List<TimeSeq>> jobiterComplete = new HashMap<Integer, List<TimeSeq>>();
 				this.recTimeSeq.put(jobid, jobiterComplete);
-				List<TaskMigrate> tmList = new ArrayList<TaskMigrate>();
-				this.taskMigrateList.clear();
+
+				taskReAssignMap.clear();
 			}
 			
 			if(this.recTimeSeq.get(jobid).get(iterIndex) == null){
@@ -3393,9 +3458,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				this.recTimeSeq.get(jobid).put(iterIndex, taskiterComplete);
 			}
 			
-			long currtime = System.currentTimeMillis();
+			long currtime = System.currentTimeMillis() - lastIterTime;
 			recTimeSeq.get(jobid).get(iterIndex).add(new TimeSeq(taskid, currtime));
-			LOG.info("get iteration complete report for " + taskid + " at " + currtime);
+			LOG.info("get iteration complete report for " + taskid + " it takes " + currtime);
 			
 			if(recTimeSeq.get(jobid).get(iterIndex).size() == totalReduces){
 				//perform load measurement
@@ -3405,28 +3470,43 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				//if time dif larger than 10 seconds, migrate task
 				TimeSeq com1 = seq.get(seq.size()-1);
 				TimeSeq com2 = seq.get(0);
-				if(com1.time - com2.time > 10000){
+				
+				//migrate task
+				if(com1.time - com2.time > jobs.get(jobid).getJobConf().getLong("mapred.iterative.lbtimethresh", 10000)){
 					String fromTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com1.taskid);
 					String toTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com2.taskid);
+					int migrateTaskId = com1.taskid;
 					
 					if(fromTT.equals(toTT)){
 						recTimeSeq.get(jobid).remove(iterIndex);
 						return;
 					}
 					
-					this.taskMigrateList.add(new TaskMigrate(com1.taskid, fromTT, toTT));
-					LOG.info("do task migration from " + fromTT + " to " + toTT + " for task " + com1.taskid);
-					
-					for (JobInProgress job : ((PrIterTaskScheduler)taskScheduler).jobQueueJobInProgressListener.getJobQueue()) {
-				        if (job.getStatus().getRunState() == JobStatus.RUNNING) {
-				        	currJob = job;
-				        }
+					synchronized(trackerToTaskMap){
+						for(String trackername : trackerToTaskMap.keySet()){
+							Set<TaskAttemptID> listold = trackerToTaskMap.get(trackername);
+							List<Integer> listnew = new ArrayList<Integer>();
+							
+							for(TaskAttemptID t : listold){
+								listnew.add(t.getTaskID().getId());
+							}
+							
+							if(trackername.equals(fromTT)){
+								listnew.remove(migrateTaskId);
+							}else if(trackername.equals(toTT)){
+								listnew.add(migrateTaskId);
+							}
+							
+							taskReAssignMap.put(trackername, listnew);				
+						}
+						taskReAssign = true;	
 					}
-					
-					for(String tasktrackername : ((PrIterTaskScheduler)taskScheduler)com1.)
+		
+					LOG.info("do task migration from " + fromTT + " to " + toTT + " for task " + com1.taskid);
 				}
 								
 				recTimeSeq.get(jobid).remove(iterIndex);
+				lastIterTime = System.currentTimeMillis();
 			}
 		}
 	}
