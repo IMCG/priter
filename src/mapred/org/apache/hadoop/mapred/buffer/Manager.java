@@ -397,14 +397,14 @@ public class Manager implements BufferUmbilicalProtocol {
 			float src_cnt = srcs.size();
 			for (OutputFile file : outs) {
 				
-				LOG.info("files are: " + file);
+				//LOG.info("files are: " + file);
 				
 				Iterator<BufferExchangeSource> siter = srcs.iterator();
 				while (siter.hasNext()) {			
 					if (!open) return;
 					BufferExchangeSource src = siter.next();
 					
-					LOG.info("sources are: " + src);
+					//LOG.info("sources are: " + src);
 					
 					if (!file.isServiced(src.destination())) {
 						//LOG.info("what is source? " + src);

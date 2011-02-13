@@ -251,7 +251,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 	 * @throws IOException
 	 */
 	public synchronized OutputFile spillTops() throws IOException {
-
+		start = true;
+		
 		Path filename = null;
 		Path indexFilename = null;
 		try{
@@ -461,7 +462,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 					P pri = (P) iterReducer.setPriority(k, v);
 					if(pri.compareTo(threshold) > 0){
 						//writer.append(k, stateTable.get(k).getcState());
-						writer.write(k + "\t" + stateTable.get(k).getcState());
+						writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");
 					}			
 				}	
 			}

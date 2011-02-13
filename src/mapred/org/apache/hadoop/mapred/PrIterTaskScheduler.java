@@ -21,8 +21,13 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	  private EagerTaskInitializationListener eagerTaskInitializationListener;
 	  private float padFraction;
 	  
+	  //tasktracker <-> taskid1, taskid2 map
 	  public Map<JobID, Map<String, ArrayList<Integer>>> taskTrackerMap = new HashMap<JobID, Map<String, ArrayList<Integer>>>();
+	  
+	  //for assign task
 	  public Map<JobID, Map<Integer, Boolean>> reduceTakenMap = new HashMap<JobID, Map<Integer, Boolean>>();
+	  
+	  //taskid <-> tasktracker map
 	  public Map<JobID, Map<Integer, String>> taskidTTMap = new HashMap<JobID, Map<Integer, String>>();
 	  
 	  public PrIterTaskScheduler() {

@@ -8,9 +8,11 @@ import org.apache.hadoop.io.Writable;
 
 public class IterationCompletionEvent implements Writable {
 
-	int iterationNum;
-	int taskid;
-	JobID jobID;
+	int iterationNum = 0;
+	int taskid = 0;
+	JobID jobID = new JobID();;
+	
+	public IterationCompletionEvent() {};
 	
 	public IterationCompletionEvent(int iterNum, int id, JobID job){
 		iterationNum = iterNum;

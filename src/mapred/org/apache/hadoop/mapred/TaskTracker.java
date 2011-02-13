@@ -2886,7 +2886,7 @@ public class TaskTracker
 				  FetchStatus f = rjob.getReduceFetchStatus();
 				  if (f != null) {
 					  reduceEvents = f.getEvents(fromEventId, maxLocs);
-					  LOG.info("reduce events size is: " + reduceEvents.length);
+					  //LOG.info("reduce events size is: " + reduceEvents.length);
 				  }
 			  }
 		  }
