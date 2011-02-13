@@ -653,7 +653,8 @@ public class ReduceTask extends Task {
 				
 				if(iterindex > 5){
 					//after the system is stable
-					IterationCompletionEvent event = new IterationCompletionEvent(iterindex, this.getTaskID().getTaskID().getId(), getJobID());
+					int id = this.getTaskID().getTaskID().getId();
+					IterationCompletionEvent event = new IterationCompletionEvent(iterindex, id, getJobID());
 					try {
 						taskUmbilical.afterIterCommit(event);
 					} catch (Exception e) {

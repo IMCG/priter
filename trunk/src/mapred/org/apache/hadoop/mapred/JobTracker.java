@@ -137,6 +137,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  }
   }
   private List<TaskMigrate> taskMigrateList = new ArrayList<TaskMigrate>();
+  
+  private JobInProgress currJob;
+  private Map<String, List<Integer>> taskReAssignMap = new HashMap<String, List<Integer>>();
+  
   class TimeSeq{
 	  public int taskid;
 	  public long time;
@@ -3281,7 +3285,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				
 				IntWritable key = new IntWritable(Integer.parseInt(field[0]));
 				if(valClass == IntWritable.class){
-					IntWritable cState = new IntWritable(Integer.parseInt(field[3]));
+					IntWritable cState = new IntWritable(Integer.parseInt(field[1]));
 					KVRecord<IntWritable, IntWritable> kvrecord = new KVRecord<IntWritable, IntWritable>(key, cState);
 					if(topkQueue.size() >= topk){
 						//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
@@ -3293,7 +3297,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						topkQueue.add((KVRecord<IntWritable, V>)kvrecord);
 					}
 				}else if(valClass == DoubleWritable.class){
-					DoubleWritable cState = new DoubleWritable(Double.parseDouble((field[3])));
+					DoubleWritable cState = new DoubleWritable(Double.parseDouble((field[1])));
 					KVRecord<IntWritable, DoubleWritable> kvrecord = new KVRecord<IntWritable, DoubleWritable>(key, cState);
 					if(topkQueue.size() >= topk){
 						//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
@@ -3305,7 +3309,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						topkQueue.add((KVRecord<IntWritable, V>)kvrecord);
 					}
 				}else if(valClass == FloatWritable.class){
-					FloatWritable cState = new FloatWritable(Float.parseFloat((field[3])));
+					FloatWritable cState = new FloatWritable(Float.parseFloat((field[1])));
 					KVRecord<IntWritable, FloatWritable> kvrecord = new KVRecord<IntWritable, FloatWritable>(key, cState);
 					if(topkQueue.size() >= topk){
 						//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
@@ -3412,6 +3416,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					
 					this.taskMigrateList.add(new TaskMigrate(com1.taskid, fromTT, toTT));
 					LOG.info("do task migration from " + fromTT + " to " + toTT + " for task " + com1.taskid);
+					
+					for (JobInProgress job : ((PrIterTaskScheduler)taskScheduler).jobQueueJobInProgressListener.getJobQueue()) {
+				        if (job.getStatus().getRunState() == JobStatus.RUNNING) {
+				        	currJob = job;
+				        }
+					}
+					
+					for(String tasktrackername : ((PrIterTaskScheduler)taskScheduler)com1.)
 				}
 								
 				recTimeSeq.get(jobid).remove(iterIndex);

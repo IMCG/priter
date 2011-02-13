@@ -110,7 +110,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 			try {
 				Transfer t = transfer(file);
 				long sendend = System.currentTimeMillis();
-				LOG.info("send file " + file + " use time " + (sendend-sendstart));
+				//LOG.info("send file " + file + " use time " + (sendend-sendstart));
 				
 				return t;
 			} catch (Exception e) {
@@ -394,7 +394,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 				BufferExchange.Connect result = open(BufferType.STREAM);
 				
 				if (result == Connect.OPEN) {
-					LOG.info("Transfer stream file " + file + ". Destination " + destination());
+					//LOG.info("Transfer stream file " + file + ". Destination " + destination());
 					Transfer response = transmit(file);
 					if (response == Transfer.TERMINATE) {
 						return Transfer.TERMINATE;
@@ -495,12 +495,12 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 		protected final Transfer transfer(OutputFile file) {
 			OutputFile.PKVBufferHeader header = (OutputFile.PKVBufferHeader) file.header();
 			TaskID taskid = header.owner().getTaskID();
-			LOG.info("cursor : " + cursor.containsKey(taskid) + "\t" + cursor.get(taskid) + "\t" + header.iteration());
+			//LOG.info("cursor : " + cursor.containsKey(taskid) + "\t" + cursor.get(taskid) + "\t" + header.iteration());
 			
 			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.iteration()) { 
 				BufferExchange.Connect result = open(BufferType.PKVBUF);
 				if (result == Connect.OPEN) {
-					LOG.info("Transfer pkvbuffer file " + file + ". Destination " + destination());
+					//LOG.info("Transfer pkvbuffer file " + file + ". Destination " + destination());
 					Transfer response = transmit2(file);
 					if (response == Transfer.TERMINATE) {
 						return Transfer.TERMINATE;
