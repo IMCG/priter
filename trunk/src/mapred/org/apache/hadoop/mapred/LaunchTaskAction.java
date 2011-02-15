@@ -43,6 +43,7 @@ class LaunchTaskAction extends TaskTrackerAction {
     return task;
   }
   
+  
   public void write(DataOutput out) throws IOException {
     out.writeBoolean(task.isMapTask());
     out.writeBoolean(task.isPipeline());

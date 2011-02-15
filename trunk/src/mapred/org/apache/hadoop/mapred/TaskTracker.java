@@ -157,6 +157,8 @@ public class TaskTracker
   Manager bufferController = null;
     
   Map<TaskAttemptID, TaskInProgress> tasks = new HashMap<TaskAttemptID, TaskInProgress>();
+  
+  List<RedoTaskAction> redoTasksQueue = new ArrayList<RedoTaskAction>();
   /**
    * Map from taskId -> TaskInProgress.
    */
@@ -1261,7 +1263,7 @@ public class TaskTracker
         
         // Send the heartbeat and process the jobtracker's directives
         HeartbeatResponse heartbeatResponse = transmitHeartBeat(now);
-
+        
         // Note the time when the heartbeat returned, use this to decide when to send the
         // next heartbeat   
         lastHeartbeat = System.currentTimeMillis();
@@ -1309,6 +1311,11 @@ public class TaskTracker
           return State.STALE;
         }
             
+        //for debug
+        LOG.info("Got heartbeatResponse from JobTracker with responseId: " + 
+                heartbeatResponse.getResponseId() + " and " + 
+                ((actions != null) ? actions.length : 0) + " actions");
+        
         // resetting heartbeat interval from the response.
         heartbeatInterval = heartbeatResponse.getHeartbeatInterval();
         justStarted = false;
@@ -1323,7 +1330,11 @@ public class TaskTracker
                           commitAction.getTaskID());
                 commitResponses.add(commitAction.getTaskID());
               }
-            } else {
+            } else if (action instanceof RedoTaskAction){
+            	LOG.info("RedoTaskAction received");
+            	rollbackTask((RedoTaskAction)action);
+            }else {
+            	LOG.info("KillTaskAction received");
               tasksToCleanup.put(action);
             }
           }
@@ -1430,7 +1441,8 @@ public class TaskTracker
     HeartbeatResponse heartbeatResponse = jobClient.heartbeat(status, 
                                                               justStarted, askForNewTask, 
                                                               heartbeatResponseId);
-      
+ 
+    
     //
     // The heartbeat got through successfully!
     //
@@ -1805,6 +1817,16 @@ public class TaskTracker
     } else {
       reduceLauncher.addToTaskQueue(action);
     }
+  }
+  
+  private void rollbackTask(RedoTaskAction action) throws Exception{	
+	  TaskAttemptID taskid = action.getTaskID();
+	  if(tasks.containsKey(taskid)){
+		  //roll back task
+		  tasks.get(taskid).getTask().Rollback();
+	  }else{
+		  throw new Exception("no task " + action.getTaskID() + " existed!");
+	  }
   }
   
   private class TaskLauncher extends Thread {

@@ -52,10 +52,13 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 	private final FileSystem localFs;
 	private FileSystem hdfs;
 	private FileHandle outputHandle = null;
+	
 	public String exeQueueFile;
 	public String stateTableFile;
 	private int dumpFrequency;
 	private boolean ftSupport;
+	public int checkpointIter;
+	
 	private String topkDir = null;
 
     private IterativeReducer iterReducer = null;
@@ -314,6 +317,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 				if(ftSupport && (iteration % dumpFrequency == 0)){
 					dumpExeQueue();
 					dumpStateTable();
+					checkpointIter = iteration - 1;
 				}
 				priorityQueue.clear();
 			}

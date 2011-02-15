@@ -520,6 +520,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 
 			synchronized (task) {			
 				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
+				LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
 				if (pos <= header.sequence()) {
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
 					ostream.flush();

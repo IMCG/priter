@@ -124,11 +124,36 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
   private Map<JobID, WritableComparable> lastTotal = new HashMap<JobID, WritableComparable>();
   
-  private boolean taskReAssign = false;
+  public boolean taskReAssign = false;
+  public int checkpoint;
+  private Set<String> assignedTrackers = new HashSet<String>();
   
-  private JobInProgress currJob;
+  
+  class TaskMigrate{
+	  public String fromTT;
+	  public String toTT;
+	  public int taskid;
+	  public TaskAttemptID mapAttemptid;
+	  public TaskAttemptID reduceAttemptid;
+	  public boolean mapAssigned;
+	  public boolean redAssigned;
+	  
+	  public TaskMigrate(String fromTT, String toTT, int taskid, int recFromIter, TaskAttemptID attemptid1, TaskAttemptID attemptid2){
+		  this.fromTT = fromTT;
+		  this.toTT = toTT;
+		  this.taskid = taskid;
+		  this.mapAttemptid = attemptid1;
+		  this.reduceAttemptid = attemptid2;
+		  this.mapAssigned = false;
+		  this.redAssigned = false;
+	  }
+  }
+  
+  private Map<TaskMigrate, Integer> migrateTasks = new HashMap<TaskMigrate, Integer>();
   private Map<String, List<Integer>> taskReAssignMap = new HashMap<String, List<Integer>>();
   private long lastIterTime = 0;
+  private int recoverIterations = 3;
+
   
   class TimeSeq{
 	  public int taskid;
@@ -1931,6 +1956,136 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     return VersionInfo.getBuildVersion();
   }
 
+  private synchronized void taskMigration(String trackerName, List<TaskTrackerAction> actions) throws IOException {
+	   	JobInProgress currjob = null;
+    	int partitions = 0;
+        
+		//only one migration could happen in each tracker, kill or add new
+		TaskAttemptID newMapTask = null;
+		TaskAttemptID newRedTask = null;
+		TaskAttemptID remMapTask = null;
+		TaskAttemptID remRedTask = null;
+		TaskMigrate foundMigrate = null;
+		int operations = 0;
+	
+		//another method
+		for (TaskAttemptID taskid : trackerToTaskMap.get(trackerName)) {
+        	if(currjob == null){
+        		currjob = getJob(taskid.getJobID());
+        		partitions = currjob.getJobConf().getInt("mapred.iterative.partitions", 0);
+        	}
+        	
+    		if(taskid.getTaskID().getId() >= partitions) continue;
+    		
+    		boolean kill = false;
+    		TaskMigrate temp = null;
+
+    		int id = taskid.getTaskID().getId();
+    		
+        	for(TaskMigrate migrate : migrateTasks.keySet()){	
+        		if(migrate.toTT.equals(trackerName)){
+    				TaskTrackerStatus taskTrackerStatus = getTaskTracker(trackerName);
+    			    ClusterStatus clusterStatus = getClusterStatus();
+    			    int numTaskTrackers = clusterStatus.getTaskTrackers();
+    			    
+    			    Task t = null;
+    			    if(taskid.isMap()){
+    			    	if(!migrate.mapAssigned){
+    			    		//first kill that task
+    			    		//killTask(migrate.mapAttemptid, false);
+    			    		t = currjob.obtainNewMapTask(taskTrackerStatus, numTaskTrackers,
+    	      			              getNumberOfUniqueHosts(), migrate.taskid);
+    			    		migrate.mapAssigned = true;
+    			    		newMapTask = t.getTaskID();
+    			    	}
+    			    	
+    			    }else{
+    			    	if(!migrate.redAssigned){
+    			    		//first kill that task
+    			    		//killTask(migrate.reduceAttemptid, false);
+    			    		t = currjob.obtainNewReduceTask(taskTrackerStatus, numTaskTrackers,
+    	      			              getNumberOfUniqueHosts(), migrate.taskid);
+    			    		migrate.redAssigned = true;
+    			    		newRedTask = t.getTaskID();
+    			    	}
+    			    }
+
+    			    if(t != null){
+        		        t.setCheckPoint(checkpoint);  
+        	            expireLaunchingTasks.addNewTask(t.getTaskID());
+        	            actions.add(new LaunchTaskAction(t));
+        	            if (t.isMapTask()) {
+        	                JobInProgress job = getJob(t.getJobID());
+        	                job.fastUpdateTaskRunningStatus(t, taskTrackerStatus);
+        	            }
+        	            
+        				//actions.add(new RedoTaskAction(t.getTaskID(), migrate.checkpoint));
+        				//migrate.mapAssigned = true;
+        				operations++;
+        				foundMigrate = migrate;
+        				LOG.info("add new action for tracker " + trackerName + " on task " + t.getTaskID());
+    			    }
+    			}else if((id == migrate.taskid) && (migrate.fromTT.equals(trackerName))){
+    				killTask(taskid, false);
+    				//do not need to add this action, since in the following, getkilltasks method will kill it
+					actions.add(new KillTaskAction(taskid));
+    				
+    				operations++;
+    				kill = true;
+    				
+    				if(taskid.isMap()){
+    					remMapTask = taskid;
+    				}else{
+    					remRedTask = taskid;
+    				}
+    				
+    				LOG.info("add kill action for tracker " + trackerName + " on task " + taskid);
+    				foundMigrate = migrate;
+    			}
+        	}		
+    		
+    		if(!kill){   		
+    			actions.add(new RedoTaskAction(taskid, checkpoint));
+    			LOG.info("add redo action for tracker " + trackerName + " on task " + taskid);
+    		}  
+    	}
+
+		if(foundMigrate != null){
+			//did migration for this taskid
+			operations = migrateTasks.get(foundMigrate) + operations;
+			
+			//old map + old reduce + new map + new reduce = 4
+			if(operations >= 4){
+				//migrate action completed, kill + reassign
+				migrateTasks.remove(foundMigrate);
+			}else{
+				//only complete one action
+				migrateTasks.put(foundMigrate, operations);
+			}		
+		}   
+		
+		assignedTrackers.add(trackerName);
+		//task migration has done
+		if(migrateTasks.isEmpty() && assignedTrackers.size() == trackerToTaskMap.size()){
+			taskReAssign = false;
+			assignedTrackers.clear();
+		}
+		
+		//update some related maps after task reassign
+		if(newMapTask != null){
+			createTaskEntry(newMapTask, trackerName, currjob.getTaskInProgress(newMapTask.getTaskID()));
+		}
+		if(newRedTask != null){
+			createTaskEntry(newRedTask, trackerName, currjob.getTaskInProgress(newRedTask.getTaskID()));
+		}
+		if(remMapTask != null){
+			removeTaskEntry(remMapTask);
+		}
+		if(remRedTask != null){
+			removeTaskEntry(remRedTask);
+		}
+  }
+  
   /**
    * The periodic heartbeat mechanism between the {@link TaskTracker} and
    * the {@link JobTracker}.
@@ -2023,6 +2178,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
           for (Task task : tasks) {
             expireLaunchingTasks.addNewTask(task.getTaskID());
             LOG.info(trackerName + " -> LaunchTask: " + task.getTaskID());
+            task.setCheckPoint(-1);
             actions.add(new LaunchTaskAction(task));
             if (task.isMapTask() || task.isPipeline()) {
                 JobInProgress job = getJob(task.getJobID());
@@ -2035,63 +2191,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     
     //task migration
     if(taskReAssign && acceptNewTasks){
-    	JobInProgress currjob = null;
-    	
-    	//another method
-        for(int taskid : taskReAssignMap.get(trackerName)){
-        	Task task = currjob.obtainNewMapTask(taskTrackerStatus, numTaskTrackers, this.getNumberOfUniqueHosts(), taskid);
-        	newTasksList.add(task);
-        }
-        
-    	//kill old task
-    	List<TaskTrackerAction> killTasksList = new ArrayList<TaskTrackerAction>();
-        for (TaskAttemptID killTaskId : trackerToTaskMap.get(trackerName)) {
-        	if(currjob == null){
-        		currjob = getJob(killTaskId.getJobID());
-        	}
-        	
-          TaskInProgress tip = taskidToTIPMap.get(killTaskId);
-          if (tip == null) {
-            continue;
-          }
-          
-          
-	        if (!tip.getJob().isComplete()) {
-	        	killTasksList.add(new RedoTaskAction(killTaskId));
-	          LOG.info("task reassign: " + trackerName + " -> KillTaskAction: " + killTaskId);
-	        }
-        }
-        trackerToTaskMap.clear();
-        if (killTasksList != null) {
-            actions.addAll(killTasksList);
-        }
-        
-        //create new task
-        List<Task> newTasksList= new ArrayList<Task>();
-    	TaskTrackerStatus taskTrackerStatus = getTaskTracker(trackerName);
-	    ClusterStatus clusterStatus = this.getClusterStatus();
-	    int numTaskTrackers = clusterStatus.getTaskTrackers();
-	    
-        if (taskTrackerStatus == null) {
-          LOG.warn("Unknown task tracker so zyf; ignoring: " + trackerName);
-        }else{
-            for(int taskid : taskReAssignMap.get(trackerName)){
-            	Task task = currjob.obtainNewMapTask(taskTrackerStatus, numTaskTrackers, this.getNumberOfUniqueHosts(), taskid);
-            	newTasksList.add(task);
-            }
-        }
-     
-          if (newTasksList != null) {
-            for (Task task : newTasksList) {
-              expireLaunchingTasks.addNewTask(task.getTaskID());
-              LOG.info("task reassign: " + trackerName + " -> LaunchTask: " + task.getTaskID());
-              actions.add(new LaunchTaskAction(task));
-              if (task.isMapTask() || task.isPipeline()) {
-                  JobInProgress job = getJob(task.getJobID());
-                  job.fastUpdateTaskRunningStatus(task, taskTrackerStatus);
-              }
-            }
-          }
+    	taskMigration(trackerName, actions);
     }
     
     // Check for tasks to be killed
@@ -2129,6 +2229,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     // Done processing the hearbeat, now remove 'marked' tasks
     removeMarkedTasks(trackerName);
         
+    LOG.info("send response with response id " + response.getResponseId() + " and " + response.getActions().length + " actions");
     return response;
   }
   
@@ -3444,18 +3545,23 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		synchronized(taskReAssignMap){
 			int iterIndex = event.getIteration();
 			int taskid = event.gettaskID();
+			int checkpoint = event.getCheckPoint();
 			JobID jobid = event.getJob();
-			
+	
 			if(this.recTimeSeq.get(jobid) == null){			
 				Map<Integer, List<TimeSeq>> jobiterComplete = new HashMap<Integer, List<TimeSeq>>();
 				this.recTimeSeq.put(jobid, jobiterComplete);
 
 				taskReAssignMap.clear();
 			}
-			
+
 			if(this.recTimeSeq.get(jobid).get(iterIndex) == null){
 				List<TimeSeq> taskiterComplete = new ArrayList<TimeSeq>();
 				this.recTimeSeq.get(jobid).put(iterIndex, taskiterComplete);
+			}
+			
+			if(this.recTimeSeq.get(jobid).get(iterIndex).contains(taskid)){
+				throw new IOException("duplicated reduce task index " + taskid);
 			}
 			
 			long currtime = System.currentTimeMillis() - lastIterTime;
@@ -3466,13 +3572,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				//perform load measurement
 				//simple version
 				List<TimeSeq> seq = recTimeSeq.get(jobid).get(iterIndex);
-				
+
 				//if time dif larger than 10 seconds, migrate task
 				TimeSeq com1 = seq.get(seq.size()-1);
 				TimeSeq com2 = seq.get(0);
 				
 				//migrate task
-				if(com1.time - com2.time > jobs.get(jobid).getJobConf().getLong("mapred.iterative.lbtimethresh", 10000)){
+				if((iterIndex > recoverIterations) && (com1.time - com2.time > jobs.get(jobid).getJobConf().getLong("mapred.iterative.lbtimethresh", 10000))){
 					String fromTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com1.taskid);
 					String toTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com2.taskid);
 					int migrateTaskId = com1.taskid;
@@ -3482,6 +3588,29 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						return;
 					}
 					
+        			//find the task attempid basded on task id
+        			TaskAttemptID migratemAttemptid = null;
+        			TaskAttemptID migraterAttemptid = null;
+        			for(TaskAttemptID attemptid : taskidToTrackerMap.keySet()){
+        				if(attemptid.getTaskID().getId() == migrateTaskId){
+        					if(attemptid.isMap()){
+        						migratemAttemptid = attemptid;
+        					}else{
+        						migraterAttemptid = attemptid;
+        					}       					
+        				}
+        			}
+        			
+					migrateTasks.clear();
+					
+        			if((migratemAttemptid != null) && (migraterAttemptid != null)){
+        				migrateTasks.put(new TaskMigrate(fromTT, toTT, migrateTaskId, checkpoint, migratemAttemptid, migraterAttemptid), 0);
+        			}else{
+        				throw new IOException("no matched attemptid");
+        			}
+					
+					
+					/*
 					synchronized(trackerToTaskMap){
 						for(String trackername : trackerToTaskMap.keySet()){
 							Set<TaskAttemptID> listold = trackerToTaskMap.get(trackername);
@@ -3499,9 +3628,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							
 							taskReAssignMap.put(trackername, listnew);				
 						}
-						taskReAssign = true;	
 					}
-		
+					*/
+					
+					this.recoverIterations = iterIndex + 3;
+					taskReAssign = true;
+					this.checkpoint = checkpoint;
 					LOG.info("do task migration from " + fromTT + " to " + toTT + " for task " + com1.taskid);
 				}
 								
