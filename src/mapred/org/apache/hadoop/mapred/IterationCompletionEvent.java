@@ -10,13 +10,15 @@ public class IterationCompletionEvent implements Writable {
 
 	int iterationNum = 0;
 	int taskid = 0;
-	JobID jobID = new JobID();;
+	int checkpoint = 0;
+	JobID jobID = new JobID();
 	
 	public IterationCompletionEvent() {};
 	
-	public IterationCompletionEvent(int iterNum, int id, JobID job){
+	public IterationCompletionEvent(int iterNum, int id, int inIter, JobID job){
 		iterationNum = iterNum;
 		taskid = id;
+		checkpoint = inIter;
 		jobID = job;
 	}
 	
@@ -28,6 +30,10 @@ public class IterationCompletionEvent implements Writable {
 		return taskid;
 	}
 	
+	public int getCheckPoint(){
+		return checkpoint;
+	}
+	
 	public JobID getJob(){
 		return jobID;
 	}
@@ -36,6 +42,7 @@ public class IterationCompletionEvent implements Writable {
 	public void readFields(DataInput in) throws IOException {
 		this.iterationNum = in.readInt();
 		this.taskid = in.readInt();
+		this.checkpoint = in.readInt();
 		this.jobID.readFields(in);
 	}
 
@@ -43,6 +50,7 @@ public class IterationCompletionEvent implements Writable {
 	public void write(DataOutput out) throws IOException {
 		out.writeInt(this.iterationNum);
 		out.writeInt(this.taskid);
+		out.writeInt(this.checkpoint);
 		this.jobID.write(out);
 	}
 

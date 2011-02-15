@@ -465,6 +465,11 @@ public class ReduceTask extends Task {
 										this.iterReducer);
 		}
 		
+		if(this.checkpoint > 0){
+			int records = this.pkvBuffer.loadStateTable();
+			LOG.info("load statetable with " + records + " records");
+		}
+		
 		//termination check thread, also do generating snapshot work
 		this.termCheckThread = new snapshotThread(taskUmbilical, this);
 		this.termCheckThread.setDaemon(true);
@@ -484,6 +489,8 @@ public class ReduceTask extends Task {
 				reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
 				inputCollector.free(); // Free current data
 				
+				this.checkpoint = 0;
+				LOG.info("has finished the first reduce");
 
 				if(window == -1){
 					try { this.wait();
@@ -491,6 +498,13 @@ public class ReduceTask extends Task {
 				}else{
 					try { this.wait(window);
 					} catch (InterruptedException e) { }
+				}
+				
+				if(this.checkpoint > 0){
+					int records = this.pkvBuffer.loadStateTable();
+					LOG.info("load statetable with " + records + " records");
+					
+					inputCollector.free();
 				}
 			}
 		}	
@@ -632,7 +646,7 @@ public class ReduceTask extends Task {
 			long processtime = processend - processstart;
 			LOG.info("processed " + count + " use time " + processtime);
 
-			if(this.spillIter){
+			if(this.spillIter || this.checkpoint > 0){
 				long sortstart = new Date().getTime();
 				
 				LOG.info("average processing " + pkvBuffer.actualEmit + " takes time " + (sortstart-lasttime));
@@ -651,15 +665,19 @@ public class ReduceTask extends Task {
 				long sortend = new Date().getTime();
 				long sorttime = sortend - sortstart;
 				
-				if(iterindex > 5){
-					//after the system is stable
-					int id = this.getTaskID().getTaskID().getId();
-					IterationCompletionEvent event = new IterationCompletionEvent(iterindex, id, getJobID());
-					try {
-						taskUmbilical.afterIterCommit(event);
-					} catch (Exception e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+				if(job.getBoolean("mapred.iterative.ftsupport", true)){
+					//send iteration completetion event to jobtracker for load balance and faulttolerance
+					if(iterindex > 5){
+						//after the system is stable
+						int id = this.getTaskID().getTaskID().getId();
+						
+						IterationCompletionEvent event = new IterationCompletionEvent(iterindex, id, pkvBuffer.checkpointIter, getJobID());
+						try {
+							taskUmbilical.afterIterCommit(event);
+						} catch (Exception e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
 					}
 				}
 				

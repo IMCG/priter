@@ -414,8 +414,10 @@ public class MapTask extends Task {
 			LOG.info("mapper configure phase");
 			//mapper.configure(job);
 			LOG.info("mapper initPKVBuffer phase");
-			mapper.initStarter(pkvBuffer);
-			
+			if(this.checkpoint <= 0){
+				mapper.initStarter(pkvBuffer);
+			}
+		
 			//setPhase(TaskStatus.Phase.SHUFFLE); 
 			
 			int workload = 0;
@@ -444,6 +446,10 @@ public class MapTask extends Task {
 								} catch (InterruptedException e) {
 									// TODO Auto-generated catch block
 									e.printStackTrace();
+								}
+								
+								if(shouldRollback()){
+									
 								}
 							}
 											

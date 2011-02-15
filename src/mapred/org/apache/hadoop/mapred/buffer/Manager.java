@@ -644,7 +644,6 @@ public class Manager implements BufferUmbilicalProtocol {
 					fm_map.get(tid).close();
 				}
 			}
-			
 		}
 	}
 

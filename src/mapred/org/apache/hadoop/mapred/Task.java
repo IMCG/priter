@@ -136,6 +136,8 @@ public abstract class Task implements Writable, Configurable {
   protected TaskAttemptContext taskContext;
   
   protected boolean iterative;
+  protected int checkpoint;
+  protected boolean rollback;
 
   ////////////////////////////////////////////
   // Constructors
@@ -310,6 +312,7 @@ public abstract class Task implements Writable, Configurable {
     out.writeBoolean(writeSkipRecs);
     out.writeBoolean(taskCleanup);
     out.writeBoolean(iterative);
+    out.writeInt(checkpoint);
     Text.writeString(out, pidFile);  
   }
   
@@ -331,6 +334,7 @@ public abstract class Task implements Writable, Configurable {
       setPhase(TaskStatus.Phase.CLEANUP);
     }
     iterative = in.readBoolean();
+    checkpoint = in.readInt();
     pidFile = Text.readString(in);
   }
 
@@ -391,8 +395,28 @@ public abstract class Task implements Writable, Configurable {
 	  return false;
   }
   
+  public void Rollback(){
+	  this.rollback = true;
+  }
+  
+  public void hasRecovered(){
+	  this.rollback = false;
+  }
+  
+  public boolean shouldRollback(){
+	  return this.rollback;
+  }
+  
   public boolean isIterative() {
 	  return this.iterative;
+  }
+  
+  public int getCheckPoint() {
+	  return this.checkpoint;
+  }
+  
+  public void setCheckPoint(int checkpoint) {
+	  this.checkpoint = checkpoint;
   }
   
   public int getNumberOfInputs() {

@@ -91,6 +91,11 @@ abstract class TaskTrackerAction implements Writable {
         action = new CommitTaskAction();
       }
       break;
+    case REDO_TASK:
+    {
+      action = new RedoTaskAction();
+    }
+      break;
     }
 
     return action;
