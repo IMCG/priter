@@ -43,14 +43,12 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapred.TaskCompletionEvent.Status;
 import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
-import org.apache.hadoop.mapred.buffer.impl.Buffer;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
 import org.apache.hadoop.mapred.buffer.impl.UnSortOutputBuffer;
 import org.apache.hadoop.mapred.buffer.net.BufferExchange;
 import org.apache.hadoop.mapred.buffer.net.BufferRequest;
 import org.apache.hadoop.mapred.buffer.net.BufferExchangeSink;
-import org.apache.hadoop.mapred.buffer.net.MapBufferRequest;
 import org.apache.hadoop.mapred.buffer.net.ReduceBufferRequest;
 import org.apache.hadoop.util.ReflectionUtils;
 
@@ -173,13 +171,58 @@ public class MapTask extends Task {
 		}
 	}
 	
+	private class RollbackCheckThread extends Thread {
+		
+		private long interval = 0;
+		private TaskUmbilicalProtocol trackerUmbilical;
+		private BufferExchangeSink buffersink;
+		private InputPKVBuffer pkvBuffer;
+		private Task task;
+		
+		public RollbackCheckThread(TaskUmbilicalProtocol umbilical, BufferExchangeSink sink, Task task, InputPKVBuffer pkvBuffer) {
+			interval = conf.getInt("mapred.iterative.rollback.frequency", 2000);		  
+			this.trackerUmbilical = umbilical;
+			this.buffersink = sink;
+			this.task = task;
+			this.pkvBuffer = pkvBuffer;
+		}
+		
+		public void run() {
+			while(true) {
+				synchronized(rollbackLock){
+					try{
+						rollbackLock.wait(interval);
+						LOG.info("check roll back");
+						
+						CheckPoint checkpointEvent = trackerUmbilical.rollbackCheck(getTaskID());
+						checkpointIter = checkpointEvent.getIter();
+							
+						if(checkpointIter > 0){
+							LOG.info("rolled back to checkpoint " + checkpointIter);
+							pkvBuffer.free();
+							buffersink.resetCursorPosition(checkpointIter);
+							checkpointIter = 0;
+							synchronized(task){
+								task.notifyAll();
+							}
+							
+						}
+
+					}catch(IOException ioe){
+						ioe.printStackTrace();
+					}catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+	}
 	/**
 	 * The size of each record in the index file for the map-outputs.
 	 */
 	public static final int MAP_OUTPUT_INDEX_RECORD_LENGTH = 24;
 
 	protected TrackedRecordReader recordReader = null;
-	private JobConf job = null;
 	
 	protected OutputCollector collector = null;	//the original one uses it
 	protected JOutputBuffer buffer = null;		//iterative mapreduce uses it
@@ -193,6 +236,10 @@ public class MapTask extends Task {
     protected Class inputValClass;
     
     protected TaskID pipeReduceTaskId = null;
+    protected boolean ftsupport = false;
+    
+    private Thread rollbackCheckThread = null;
+    private Object rollbackLock = new Object();
 
 	private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -325,7 +372,6 @@ public class MapTask extends Task {
 	public void run(final JobConf job, final TaskUmbilicalProtocol umbilical, final BufferUmbilicalProtocol bufferUmbilical)
 	throws IOException {
 		final Reporter reporter = getReporter(umbilical);
-		this.job = job;
 		
 	    // start thread that will handle communication with parent
 	    startCommunicationThread(umbilical);
@@ -381,6 +427,8 @@ public class MapTask extends Task {
 				LOG.info("I didn't consider this");
 			}
 			
+			ftsupport = job.getBoolean("mapred.iterative.ftsupport", false);
+			
 			IterativeMapper mapper = (IterativeMapper) ReflectionUtils.newInstance(job.getMapperClass(), job);
 			
 			InputPKVBuffer pkvBuffer = new InputPKVBuffer(bufferUmbilical, this, job, reporter, null, 
@@ -414,10 +462,16 @@ public class MapTask extends Task {
 			LOG.info("mapper configure phase");
 			//mapper.configure(job);
 			LOG.info("mapper initPKVBuffer phase");
-			if(this.checkpoint <= 0){
+			if(this.checkpointIter <= 0){
 				mapper.initStarter(pkvBuffer);
 			}
 		
+			if(ftsupport){
+				//rollback check thread
+				this.rollbackCheckThread = new RollbackCheckThread(umbilical, sink, this, pkvBuffer);
+				this.rollbackCheckThread.setDaemon(true);
+				this.rollbackCheckThread.start();
+			}
 			//setPhase(TaskStatus.Phase.SHUFFLE); 
 			
 			int workload = 0;
@@ -447,18 +501,17 @@ public class MapTask extends Task {
 									// TODO Auto-generated catch block
 									e.printStackTrace();
 								}
-								
-								if(shouldRollback()){
-									
-								}
+							
 							}
-											
+							
 							Object keyObject = pkvBuffer.getTopKey();
 							Object valObject = pkvBuffer.getTopValue();
-							mapper.map(keyObject, valObject, this.buffer, reporter);
-							reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
-							workload++;
-							counter++;										
+							if(keyObject != null && valObject != null){
+								mapper.map(keyObject, valObject, this.buffer, reporter);
+								reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
+								workload++;
+								counter++;	
+							}			
 						}
 					}else{
 						//iteration loop, stop when reduce let it stop
@@ -509,6 +562,10 @@ public class MapTask extends Task {
 			}finally {
 				rof.interrupt();
 				rof = null;
+				if(ftsupport){
+					rollbackCheckThread.interrupt();
+					rollbackCheckThread = null;
+				}
 				sink.close();
 			}
 		}

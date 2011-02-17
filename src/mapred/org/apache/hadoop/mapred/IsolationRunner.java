@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
@@ -115,13 +116,6 @@ public class IsolationRunner {
 		return null;
 	}
 
-
-	@Override
-	public TaskID getReduceTaskID() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
 	@Override
 	public void snapshotCommit(SnapshotCompletionEvent event) throws IOException {
 		// TODO Auto-generated method stub
@@ -133,6 +127,12 @@ public class IsolationRunner {
 			throws IOException {
 		// TODO Auto-generated method stub
 		
+	}
+
+	@Override
+	public CheckPoint rollbackCheck(TaskAttemptID taskid) throws IOException {
+		// TODO Auto-generated method stub
+		return null;
 	}
   }
   

@@ -136,7 +136,8 @@ public abstract class Task implements Writable, Configurable {
   protected TaskAttemptContext taskContext;
   
   protected boolean iterative;
-  protected int checkpoint;
+  protected int checkpointIter = 0;
+  protected int checkpointSnapshot = 0;
   protected boolean rollback;
 
   ////////////////////////////////////////////
@@ -312,7 +313,8 @@ public abstract class Task implements Writable, Configurable {
     out.writeBoolean(writeSkipRecs);
     out.writeBoolean(taskCleanup);
     out.writeBoolean(iterative);
-    out.writeInt(checkpoint);
+    out.writeInt(checkpointIter);
+    out.writeInt(checkpointSnapshot);
     Text.writeString(out, pidFile);  
   }
   
@@ -334,7 +336,8 @@ public abstract class Task implements Writable, Configurable {
       setPhase(TaskStatus.Phase.CLEANUP);
     }
     iterative = in.readBoolean();
-    checkpoint = in.readInt();
+    checkpointIter = in.readInt();
+    checkpointSnapshot = in.readInt();
     pidFile = Text.readString(in);
   }
 
@@ -394,29 +397,26 @@ public abstract class Task implements Writable, Configurable {
   public boolean isPipeline() {
 	  return false;
   }
-  
-  public void Rollback(){
-	  this.rollback = true;
-  }
-  
-  public void hasRecovered(){
-	  this.rollback = false;
-  }
-  
-  public boolean shouldRollback(){
-	  return this.rollback;
-  }
+
   
   public boolean isIterative() {
 	  return this.iterative;
   }
   
-  public int getCheckPoint() {
-	  return this.checkpoint;
+  public int getCheckPointIter() {
+	  return this.checkpointIter;
   }
   
-  public void setCheckPoint(int checkpoint) {
-	  this.checkpoint = checkpoint;
+  public void setCheckPointIter(int checkpoint) {
+	  this.checkpointIter = checkpoint;
+  }
+  
+  public int getCheckPointSnapshot() {
+	  return this.checkpointSnapshot;
+  }
+  
+  public void setCheckPointSnapshot(int checkpoint) {
+	  this.checkpointSnapshot = checkpoint;
   }
   
   public int getNumberOfInputs() {

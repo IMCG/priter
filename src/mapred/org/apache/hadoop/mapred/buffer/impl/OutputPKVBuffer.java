@@ -30,6 +30,7 @@ import org.apache.hadoop.mapred.IFile;
 import org.apache.hadoop.mapred.IterativeReducer;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.ReduceTask;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskAttemptID;
@@ -48,6 +49,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 	private static final Log LOG = LogFactory.getLog(OutputPKVBuffer.class.getName());
 
 	private JobConf job = null;
+	private ReduceTask relatedTask;
 	private TaskAttemptID taskAttemptID;
 	private final FileSystem localFs;
 	private FileSystem hdfs;
@@ -58,6 +60,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 	private int dumpFrequency;
 	private boolean ftSupport;
 	public int checkpointIter;
+	public int checkpointSnapshot;
 	
 	private String topkDir = null;
 
@@ -81,7 +84,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 	private int topk;
 	private int queuelen = 0;
 	
-	private int iteration = 0;
+	public int iteration = 0;
 	public int total_map = 0;
 	public int total_reduce = 0;
 	public boolean start = false;
@@ -103,6 +106,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 		LOG.info("OutputPKVBuffer is reset for task " + task.getTaskID());
 
 		this.job = job;
+		this.relatedTask = (ReduceTask)task;
 		this.taskAttemptID = task.getTaskID();
 		this.localFs = FileSystem.getLocal(job);
 		this.hdfs = FileSystem.get(job);
@@ -138,6 +142,10 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 	
 	public TaskAttemptID getTaskAttemptID() {
 		return this.taskAttemptID;
+	}
+	
+	public int getIteration(){
+		return this.iteration;
 	}
 
 	public void init(IntWritable key, V iState, V cState){
@@ -312,13 +320,16 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 				writeIndexRecord(indexOut, out, 0, writer);
 				writer = null;
 				
-				this.iteration++;
+				
 				//periodically dump statetable and execution queue
-				if(ftSupport && (iteration % dumpFrequency == 0)){
-					dumpExeQueue();
+				if(ftSupport && iteration != 0 && (iteration % dumpFrequency == 0)){
+					//dumpExeQueue();
 					dumpStateTable();
-					checkpointIter = iteration - 1;
+					checkpointIter = iteration;
+					checkpointSnapshot = this.relatedTask.snapshotIndex;
 				}
+				
+				this.iteration++;
 				priorityQueue.clear();
 			}
 		} catch(IOException e){
@@ -379,6 +390,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 		FSDataOutputStream ostream = hdfs.create(new Path(stateTableFile), true);
 		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 		
+		long start = System.currentTimeMillis();
 		int count = 0;
 		Set<Map.Entry<IntWritable, PriorityRecord<P, V>>> entries = this.stateTable.entrySet();
 		for(Map.Entry<IntWritable, PriorityRecord<P, V>> entry : entries) {
@@ -389,8 +401,9 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends WritableCom
 		}
 		writer.close();
 		ostream.close();
+		long end = System.currentTimeMillis();
 		
-		LOG.info("dumped StateTable with " + count + " records");
+		LOG.info("dumped StateTable with " + count + " records takes " + (end-start) + " ms");
 	}
 	
 	public int loadStateTable() throws IOException {

@@ -80,7 +80,8 @@ public class InputPKVBuffer<K extends Object, V extends WritableComparable> impl
 	@Override
 	public void free() {
 		this.recordsQueue.clear();
-		this.recordsQueue = null;
+		this.savedKey = null;
+		this.savedValue = null;
 	}
 
 	//should be called in user-defined IterativeMapper.initPKVBuffer()
@@ -91,7 +92,7 @@ public class InputPKVBuffer<K extends Object, V extends WritableComparable> impl
 		}
 	}
 	
-	//load execution queue, for load balancing and fault tolerance
+	//load execution queue, for load balancing and fault tolerance, maybe not useful
 	public synchronized int loadExeQueue() throws IOException{
 		FSDataInputStream istream = hdfs.open(new Path(exeQueueFile));
 		BufferedReader reader = new BufferedReader(new InputStreamReader(istream));
