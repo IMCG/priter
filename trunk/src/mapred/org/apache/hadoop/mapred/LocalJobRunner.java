@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.DataOutputBuffer;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobTrackerMetricsInst;
 import org.apache.hadoop.mapred.JvmTask;
 
@@ -295,12 +296,6 @@ class LocalJobRunner implements JobSubmissionProtocol {
 	}
 
 	@Override
-	public TaskID getReduceTaskID() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
 	public void snapshotCommit(SnapshotCompletionEvent event) throws IOException {
 		// TODO Auto-generated method stub
 		
@@ -311,6 +306,11 @@ class LocalJobRunner implements JobSubmissionProtocol {
 			throws IOException {
 		// TODO Auto-generated method stub
 		
+	}
+
+	@Override
+	public CheckPoint rollbackCheck(TaskAttemptID taskid) throws IOException {
+		return null;
 	}
   }
 

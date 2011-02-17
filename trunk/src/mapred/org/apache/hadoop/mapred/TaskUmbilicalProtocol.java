@@ -20,6 +20,7 @@ package org.apache.hadoop.mapred;
 
 import java.io.IOException;
 
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.ipc.VersionedProtocol;
 import org.apache.hadoop.mapred.JvmTask;
 
@@ -149,9 +150,9 @@ interface TaskUmbilicalProtocol extends VersionedProtocol {
 
   ReduceTaskCompletionEventsUpdate 
   getReduceCompletionEvents(JobID reduceJobId, int fromIndex, int maxLocs) throws IOException;
-  
-  TaskID getReduceTaskID();
+
   
   void snapshotCommit(SnapshotCompletionEvent event) throws IOException;
   void afterIterCommit(IterationCompletionEvent event) throws IOException;
+  CheckPoint rollbackCheck(TaskAttemptID taskid) throws IOException;
 }

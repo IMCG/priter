@@ -309,6 +309,12 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		//LOG.info("Task " + taskid + " total sink progress = " + progress.get());
 	}
 
+	public void resetCursorPosition(int checkpoint){
+		for(TaskID task : cursor.keySet()){
+			cursor.get(task).set(checkpoint);
+		}
+	}
+	
 	/************************************** CONNECTION CLASS **************************************/
 	
 	abstract class Handler<H extends OutputFile.Header> implements Runnable {
@@ -521,7 +527,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 			synchronized (task) {			
 				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
 				LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
-				if (pos <= header.sequence()) {
+				if (pos == header.sequence()) {
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
 					ostream.flush();
 					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
@@ -666,7 +672,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 			synchronized (task) {			
 				long pos = position.longValue() < 0 ? header.iteration() : position.longValue(); 
 				LOG.info("position is: " + pos + "; header.iteration() is " + header.iteration());
-				if (pos <= header.iteration()) {
+				if (pos == header.iteration()) {
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
 					ostream.flush();
 					LOG.debug("PKVBuffer handler " + hashCode() + " ready to receive -- " + header);

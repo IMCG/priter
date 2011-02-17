@@ -158,7 +158,7 @@ public class TaskTracker
     
   Map<TaskAttemptID, TaskInProgress> tasks = new HashMap<TaskAttemptID, TaskInProgress>();
   
-  List<RedoTaskAction> redoTasksQueue = new ArrayList<RedoTaskAction>();
+  Map<TaskAttemptID, CheckPoint> rollbackTasksQueue = new HashMap<TaskAttemptID, CheckPoint>();
   /**
    * Map from taskId -> TaskInProgress.
    */
@@ -1310,11 +1310,6 @@ public class TaskTracker
         if (reinitTaskTracker(actions)) {
           return State.STALE;
         }
-            
-        //for debug
-        LOG.info("Got heartbeatResponse from JobTracker with responseId: " + 
-                heartbeatResponse.getResponseId() + " and " + 
-                ((actions != null) ? actions.length : 0) + " actions");
         
         // resetting heartbeat interval from the response.
         heartbeatInterval = heartbeatResponse.getHeartbeatInterval();
@@ -1332,7 +1327,7 @@ public class TaskTracker
               }
             } else if (action instanceof RedoTaskAction){
             	LOG.info("RedoTaskAction received");
-            	rollbackTask((RedoTaskAction)action);
+            	addToRollbackTaskQueue((RedoTaskAction)action);
             }else {
             	LOG.info("KillTaskAction received");
               tasksToCleanup.put(action);
@@ -1429,8 +1424,7 @@ public class TaskTracker
       askForNewTask = enoughFreeSpace(localMinSpaceStart);
       status.getResourceStatus().setAvailableSpace( getFreeSpace() );
       long freeVirtualMem = findFreeVirtualMemory();
-      LOG.info("Setting amount of free virtual memory for the new task: " +
-                    freeVirtualMem);
+      //LOG.info("Setting amount of free virtual memory for the new task: " + freeVirtualMem);
       status.getResourceStatus().setFreeVirtualMemory(freeVirtualMem);
       status.getResourceStatus().setTotalMemory(maxVirtualMemoryForTasks);
     }
@@ -1819,11 +1813,12 @@ public class TaskTracker
     }
   }
   
-  private void rollbackTask(RedoTaskAction action) throws Exception{	
+  private void addToRollbackTaskQueue(RedoTaskAction action) throws Exception{	
 	  TaskAttemptID taskid = action.getTaskID();
+	  CheckPoint checkpoint = new CheckPoint(action.getIterCheckPoint(), action.getSnapshotCheckpoint());
 	  if(tasks.containsKey(taskid)){
-		  //roll back task
-		  tasks.get(taskid).getTask().Rollback();
+		  this.rollbackTasksQueue.put(taskid, checkpoint);
+		  LOG.info("rollback task " + taskid + " checkpoint is " + checkpoint + " is enqueued"); 
 	  }else{
 		  throw new Exception("no task " + action.getTaskID() + " existed!");
 	  }
@@ -3343,18 +3338,7 @@ public class TaskTracker
       }
     }
   }
-  
-  @Override
-  public synchronized TaskID getReduceTaskID(){
-	  //just return a single one, for preliminary implementation
-	  for(TaskAttemptID taid : runningTasks.keySet()){
-		  if(!taid.getTaskID().isMap()){
-			  return taid.getTaskID();
-		  }		  
-	  }
-	  
-	  return null;
-  }
+
 
   /**
    * after we generate snapshot (received the notification from Child process),
@@ -3372,5 +3356,17 @@ public class TaskTracker
 	public void afterIterCommit(IterationCompletionEvent event) throws IOException {
 		LOG.info("get snapshot event " + event);
 		this.jobClient.reportIterationCompletionEvent(event);
+	}
+
+	@Override
+	public synchronized CheckPoint rollbackCheck(TaskAttemptID taskid) throws IOException {
+		CheckPoint checkpoint = new CheckPoint(0, 0);
+		
+		if(rollbackTasksQueue.containsKey(taskid)){
+			checkpoint = rollbackTasksQueue.get(taskid);
+			rollbackTasksQueue.remove(taskid);
+		}
+		
+		return checkpoint;
 	} 
 }
