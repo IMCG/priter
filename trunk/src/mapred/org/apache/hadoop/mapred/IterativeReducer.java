@@ -5,11 +5,10 @@ import java.io.IOException;
 import java.util.Iterator;
 
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 
-public interface IterativeReducer<K2, V2, K3 extends Writable, V3 extends WritableComparable, P extends WritableComparable> 
+public interface IterativeReducer<K2, V2, K3, V3,  P extends WritableComparable> 
 	extends Reducer<K2, V2, K3, V3> {
 	
 	/**

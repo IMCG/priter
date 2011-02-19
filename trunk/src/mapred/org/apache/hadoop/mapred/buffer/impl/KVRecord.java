@@ -1,8 +1,7 @@
 package org.apache.hadoop.mapred.buffer.impl;
 
-import org.apache.hadoop.io.WritableComparable;
 
-public class KVRecord<K extends Object, V extends WritableComparable> implements Comparable<KVRecord<K, V>>{
+public class KVRecord<K extends Object, V extends Object>{
 	public K k;
 	public V v;
 	
@@ -15,11 +14,4 @@ public class KVRecord<K extends Object, V extends WritableComparable> implements
 	public String toString(){
 		return k + "\t" + v;
 	}
-
-	@Override
-	public int compareTo(KVRecord<K, V> o) {
-		return this.v.compareTo(o.v);
-	}
-
-
 }

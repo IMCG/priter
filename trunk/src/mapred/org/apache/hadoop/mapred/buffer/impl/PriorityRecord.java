@@ -7,7 +7,7 @@ import java.io.IOException;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 
-public class PriorityRecord<P extends WritableComparable, V extends WritableComparable>
+public class PriorityRecord<P extends WritableComparable, V extends Object>
 				implements Writable, Comparable<PriorityRecord<P, V>> {
 	private P priority;
 	private V iState;

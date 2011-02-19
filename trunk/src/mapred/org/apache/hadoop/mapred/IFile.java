@@ -259,6 +259,17 @@ public class IFile {
     
     DataOutputBuffer buffer = new DataOutputBuffer();
     
+    public PriorityWriter(Configuration conf, FileSystem fs, Path file, 
+    		Class<P> priorityClass,
+            Class<K> keyClass, Class<V> valueClass,
+            CompressionCodec codec,
+            Counters.Counter writesCounter) throws IOException {
+		this(conf, fs.create(file), priorityClass, keyClass, valueClass, codec,
+		     writesCounter);
+		ownOutputStream = true;
+	}
+    
+    
     public PriorityWriter(Configuration conf, FSDataOutputStream out, 
     		Class<P> priorityClass,
             Class<K> keyClass, Class<V> valueClass,

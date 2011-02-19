@@ -28,7 +28,7 @@ import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.util.Progress;
 
-public class InputPKVBuffer<K extends Object, V extends WritableComparable> implements
+public class InputPKVBuffer<K extends Object, V extends Object> implements
 		InputCollector<K, V> {
 
 	private static final Log LOG = LogFactory.getLog(InputPKVBuffer.class.getName());

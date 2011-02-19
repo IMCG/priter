@@ -161,6 +161,7 @@ public class ReduceTask extends Task {
 		
 		private int partitions = 0;
 		private TaskUmbilicalProtocol trackerUmbilical;
+		private int lastiter = -1;
 		
 		public snapshotThread(TaskUmbilicalProtocol umbilical, Task task) {
 			//topk = conf.getInt("mapred.iterative.topk", 1000);
@@ -197,7 +198,11 @@ public class ReduceTask extends Task {
 						//snapshot generation
 						pkvBuffer.snapshot(snapshotIndex);
 						
-						SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, getJobID());
+						boolean update = true;
+						if(pkvBuffer.iteration == lastiter){
+							update = false;
+						}
+						SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, getJobID());
 						try {
 							this.trackerUmbilical.snapshotCommit(event);
 						} catch (Exception e) {
@@ -205,6 +210,7 @@ public class ReduceTask extends Task {
 							e.printStackTrace();
 						}
 						
+						lastiter = pkvBuffer.iteration;
 						snapshotIndex++;
 						
 					}catch(IOException ioe){
@@ -429,8 +435,7 @@ public class ReduceTask extends Task {
 	    
 	    this.outputKeyClass = job.getOutputKeyClass();
 	    this.outputValClass = job.getOutputValueClass();
-	    
-	    this.priorityClass = (job.getPriorityClass() == Text.class) ? this.outputValClass : job.getPriorityClass();
+	    this.priorityClass = job.getPriorityClass();
 	    
 		if (job.getCompressMapOutput()) {
 			this.codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
