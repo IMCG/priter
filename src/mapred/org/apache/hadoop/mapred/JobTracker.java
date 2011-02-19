@@ -119,6 +119,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   //for checking the snapshot completion event
   //integer: the iteration index
   //arraylist: contains snapshot from different tasktrackers
+  private Map<JobID, Map<Integer, Boolean>> snapshotUpdateMap = new HashMap<JobID, Map<Integer, Boolean>>();
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
@@ -3227,24 +3228,27 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			int snapshotIndex = event.getSnapshotIndex();
 			int iterIndex = event.getIterIndex();
 			int reduceIndex = event.getTaskIndex();
+			boolean update = event.getUpdate();
 			JobID jobid = event.getJobID();
 			
 			if(this.snapshotCompletionMap.get(jobid) == null){			
 				Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
 				this.snapshotCompletionMap.put(jobid, snapshotComplete);
+				Map<Integer, Boolean> snapshotupdate = new HashMap<Integer, Boolean>();
+				this.snapshotUpdateMap.put(jobid, snapshotupdate);
 				
 				JobConf job = jobs.get(jobid).getJobConf();
-			    Class keyClass = job.getOutputKeyClass();
+				Class priClass = job.getPriorityClass();
 			    Class valClass = job.getOutputValueClass();
-				Merger merger = new Merger(job, valClass, snapshotIndex);
+				Merger merger = new Merger(job, priClass, valClass, snapshotIndex);
 				this.mergerMap.put(jobid, merger);
 				LOG.info("put merger for job " + jobid);
 				
-				if(valClass == IntWritable.class){
+				if(priClass == IntWritable.class){
 					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
-				}else if(valClass == DoubleWritable.class){
+				}else if(priClass == DoubleWritable.class){
 					lastTotal.put(jobid, new DoubleWritable(Double.MAX_VALUE));
-				}else if(valClass == FloatWritable.class){
+				}else if(priClass == FloatWritable.class){
 					lastTotal.put(jobid, new FloatWritable(Float.MAX_VALUE));
 				}else{
 					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
@@ -3256,6 +3260,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					throw new IOException("duplicated reduce task index " + reduceIndex);
 				}
 				
+				boolean updateb = update && this.snapshotUpdateMap.get(jobid).get(snapshotIndex);
+				this.snapshotUpdateMap.get(jobid).put(snapshotIndex, updateb);
 				this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
 				this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
 				ArrayList<Integer> tasks = this.snapshotCompletionMap.get(jobid).get(snapshotIndex);
@@ -3294,7 +3300,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
 							int threshold = jobs.get(jobid).getJobConf().getInt("mapred.iterative.stop.threshold", 0);
-							if(diff <= threshold){
+							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
 							}
@@ -3307,7 +3313,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
 							double threshold = jobs.get(jobid).getJobConf().getFloat("mapred.iterative.stop.threshold", 0);
-							if(diff <= threshold){
+							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
 							}
@@ -3320,7 +3326,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
 							float threshold = jobs.get(jobid).getJobConf().getFloat("mapred.iterative.stop.threshold", 0);
-							if(diff <= threshold){
+							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
 							}
@@ -3338,6 +3344,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				}else{
 					this.snapshotCompletionMap.get(jobid).put(snapshotIndex, tasks);						
 					this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
+					this.snapshotUpdateMap.get(jobid).put(snapshotIndex, update);
 					try{
 						this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
 					}catch(Exception e){
@@ -3349,13 +3356,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		}
 	} 
 	
-	class Merger<V extends WritableComparable> {
+	class Merger<P extends WritableComparable, V extends WritableComparable> {
 		
 		private JobConf job;
 		private FileSystem hdfs;
+		public Class<P> priClass;
 		public Class<V> valClass;
+		private Deserializer priDeserializer;	
 		private Deserializer keyDeserializer;	
 		private Deserializer valDeserializer;	
+		private DataInputBuffer priBuffer;
 		private DataInputBuffer keyBuffer;
 		private DataInputBuffer valBuffer;
 		private boolean descend;
@@ -3363,15 +3373,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		private String outputDir;
 		private Comparator comparator;
 		private Comparator icomparator;
-		private HashMap<Integer, PriorityQueue<KVRecord<IntWritable, V>>> topkQueues;
+		private HashMap<Integer, PriorityQueue<PKVRecord<P, IntWritable, V>>> topkQueues;
 		
-		public Merger(JobConf job, Class<V> valclass, int snapshotindex) throws IOException{
+		public Merger(JobConf job, Class<P> priclass, Class<V> valclass, int snapshotindex) throws IOException{
 			this.job = job;
 			this.hdfs = FileSystem.get(conf);
+			this.priClass = priclass;
 			this.valClass = valclass;
 			SerializationFactory serializationFactory = new SerializationFactory(job);
+			this.priDeserializer = serializationFactory.getDeserializer(priClass);
 		    this.keyDeserializer = serializationFactory.getDeserializer(IntWritable.class);
 		    this.valDeserializer = serializationFactory.getDeserializer(valClass);
+		    this.priBuffer = new DataInputBuffer();
 		    this.keyBuffer = new DataInputBuffer();
 		    this.valBuffer = new DataInputBuffer();
 		    
@@ -3379,7 +3392,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			topk = job.getInt("mapred.iterative.topk", 1000);
 			outputDir = job.get("mapred.output.dir");
 			if(outputDir == null) throw new IOException("no output dir");
-			
+			/*
 			if(descend){
 				comparator = new Comparator<KVRecord<IntWritable, V>>(){
 					@Override
@@ -3411,37 +3424,46 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					}
 				};
 			}
-			
-			topkQueues = new HashMap<Integer, PriorityQueue<KVRecord<IntWritable, V>>>();
+			*/
+			topkQueues = new HashMap<Integer, PriorityQueue<PKVRecord<P, IntWritable, V>>>();
 		}
 		
 		public void mergeTopKFile(int snapshotindex, int taskid) throws IOException{
 			if(!topkQueues.containsKey(snapshotindex)){
-				PriorityQueue<KVRecord<IntWritable, V>> topkQueue = new PriorityQueue<KVRecord<IntWritable, V>>(topk, comparator);
+				PriorityQueue<PKVRecord<P, IntWritable, V>> topkQueue = new PriorityQueue<PKVRecord<P, IntWritable, V>>(topk/*, comparator*/);
 				topkQueues.put(snapshotindex, topkQueue);
 			}
 			
-			PriorityQueue<KVRecord<IntWritable, V>> topkQueue = topkQueues.get(snapshotindex);
+			PriorityQueue<PKVRecord<P, IntWritable, V>> topkQueue = topkQueues.get(snapshotindex);
 			
 			Path topKPath = new Path(outputDir + "/" + taskid + "/topKsnapshot-" + snapshotindex);				
-			IFile.Reader<IntWritable, V> reader = new IFile.Reader<IntWritable, V>(job, hdfs, topKPath, null, null);
-			while(reader.next(keyBuffer, valBuffer)){
+			IFile.PriorityReader<P, IntWritable, V> reader = new IFile.PriorityReader<P, IntWritable, V>(job, hdfs, topKPath, null, null);
+			while(reader.next(priBuffer, keyBuffer, valBuffer)){
+				priDeserializer.open(priBuffer);
 				keyDeserializer.open(keyBuffer);
 				valDeserializer.open(valBuffer);
+				Object pri = null;
 				Object key = null;
 				Object val = null;
+				pri = priDeserializer.deserialize(pri);
 				key = keyDeserializer.deserialize(key);
 				val = valDeserializer.deserialize(val);
 				
-				KVRecord<IntWritable, V> kvrecord = new KVRecord<IntWritable, V>((IntWritable)key, (V)val);
+				PKVRecord<P, IntWritable, V> pkvrecord = new PKVRecord<P, IntWritable, V>((P)pri, (IntWritable)key, (V)val);
 				if(topkQueue.size() >= topk){
 					//LOG.info("least is " + topkQueue.peek() + " rec is " + kvrecord + " size is " + topkQueue.size());
+					/*
 					if(comparator.compare(kvrecord, topkQueue.peek()) > 0){						
 						topkQueue.poll();						
 						topkQueue.add(kvrecord);
 					}
+					*/
+					if(pkvrecord.compareTo(topkQueue.peek()) > 0){
+						topkQueue.poll();						
+						topkQueue.add(pkvrecord);
+					}
 				}else{
-					topkQueue.add(kvrecord);
+					topkQueue.add(pkvrecord);
 				}
 			}
 			/*
@@ -3505,35 +3527,41 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			FSDataOutputStream ostream = hdfs.create(new Path(snapshot), true);
 			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 
-			KVRecord[] recs = topkQueues.get(snapshotindex).toArray(new KVRecord[topk]);
-			Arrays.sort(recs, icomparator);
+			PKVRecord<P, IntWritable, V>[] recs = topkQueues.get(snapshotindex).toArray(new PKVRecord[topkQueues.get(snapshotindex).size()]);
+			Arrays.sort(recs, new Comparator<PKVRecord<P, IntWritable, V>>(){
+				public int compare(PKVRecord<P, IntWritable, V> o1,
+						PKVRecord<P, IntWritable, V> o2) {
+					return -o1.p.compareTo(o2.p);
+				}
+			});
+			//Arrays.sort(recs, icomparator);
 			topkQueues.remove(snapshotindex);	
 			
-			if(valClass == IntWritable.class){
+			if(priClass == IntWritable.class){
 				int total = 0;
-				for(KVRecord rec : recs){
+				for(PKVRecord rec : recs){
 					writer.write(rec.k + "\t" + rec.v + "\n");
-					total += ((IntWritable)rec.v).get();
+					total += ((IntWritable)rec.p).get();
 				}				
 				writer.close();
 				ostream.close();
 				
 				return new IntWritable(total);
-			}else if(valClass == DoubleWritable.class){
+			}else if(priClass == DoubleWritable.class){
 				double total = 0;
-				for(KVRecord rec : recs){
+				for(PKVRecord rec : recs){
 					writer.write(rec.k + "\t" + rec.v + "\n");
-					total += ((DoubleWritable)rec.v).get();
+					total += ((DoubleWritable)rec.p).get();
 				}
 				writer.close();
 				ostream.close();
 				
 				return new DoubleWritable(total);
-			}else if(valClass == FloatWritable.class){
+			}else if(priClass == FloatWritable.class){
 				float total = 0;
-				for(KVRecord rec : recs){
+				for(PKVRecord rec : recs){
 					writer.write(rec.k + "\t" + rec.v + "\n");
-					total += ((FloatWritable)rec.v).get();
+					total += ((FloatWritable)rec.p).get();
 				}
 				writer.close();
 				ostream.close();
