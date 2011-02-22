@@ -8,14 +8,3 @@
 || "mapred.iterative.output.wearfactor" || float || 10 || the ratio of the computation to the overhead ||
 || "mapred.iterative.snapshot.interval" || integer || 10000 || the time interval of snapshot generation ||
 || "mapred.iterative.reduce.emitsize" || integer || 100 || the initial output queue size ||
-
-
-= User-Defined Functions =
-
-|| *function* || *input* || *output* || *description* || *invoked* ||
-|| Map.initStateTable() || StateTable || na || initialize the StateTable || in the init phase ||
-|| Map.loadStaticData() || static data path || na || load the static data to memory || in the init phase ||
-|| Map.iterate() || na || na || do some summarization || after each map-reduce iteration ||
-|| Reduce.updateState() || output key-value pair || iState & cState || set each output key-value pair's state || after reduce operation ||
-|| Reduce.setPriority() || output key-value pair || priority || set each output key-value pair's priority || before enqueue ||
-|| Reduce.iterate() || na || na || do some summarization || after each map-reduce iteration ||
