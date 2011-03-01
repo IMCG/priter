@@ -3,14 +3,22 @@
 = System Parameters =
 
 || *property* || *type* || *default* || *description* ||
-|| "mapred.job.iterative" || boolean || false || set iterative processing ||
-|| "mapred.jobtracker.taskScheduler" || string || org.apache.hadoop.mapred.PrIterTaskScheduler || use PrIter's task scheduler ||
-|| "mapred.job.iterative.sort" || boolean || false || turn off sorting and grouping ||
+|| "priter.job" || boolean || true || turn on priter framework, otherwise it does normal MapReduce job ||
+|| "mapred.jobtracker.taskScheduler" || string || org.apache.hadoop.mapred.PrIterTaskScheduler || use PrIter's task scheduler for assign MRPairs||
+|| "priter.checkpoint" || boolean || true || turn on checkpoint for the support of fault tolerance and load balancing||
+|| "priter.checkpoint.frequency" || int || 5 || the StateTable checkpoint dump frequency for fault tolerance and load balancing ||
+
+
+|| "mapred.iterative.lbtimethresh" || long || 20000 || the time difference (ms) threshold to the average for performing load balancing ||
+|| "mapred.iterative.rollback.frequency" || long || 2000 || the frequency for a task to check if should do roll back ||
+
+
+
+|| "priter.job.priority" || boolean || true || turn on prioritized iteration, otherwise it performs normal iteration on top of PrIter ||
+|| "priter.job.inmem" || boolean || true || in-memory PrIter system, no need to sort, otherwise on-disk PrIter, need to sort||
+
+
+
 || "mapred.iterative.topk" || integer || 1000 || specify the number of interested top records ||
 || "mapred.iterative.topk.scale" || integer || 4 || how many top records to be sent to the merge worker. scale to the average. ||
 || "mapred.iterative.snapshot.interval" || integer || 10000 || the time interval of snapshot generation ||
-|| "mapred.iterative.ftsupport" || boolean || true || turn on fault tolerance support ||
-|| "mapred.iterative.lbsupport" || boolean || true || turn on load balancing support ||
-|| "mapred.iterative.dump.frequency" || int || 5 || the StateTable dump frequency for fault tolerance and load balancing ||
-|| "mapred.iterative.lbtimethresh" || long || 20000 || the time difference (ms) threshold to the average for performing load balancing ||
-|| "mapred.iterative.rollback.frequency" || long || 2000 || the frequency for a task to check if should do roll back ||
