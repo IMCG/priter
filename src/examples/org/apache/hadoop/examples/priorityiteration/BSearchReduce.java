@@ -31,25 +31,6 @@ public class BSearchReduce extends MapReduceBase implements
 	
 	//format node	f:len
 	//       node	v:shortest_length
-	@Override
-	public void reduce(IntWritable key, Iterator<IntWritable> values,
-			OutputPKVBuffer<IntWritable, IntWritable, IntWritable> output, Reporter report)
-			throws IOException {
-		reduce++;	
-		//System.out.println("input key: " + key);
-		
-		int min_len = Integer.MAX_VALUE;
-		while(values.hasNext()){
-			int len = values.next().get();
-			//System.out.println("input value: " + len);
-			if(len<min_len){
-				min_len = len;
-			}
-		}
-		
-		output.collect(new IntWritable(key.get()), new IntWritable(min_len));
-		//System.out.println("output " + key + "\t" + min_len);
-	}
 
 	@Override
 	public void iterate() {
@@ -70,36 +51,15 @@ public class BSearchReduce extends MapReduceBase implements
 	public IntWritable setDefaultcState(IntWritable key) {
 		return new IntWritable(Integer.MAX_VALUE);
 	}
-	
-	@Override
-	public void updateState(IntWritable iState, IntWritable cState, IntWritable value) {
-		if(value.get() < cState.get()){
-			iState.set(value.get());
-			cState.set(value.get());
-		}
-	}
 
 	@Override
 	public void initStateTable(
-			OutputPKVBuffer<IntWritable, IntWritable, IntWritable> stateTable) {
-		//stateTable.init(new IntWritable(startnode), new IntWritable(0), new IntWritable(0));
+			OutputPKVBuffer<IntWritable, IntWritable> stateTable) {
+		stateTable.init(new IntWritable(startnode), new IntWritable(0), new IntWritable(0));
 	}
 
 	@Override
-	public boolean stopCheck(
-			StateTableIterator<IntWritable, IntWritable> stateTable) {
-		boolean stop = true;
-		while(stateTable.next()){
-			if((stateTable.getiState().get() != Integer.MAX_VALUE) && (stateTable.getKey().get() != startnode)){
-				stop = false;
-				break;
-			}
-		}
-		return stop;
-	}
-
-	@Override
-	public IntWritable setPriority(IntWritable key, IntWritable iState) {
+	public IntWritable setPriority(IntWritable key, IntWritable iState, boolean iorc) {
 		return new IntWritable(-iState.get());
 	}
 
@@ -111,4 +71,35 @@ public class BSearchReduce extends MapReduceBase implements
 		
 	}
 
+	@Override
+	public void updateState(IntWritable key, Iterator<IntWritable> values,
+			OutputPKVBuffer<IntWritable, IntWritable> buffer, Reporter report)
+			throws IOException {
+		reduce++;	
+		
+		int min_len = Integer.MAX_VALUE;
+		while(values.hasNext()){
+			int len = values.next().get();
+			//System.out.println("input value: " + len);
+			if(len<min_len){
+				min_len = len;
+			}
+		}
+		
+		PriorityRecord<IntWritable, IntWritable> pkvRecord;	
+		if(buffer.stateTable.containsKey(key)){
+			pkvRecord = buffer.stateTable.get(key);
+
+			int cState = pkvRecord.getcState().get();
+			if(min_len < cState){
+				buffer.stateTable.get(key).getiState().set(min_len);
+				buffer.stateTable.get(key).getcState().set(min_len);
+				buffer.stateTable.get(key).getPriority().set(-min_len);
+			}
+		}else{
+			pkvRecord = new PriorityRecord<IntWritable, IntWritable>(
+					new IntWritable(-min_len), new IntWritable(min_len), new IntWritable(min_len));
+			buffer.stateTable.put(key, pkvRecord);
+		}
+	}
 }
