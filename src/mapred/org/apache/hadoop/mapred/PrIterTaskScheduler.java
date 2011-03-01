@@ -195,6 +195,8 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	          }
 	        }
 	      }
+	    }else{
+	    	//LOG.warn("numMaps is " + numMaps + " and maxMapLoad is " + maxMapLoad);
 	    }
 
 	    //
@@ -212,6 +214,8 @@ public class PrIterTaskScheduler extends TaskScheduler {
 
 	          if(job.getJobConf().getBoolean("mapred.job.iterative", false)){
 		          int reducetasknum = -1;
+		          if(taskTrackerMap.get(job.getJobID()) == null) continue;
+		          if(taskTrackerMap.get(job.getJobID()).get(taskTracker.trackerName) == null) continue;
 		          for(int participate : taskTrackerMap.get(job.getJobID()).get(taskTracker.trackerName)){
 		        	  if(reduceTakenMap.get(job.getJobID()).get(participate)){
 		        		  reducetasknum = participate;
@@ -260,6 +264,8 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	          }
 	        }
 	      }
+	    }else{
+	    	//LOG.warn("numReduces is " + numReduces + " and maxReduceLoad is " + maxReduceLoad);
 	    }
 	    return null;
 	  }

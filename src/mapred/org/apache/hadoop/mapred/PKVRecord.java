@@ -2,7 +2,7 @@ package org.apache.hadoop.mapred;
 
 import org.apache.hadoop.io.WritableComparable;
 
-public class PKVRecord<P extends WritableComparable, K extends Object, V extends WritableComparable> implements Comparable<PKVRecord<P, K, V>>{
+public class PKVRecord<P extends WritableComparable, K extends Object, V extends Object> implements Comparable<PKVRecord<P, K, V>>{
 	public P p;
 	public K k;
 	public V v;
