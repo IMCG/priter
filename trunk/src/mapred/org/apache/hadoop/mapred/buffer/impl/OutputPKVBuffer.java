@@ -57,9 +57,10 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	private FileSystem hdfs;
 	private FileHandle outputHandle = null;
 	
+	private boolean bPriExec;
 	public String exeQueueFile;
 	public String stateTableFile;
-	private int dumpFrequency;
+	private int checkFreq;
 	private boolean ftSupport;
 	public int checkpointIter;
 	public int checkpointSnapshot;
@@ -96,7 +97,6 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	public long timeComp;
 	public long timeSync;
 	
-	public int actualEmit = 0;
 	public static int WAIT_ITER = 0;
 	
 	//for termination check
@@ -119,12 +119,13 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.defaultKey = iterReducer.setDefaultKey();
 		this.defaultiState = (V)iterReducer.setDefaultiState();
 		
-		this.ftSupport = job.getBoolean("mapred.iterative.ftsupport", true);
+		this.bPriExec = job.getBoolean("priter.job.priority", true);
+		this.ftSupport = job.getBoolean("priter.checkpoint", true);
 		this.exeQueueFile = job.get("mapred.output.dir") + "/_ExeQueueTemp/" + 
 							taskAttemptID.getTaskID().getId() + "-exequeue";
 		this.stateTableFile = job.get("mapred.output.dir") + "/_StateTableTempDir/"
 								+ taskAttemptID.getTaskID().getId() + "-statetable";
-		this.dumpFrequency = job.getInt("mapred.dump.frequency", 20);
+		this.checkFreq = job.getInt("priter.checkpoint.frequency", 10);
 
 		this.topkDir = job.get("mapred.output.dir") + "/" + this.taskAttemptID.getTaskID().getId();
 		this.valClass = valClass;
@@ -164,6 +165,25 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.stateTable.put(key, newpkvRecord);
 	}
 	
+	private synchronized ArrayList<KVRecord<IntWritable, V>> getAllRecords() {
+		synchronized(this.stateTable){	
+			int activations = 0;
+			ArrayList<KVRecord<IntWritable, V>> records = new ArrayList<KVRecord<IntWritable, V>>();
+			for(IntWritable k : stateTable.keySet()){		
+				V v = stateTable.get(k).getiState();
+				P pri = stateTable.get(k).getPriority();
+				
+				records.add(new KVRecord<IntWritable, V>(k, v));
+				V iState = (V)iterReducer.setDefaultiState();
+				this.stateTable.get(k).setiState(iState);
+				P p = (P) iterReducer.setPriority(k, iState, true);
+				this.stateTable.get(k).setPriority(p);
+				activations++;
+			}
+			LOG.info("iteration " + iteration + " activate " + activations + " k-v pairs");
+			return records;
+		}
+	}
 	private synchronized ArrayList<KVRecord<IntWritable, V>> getTopRecords() {
 		synchronized(this.stateTable){	
 			/*
@@ -172,7 +192,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				actualEmit = (actualEmit == 0) ? 1 : actualEmit;
 			}
 			*/
-			actualEmit = 0;
+
+			int activations = 0;
 			ArrayList<KVRecord<IntWritable, V>> records = new ArrayList<KVRecord<IntWritable, V>>();
 			P threshold = (P) iterReducer.setPriority(iterReducer.setDefaultKey(), (V)iterReducer.setDefaultiState(), true);
 			
@@ -211,11 +232,11 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 						this.stateTable.get(k).setiState(iState);
 						P p = (P) iterReducer.setPriority(k, iState, true);
 						this.stateTable.get(k).setPriority(p);
-						actualEmit++;
+						activations++;
 					}	
 					//LOG.info(k + "\t" + pri + "\t" + v);
 				}
-				LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs" + " threshold is " + threshold);
+				LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 				
 			}else{
 				//queulen extraction
@@ -229,10 +250,10 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							this.stateTable.get(k).setiState(iState);
 							P p = (P) iterReducer.setPriority(k, iState, true);
 							this.stateTable.get(k).setPriority(p);
-							actualEmit++;	
+							activations++;	
 						}
 					}
-					LOG.info("iteration " + iteration + "queuelen is " + queuelen + " expend " + actualEmit + " k-v pairs");
+					LOG.info("iteration " + iteration + "queuelen is " + queuelen + " expend " + activations + " k-v pairs");
 				}else{
 					Random rand = new Random();
 					List<IntWritable> randomkeys = new ArrayList<IntWritable>(SAMPLESIZE);
@@ -267,11 +288,11 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							this.stateTable.get(k).setiState(iState);
 							P p = (P) iterReducer.setPriority(k, iState, true);
 							this.stateTable.get(k).setPriority(p);
-							actualEmit++;
+							activations++;
 						}	
 						//LOG.info(k + "\t" + pri + "\t" + v);
 					}
-					LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs" + " threshold is " + threshold);
+					LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 				}
 			}
 			return records;
@@ -351,7 +372,13 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			if (out == null ) throw new IOException("Unable to create spill file " + filename);
 			
 			synchronized(this.stateTable){
-				ArrayList<KVRecord<IntWritable, V>> entries = getTopRecords();
+	
+				ArrayList<KVRecord<IntWritable, V>> entries = null;
+				if(this.bPriExec){
+					entries = getTopRecords();
+				}else{
+					entries = getAllRecords();
+				}
 					
 				writer = new IFile.Writer<IntWritable, V>(job, out, IntWritable.class, valClass, null, null);
 
@@ -380,7 +407,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				
 				
 				//periodically dump statetable and execution queue
-				if(ftSupport && iteration != 0 && (iteration % dumpFrequency == 0)){
+				if(ftSupport && iteration != 0 && (iteration % checkFreq == 0)){
 					//dumpExeQueue();
 					dumpStateTable();
 					checkpointIter = iteration;

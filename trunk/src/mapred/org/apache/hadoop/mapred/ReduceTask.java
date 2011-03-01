@@ -445,7 +445,7 @@ public class ReduceTask extends Task {
 		snapshotFreq   = job.getFloat("mapred.snapshot.frequency", 1f);
 		snapshotThreshold = snapshotFreq;
 		inputSnapshots  = job.getBoolean("mapred.job.input.snapshots", false);
-		iterative = job.getBoolean("mapred.job.iterative", false);
+		iterative = job.getBoolean("priter.job", false);
 		
 		InputCollector inputCollector = null;
 		if (inputSnapshots) {
@@ -512,7 +512,7 @@ public class ReduceTask extends Task {
 			BufferExchangeSink sink, TaskUmbilicalProtocol taskUmbilical,
 			BufferUmbilicalProtocol umbilical) throws IOException {
 		int window = job.getInt("mapred.iterative.reduce.window", 1000);
-		this.ftsupport = job.getBoolean("mapred.iterative.ftsupport", false);
+		this.ftsupport = job.getBoolean("priter.checkpoint", true);
 
 		this.iterReducer = (IterativeReducer)ReflectionUtils.newInstance(job.getReducerClass(), job);
 		if (this.pkvBuffer == null) {
@@ -711,7 +711,7 @@ public class ReduceTask extends Task {
 			if(this.spillIter || this.checkpointIter > 0){
 				long sortstart = new Date().getTime();
 				
-				LOG.info("average processing " + pkvBuffer.actualEmit + " takes time " + (sortstart-lasttime));
+				//LOG.info("average processing " + pkvBuffer.actualEmit + " takes time " + (sortstart-lasttime));
 				lasttime = sortstart;
 				
 				//retrieve the top records, and generate a file
@@ -743,7 +743,7 @@ public class ReduceTask extends Task {
 					}
 				}
 				
-				LOG.info("iteration " + iterindex + "emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
+				//LOG.info("iteration " + iterindex + "emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
 				iterindex++;
 			}
 			

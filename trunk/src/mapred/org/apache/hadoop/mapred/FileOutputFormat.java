@@ -233,7 +233,7 @@ public abstract class FileOutputFormat<K, V> implements OutputFormat<K, V> {
     
 	  //if it is a iterative process, we should remain the temporary file which is snapshot
     //${mapred.out.dir}/${id}/${name}
-	  if(conf.getBoolean("mapred.job.iterative", false)){
+	  if(conf.getBoolean("priter.job", false)){
 		  int taskid = context.getTaskAttemptID().getTaskID().getId();
 		  String outsnapshotdir = outputPath + "/" + taskid;
 		  return new Path(outsnapshotdir, name);

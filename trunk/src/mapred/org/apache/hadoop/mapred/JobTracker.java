@@ -3628,7 +3628,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				TimeSeq com1 = seq.get(seq.size()-1);
 				TimeSeq com2 = seq.get(0);
 				
-				if(recoverIterations == 0) recoverIterations = jobs.get(jobid).getJobConf().getInt("mapred.dump.frequency", 20);
+				if(recoverIterations == 0) recoverIterations = jobs.get(jobid).getJobConf().getInt("priter.checkpoint.frequency", 10);
 				//migrate task
 				if(!taskReAssign && (iterIndex >= recoverIterations) && (com1.time - com2.time > jobs.get(jobid).getJobConf().getLong("mapred.iterative.lbtimethresh", 10000))){
 					String fromTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com1.taskid);
@@ -3684,7 +3684,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					}
 					*/
 					
-					this.recoverIterations = iterIndex + jobs.get(jobid).getJobConf().getInt("mapred.dump.frequency", 20);
+					this.recoverIterations = iterIndex + jobs.get(jobid).getJobConf().getInt("priter.checkpoint.frequency", 10);
 					this.taskReAssign = true;
 					this.checkpointIter = checkpoint;
 					this.checkpointSnapshot = snapshotCheckpoint;
