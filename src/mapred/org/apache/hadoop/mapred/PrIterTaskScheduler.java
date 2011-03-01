@@ -93,7 +93,7 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	    synchronized (jobQueue) {
 	      for (JobInProgress job : jobQueue) {
 	        if (job.getStatus().getRunState() == JobStatus.RUNNING) {
-	        	if(job.getJobConf().getBoolean("mapred.job.iterative", false)){
+	        	if(job.getJobConf().getBoolean("priter.job", false)){
 	  	          if(!taskTrackerMap.containsKey(job.getJobID())){
 		        	  Map<String, ArrayList<Integer>> taskmap = new HashMap<String, ArrayList<Integer>>();
 		        	  taskTrackerMap.put(job.getJobID(), taskmap);
@@ -161,7 +161,7 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	          Task t = job.obtainNewMapTask(taskTracker, numTaskTrackers,
 	              taskTrackerManager.getNumberOfUniqueHosts());
 	          if (t != null) {
-	        	  if(job.getJobConf().getBoolean("mapred.job.iterative", false)){
+	        	  if(job.getJobConf().getBoolean("priter.job", false)){
 		        	  ArrayList<Integer> maps = null;
 		        	  if(!taskTrackerMap.get(job.getJobID()).containsKey((taskTracker.trackerName))){		  
 		        		  maps = new ArrayList<Integer>();
@@ -212,7 +212,7 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	            continue;
 	          }
 
-	          if(job.getJobConf().getBoolean("mapred.job.iterative", false)){
+	          if(job.getJobConf().getBoolean("priter.job", false)){
 		          int reducetasknum = -1;
 		          if(taskTrackerMap.get(job.getJobID()) == null) continue;
 		          if(taskTrackerMap.get(job.getJobID()).get(taskTracker.trackerName) == null) continue;

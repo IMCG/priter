@@ -1577,7 +1577,7 @@ public class TaskTracker
         // time-period greater than the configured time-out
         long timeSinceLastReport = now - tip.getLastProgressReport();
         if (timeSinceLastReport > jobTaskTimeout && !tip.wasKilled) {
-        	if(tip.getJobConf().getBoolean("mapred.job.iterative", false)){
+        	if(tip.getJobConf().getBoolean("priter.job", false)){
         		continue;
         	}
           String msg = 

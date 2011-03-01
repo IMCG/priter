@@ -565,7 +565,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 							((ReduceTask)task).spillIter = true;	
 							compStart = System.currentTimeMillis();
 							task.notifyAll();								
-						}else if(!conf.getBoolean("mapred.job.iterative.sort", true)){
+						}else if(conf.getBoolean("priter.job.inmem", true)){
 							// no need to be synchronized, the state is stored in hashmap
 							task.notifyAll();
 						}

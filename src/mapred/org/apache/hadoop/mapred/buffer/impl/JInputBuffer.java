@@ -540,11 +540,11 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	
 	@Override
 	public ValuesIterator<K, V> valuesIterator() throws IOException {
-		if(conf.getBoolean("mapred.job.iterative.sort", false)){
-			RawKeyValueIterator kvIter = this.createSortKVIterator(conf, rfs, reporter);
+		if(conf.getBoolean("priter.job.inmem", true)){
+			RawKeyValueIterator kvIter = this.createUnSortKVIterator(conf, rfs, reporter);
 			return new ValuesIterator<K, V>(kvIter, comparator, keyClass, valClass, conf, reporter);
 		}else{
-			RawKeyValueIterator kvIter = this.createUnSortKVIterator(conf, rfs, reporter);
+			RawKeyValueIterator kvIter = this.createSortKVIterator(conf, rfs, reporter);
 			return new ValuesIterator<K, V>(kvIter, comparator, keyClass, valClass, conf, reporter);
 		}
 	}

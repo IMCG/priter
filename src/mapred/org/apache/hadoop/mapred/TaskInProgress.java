@@ -899,14 +899,14 @@ class TaskInProgress {
     	 t = new PipelineMapTask(jobFile, taskid, partition); 
       }
       else {
-    	  LOG.info(conf.getBoolean("mapred.job.iterative", false));
+    	  LOG.info(conf.getBoolean("priter.job", false));
     	  t = new MapTask(jobFile, taskid, partition, 
     			  rawSplit.getClassName(), rawSplit.getBytes(),
-    			  conf.getBoolean("mapred.job.iterative", false));
+    			  conf.getBoolean("priter.job", false));
       }
     } else {
    		t = new ReduceTask(jobFile, taskid, partition, numMaps, 
-   				conf.getBoolean("mapred.job.iterative", false));
+   				conf.getBoolean("priter.job", false));
     }
     if (jobCleanup) {
       t.setJobCleanupTask();

@@ -413,12 +413,12 @@ public class MapTask extends Task {
 					codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
 				}
 				
-				if(job.getBoolean("mapred.job.iterative.sort", false)){
-					this.buffer = new JOutputBuffer(bufferUmbilical, this, job, 
+				if(job.getBoolean("priter.job.inmem", true)){
+					this.nsortBuffer = new UnSortOutputBuffer(bufferUmbilical, this, job, 
 							reporter, getProgress(), false, 
 							this.inputKeyClass, this.inputValClass, codecClass);
 				}else{
-					this.nsortBuffer = new UnSortOutputBuffer(bufferUmbilical, this, job, 
+					this.buffer = new JOutputBuffer(bufferUmbilical, this, job, 
 							reporter, getProgress(), false, 
 							this.inputKeyClass, this.inputValClass, codecClass);
 				}
@@ -427,7 +427,7 @@ public class MapTask extends Task {
 				LOG.info("I didn't consider this");
 			}
 			
-			ftsupport = job.getBoolean("mapred.iterative.ftsupport", false);
+			ftsupport = job.getBoolean("priter.checkpoint", true);
 			
 			IterativeMapper mapper = (IterativeMapper) ReflectionUtils.newInstance(job.getMapperClass(), job);
 			
@@ -479,41 +479,7 @@ public class MapTask extends Task {
 					
 			try{
 				synchronized(this){		
-					if(job.getBoolean("mapred.job.iterative.sort", false)){
-						//iteration loop, stop when reduce let it stop	
-						while(true) {
-							while(!pkvBuffer.next()){
-								LOG.info("total workload is " + workload);
-								mapper.iterate();
-								if(counter == 0){
-									LOG.info("sort no records left, do nothing");
-								}else{		
-									this.buffer.iterate();
-									counter = 0;
-								}
-														
-								LOG.info("no records, I am waiting!");
-								
-								setProgressFlag();
-								try {
-									this.wait();
-								} catch (InterruptedException e) {
-									// TODO Auto-generated catch block
-									e.printStackTrace();
-								}
-							
-							}
-							
-							Object keyObject = pkvBuffer.getTopKey();
-							Object valObject = pkvBuffer.getTopValue();
-							if(keyObject != null && valObject != null){
-								mapper.map(keyObject, valObject, this.buffer, reporter);
-								reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
-								workload++;
-								counter++;	
-							}			
-						}
-					}else{
+					if(job.getBoolean("priter.job.inmem", true)){
 						//iteration loop, stop when reduce let it stop
 						
 						//for processing time measurement
@@ -555,6 +521,40 @@ public class MapTask extends Task {
 							reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
 							workload++;
 							counter++;										
+						}
+					}else{
+						//iteration loop, stop when reduce let it stop	
+						while(true) {
+							while(!pkvBuffer.next()){
+								LOG.info("total workload is " + workload);
+								mapper.iterate();
+								if(counter == 0){
+									LOG.info("sort no records left, do nothing");
+								}else{		
+									this.buffer.iterate();
+									counter = 0;
+								}
+														
+								LOG.info("no records, I am waiting!");
+								
+								setProgressFlag();
+								try {
+									this.wait();
+								} catch (InterruptedException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
+							
+							}
+							
+							Object keyObject = pkvBuffer.getTopKey();
+							Object valObject = pkvBuffer.getTopValue();
+							if(keyObject != null && valObject != null){
+								mapper.map(keyObject, valObject, this.buffer, reporter);
+								reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
+								workload++;
+								counter++;	
+							}			
 						}
 					}
 	
