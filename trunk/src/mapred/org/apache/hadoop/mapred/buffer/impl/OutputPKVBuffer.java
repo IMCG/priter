@@ -135,7 +135,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		if(job.getFloat("mapred.iterative.exequeue.portion", -1) != -1){
 			this.queuelen = (int) (totalkeys * job.getFloat("mapred.iterative.exequeue.portion", 1));
 		}else if(job.getInt("mapred.iterative.exequeue.lenth", 1) != 1){
-			this.queuelen = job.getInt("mapred.iterative.exequeue.lenth", totalkeys) / partitions;
+			this.queuelen = job.getInt("mapred.iterative.exequeue.lenth", totalkeys);
 		}else if(job.getInt("mapred.iterative.exequeue.top", -1) != -1){
 			this.queuetop = job.getInt("mapred.iterative.exequeue.top", -1);
 		}
@@ -159,7 +159,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	}
 
 	public void init(IntWritable key, V iState, V cState){
-		P pri = (P) iterReducer.setPriority(key, iState);
+		P pri = (P) iterReducer.setPriority(key, iState, true);
 		PriorityRecord<P, V> newpkvRecord = new PriorityRecord<P, V>(pri, iState, cState);
 		this.stateTable.put(key, newpkvRecord);
 	}
@@ -174,7 +174,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			*/
 			actualEmit = 0;
 			ArrayList<KVRecord<IntWritable, V>> records = new ArrayList<KVRecord<IntWritable, V>>();
-			P threshold = (P) iterReducer.setPriority(iterReducer.setDefaultKey(), (V)iterReducer.setDefaultiState());
+			P threshold = (P) iterReducer.setPriority(iterReducer.setDefaultKey(), (V)iterReducer.setDefaultiState(), true);
 			
 			if(queuetop != -1){
 				//queue top extraction
@@ -209,7 +209,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 						records.add(new KVRecord<IntWritable, V>(k, v));
 						V iState = (V)iterReducer.setDefaultiState();
 						this.stateTable.get(k).setiState(iState);
-						P p = (P) iterReducer.setPriority(k, iState);
+						P p = (P) iterReducer.setPriority(k, iState, true);
 						this.stateTable.get(k).setPriority(p);
 						actualEmit++;
 					}	
@@ -219,7 +219,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				
 			}else{
 				//queulen extraction
-				if((stateTable.size() <= queuelen) || (stateTable.size() <= SAMPLESIZE)){
+				if((this.stateTable.size() <= queuelen) || (this.stateTable.size() <= SAMPLESIZE)){
 					for(IntWritable k : stateTable.keySet()){		
 						V v = stateTable.get(k).getiState();
 						P pri = stateTable.get(k).getPriority();
@@ -227,12 +227,12 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							records.add(new KVRecord<IntWritable, V>(k, v));
 							V iState = (V)iterReducer.setDefaultiState();
 							this.stateTable.get(k).setiState(iState);
-							P p = (P) iterReducer.setPriority(k, iState);
+							P p = (P) iterReducer.setPriority(k, iState, true);
 							this.stateTable.get(k).setPriority(p);
 							actualEmit++;	
 						}
 					}
-					LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs");
+					LOG.info("iteration " + iteration + "queuelen is " + queuelen + " expend " + actualEmit + " k-v pairs");
 				}else{
 					Random rand = new Random();
 					List<IntWritable> randomkeys = new ArrayList<IntWritable>(SAMPLESIZE);
@@ -265,7 +265,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							records.add(new KVRecord<IntWritable, V>(k, v));
 							V iState = (V)iterReducer.setDefaultiState();
 							this.stateTable.get(k).setiState(iState);
-							P p = (P) iterReducer.setPriority(k, iState);
+							P p = (P) iterReducer.setPriority(k, iState, true);
 							this.stateTable.get(k).setPriority(p);
 							actualEmit++;
 						}	
@@ -274,7 +274,6 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					LOG.info("iteration " + iteration + " expend " + actualEmit + " k-v pairs" + " threshold is " + threshold);
 				}
 			}
-
 			return records;
 		}
 	}
@@ -528,7 +527,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			if(stateTable.size() <= topk){
 				for(IntWritable k : stateTable.keySet()){	
 					V v = stateTable.get(k).getcState();
-					P pri = (P) iterReducer.setPriority(k, v);
+					P pri = (P) iterReducer.setPriority(k, v, false);
 					writer.append(pri, k, stateTable.get(k).getcState());	
 					//writer.write(k + "\t" + stateTable.get(k).getcState());
 				}
@@ -548,8 +547,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							public int compare(Object left, Object right){
 								V leftrecord = langForSort.get(left).getcState();
 								V rightrecord = langForSort.get(right).getcState();
-								P leftpriority = (P) iterReducer.setPriority((IntWritable)left, leftrecord);
-								P rightpriority = (P) iterReducer.setPriority((IntWritable)right, rightrecord);
+								P leftpriority = (P) iterReducer.setPriority((IntWritable)left, leftrecord, false);
+								P rightpriority = (P) iterReducer.setPriority((IntWritable)right, rightrecord, false);
 								return -leftpriority.compareTo(rightpriority);
 							}
 						});
@@ -559,7 +558,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		
 				for(IntWritable k : stateTable.keySet()){		
 					V v = stateTable.get(k).getcState();
-					P pri = (P) iterReducer.setPriority(k, v);
+					P pri = (P) iterReducer.setPriority(k, v, false);
 					if(pri.compareTo(threshold) > 0){
 						writer.append(pri, k, stateTable.get(k).getcState());
 						//writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");

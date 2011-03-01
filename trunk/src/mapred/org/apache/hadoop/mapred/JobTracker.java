@@ -62,6 +62,7 @@ import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.MapWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
@@ -3293,7 +3294,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						}
 					}else{
 						//3. max difference
-						if(this.mergerMap.get(jobid).valClass == IntWritable.class){
+						if(this.mergerMap.get(jobid).priClass == IntWritable.class){
 							int curr = ((IntWritable)total).get();
 							int last = ((IntWritable)lastTotal.get(jobid)).get();
 							int diff = Math.abs(last - curr);
@@ -3305,8 +3306,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 								completeJob(jobid);
 							}
 							
-							lastTotal.put(jobid, new IntWritable(curr));
-						}else if(this.mergerMap.get(jobid).valClass == DoubleWritable.class){
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex)) lastTotal.put(jobid, new IntWritable(curr));
+							
+						}else if(this.mergerMap.get(jobid).priClass == DoubleWritable.class){
 							double curr = ((DoubleWritable)total).get();
 							double last = ((DoubleWritable)lastTotal.get(jobid)).get();
 							double diff = Math.abs(last - curr);
@@ -3318,8 +3320,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 								completeJob(jobid);
 							}
 							
-							lastTotal.put(jobid, new DoubleWritable(curr));
-						}else if(this.mergerMap.get(jobid).valClass == FloatWritable.class){
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex))  lastTotal.put(jobid, new DoubleWritable(curr));
+						}else if(this.mergerMap.get(jobid).priClass == FloatWritable.class){
 							float curr = ((FloatWritable)total).get();
 							float last = ((FloatWritable)lastTotal.get(jobid)).get();
 							float diff = Math.abs(last - curr);
@@ -3331,7 +3333,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 								completeJob(jobid);
 							}
 							
-							lastTotal.put(jobid, new FloatWritable(curr));
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex)) lastTotal.put(jobid, new FloatWritable(curr));
 						}
 					}
 				}
@@ -3356,7 +3358,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		}
 	} 
 	
-	class Merger<P extends WritableComparable, V extends WritableComparable> {
+	class Merger<P extends WritableComparable, V extends Object> {
 		
 		private JobConf job;
 		private FileSystem hdfs;
@@ -3537,7 +3539,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			//Arrays.sort(recs, icomparator);
 			topkQueues.remove(snapshotindex);	
 			
-			if(priClass == IntWritable.class){
+			if(valClass == IntWritable.class){
 				int total = 0;
 				for(PKVRecord rec : recs){
 					writer.write(rec.k + "\t" + rec.v + "\n");
@@ -3547,7 +3549,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				ostream.close();
 				
 				return new IntWritable(total);
-			}else if(priClass == DoubleWritable.class){
+			}else if(valClass == DoubleWritable.class){
 				double total = 0;
 				for(PKVRecord rec : recs){
 					writer.write(rec.k + "\t" + rec.v + "\n");
@@ -3557,10 +3559,24 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				ostream.close();
 				
 				return new DoubleWritable(total);
-			}else if(priClass == FloatWritable.class){
+			}else if(valClass == FloatWritable.class){
 				float total = 0;
 				for(PKVRecord rec : recs){
 					writer.write(rec.k + "\t" + rec.v + "\n");
+					total += ((FloatWritable)rec.p).get();
+				}
+				writer.close();
+				ostream.close();
+				
+				return new FloatWritable(total);
+			}else if(valClass == MapWritable.class){
+				float total = 0;
+				for(PKVRecord rec : recs){
+					writer.write(rec.k + "\t" + rec.p + "\t");
+					for(Map.Entry<Writable, Writable> entry : ((MapWritable)rec.v).entrySet()){
+						writer.write(entry.getKey() + "," + entry.getValue() + " ");
+					}
+					writer.write("\n");
 					total += ((FloatWritable)rec.p).get();
 				}
 				writer.close();
