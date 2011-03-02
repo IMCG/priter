@@ -16,47 +16,46 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
 
+
 public class PageRank extends Configured implements Tool {
 	private String input;
 	private String output;
 	private String subGraphDir;
-	private float wearfactor;
+	private int partitions;
 	private int topk;
-	private int nNodes;
-	private int emitSize;
+	private int nPages;
+	private int startPages;
+	private float alpha;
+	private float stopthresh;
+	//private float avgdeg;
 	
 	//damping factor
 	public static final double DAMPINGFAC = 0.8;
 	public static final double RETAINFAC = 0.2;
+	public static final long OVHDTIME = 1000;
 
-	
 	private int pagerank() throws IOException{
 	    JobConf job = new JobConf(getConf());
 	    String jobname = "pagerank";
 	    job.setJobName(jobname);
        
 	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
-	    job.setInt(MainDriver.PG_TOTAL_PAGES, nNodes);
-	    job.setInt(MainDriver.TOP_K, topk);
-	    job.setBoolean(MainDriver.IN_MEM, true);
+	    job.setInt(MainDriver.START_NODE, startPages);
 	    
 	    FileInputFormat.addInputPath(job, new Path(input));
 	    FileOutputFormat.setOutputPath(job, new Path(output));
 	    job.setOutputFormat(TextOutputFormat.class);
-	    
-	    int ttnum = Util.getTTNum(job);
 	    	    
 	    //set for iterative process   
-	    job.setBoolean("mapred.job.iterative", true);
-	    job.setBoolean("mapred.job.iterative.sort", false);
-	    job.setInt("mapred.iterative.ttnum", ttnum);
-	    job.setInt("mapred.iterative.topk", topk);
-	    job.setBoolean("mapred.iterative.snapshot.descend", true);
-	    job.setFloat("mapred.iterative.output.wearfactor", wearfactor);
-	    job.setLong("mapred.iterative.snapshot.interval", 20000);
-	    job.setInt("mapred.iterative.reduce.emitsize", emitSize);
-	    job.setLong("mapred.iterative.reduce.window", -1);	  
-	        
+	    job.setBoolean("priter.job", true);
+	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
+	    job.setInt("priter.graph.nodes", nPages);						//total nodes
+	    job.setLong("priter.snapshot.interval", 20000);					//snapshot interval	
+	    job.setInt("priter.snapshot.topk", topk);						//topk
+	    job.setFloat("priter.queue.portion", alpha);					//execution queue
+	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
+	    		
+	          
 	    job.setJarByClass(PageRank.class);
 	    job.setMapperClass(PageRankMap.class);	
 	    job.setReducerClass(PageRankReduce.class);
@@ -64,29 +63,32 @@ public class PageRank extends Configured implements Tool {
 	    job.setMapOutputValueClass(DoubleWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
 	    job.setOutputValueClass(DoubleWritable.class);
+	    job.setPriorityClass(DoubleWritable.class);
 	    
 	    job.setPartitionerClass(UniDistIntPartitioner.class);
 
-	    job.setNumMapTasks(ttnum);
-	    job.setNumReduceTasks(ttnum);
+	    job.setNumMapTasks(partitions);
+	    job.setNumReduceTasks(partitions);
 	    
 	    JobClient.runJob(job);
 	    return 0;
 	}
 	@Override
 	public int run(String[] args) throws Exception {
-		if (args.length != 7) {
-		      System.err.println("Usage: pagerank <indir> <outdir> <subgraph> <topk> <number of nodes> <reduce output granularity> <wear factor>");
+		if (args.length != 9) {
+		      System.err.println("Usage: pagerank <indir> <outdir> <subgraph> <partitions> <topk> <number of nodes> <start nodes> <alpha> <stopthreshold>");
 		      System.exit(2);
 		}
 	    
 		input = args[0];
 	    output = args[1];
 	    subGraphDir = args[2];
-	    topk = Integer.parseInt(args[3]);
-	    nNodes = Integer.parseInt(args[4]);
-	    emitSize = Integer.parseInt(args[5]);
-	    wearfactor = Float.parseFloat(args[6]);
+	    partitions = Integer.parseInt(args[3]);
+	    topk = Integer.parseInt(args[4]);
+	    nPages = Integer.parseInt(args[5]);
+	    startPages = Integer.parseInt(args[6]);
+	    alpha = Float.parseFloat(args[7]);
+	    stopthresh = Float.parseFloat(args[8]);
     
 	    pagerank();
 	    
