@@ -21,7 +21,7 @@ public interface IterativeReducer<K2, V2, K3, V3,  P extends WritableComparable>
 	IntWritable setDefaultKey();
 	V3 setDefaultiState();
 	V3 setDefaultcState(IntWritable k);
-	P setPriority(IntWritable key, V3 iState, boolean iornot);
+	P decidePriority(IntWritable key, V3 iState, boolean iornot);
 	void updateState(K2 key, Iterator<V2> values, OutputPKVBuffer<P, V3> stateTable, Reporter reporter) throws IOException;	
 	
 	void iterate();
