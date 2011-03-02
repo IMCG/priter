@@ -1,6 +1,14 @@
 #summary PrIter API.
 
+= Configure JobConf ==
+
+void JobConf.setPriorityClass(Class<? extends Writable>);
+Writable JobConf.getPriorityClass();
+JobConf.setActivatorClass(Class<? extends PrIterActivator>);
+JobConf.setUpdatorClass(Class<? extends PrIterUpdator>);
+
 = User-Defined Functions =
+
 
 == Along with Map Task ==
 
