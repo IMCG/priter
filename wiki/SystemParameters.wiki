@@ -16,7 +16,7 @@
 || *property* || *type* || *default* || *description* ||
 || "priter.job.priority" || boolean || true || turn on prioritized iteration, otherwise it performs normal iteration on top of PrIter ||
 || "priter.job.inmem" || boolean || true || in-memory PrIter system, no need to sort, otherwise on-disk PrIter, need to sort||
-|| "priter.graph.partitions" || int || 2 times (# of tasktrackers) || the number of graph partitions ||
+|| "priter.graph.partitions" || int || 2 \* (# of tasktrackers) || the number of graph partitions ||
 || "priter.graph.nodes" || int || --- || the number of graph nodes ||
 || "priter.snapshot.interval" || long || 10000 || the time interval (ms) of snapshot generation for online query ||
 || "priter.snapshot.topk" || integer || 1000 || specify the number of interested top records ||
