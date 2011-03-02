@@ -1,24 +1,29 @@
 #summary of system parameters
 
-= System Parameters =
+= General System Parameters =
 
 || *property* || *type* || *default* || *description* ||
 || "priter.job" || boolean || true || turn on priter framework, otherwise it does normal MapReduce job ||
 || "mapred.jobtracker.taskScheduler" || string || org.apache.hadoop.mapred.PrIterTaskScheduler || use PrIter's task scheduler for assign MRPairs||
 || "priter.checkpoint" || boolean || true || turn on checkpoint for the support of fault tolerance and load balancing||
-|| "priter.checkpoint.frequency" || int || 5 || the StateTable checkpoint dump frequency for fault tolerance and load balancing ||
+|| "priter.checkpoint.frequency" || int || 10 || the StateTable checkpoint dump frequency for fault tolerance and load balancing ||
+|| "priter.task.migration.threshold" || long || 20000 || the time difference (ms) threshold to the average to perform task migration ||
+|| "priter.task.restart.threshold" || long || 40000 || how long (ms) is it should we wait to ensure some task is failed after receiving last task's iteration completion report||
+|| "priter.task.checkrollback.frequency" || long || 2000 || the frequency for a task to check if should do roll back ||
 
 
-|| "mapred.iterative.lbtimethresh" || long || 20000 || the time difference (ms) threshold to the average for performing load balancing ||
-|| "mapred.iterative.rollback.frequency" || long || 2000 || the frequency for a task to check if should do roll back ||
-
-
-
+= Application Specific Parameters =
+|| *property* || *type* || *default* || *description* ||
 || "priter.job.priority" || boolean || true || turn on prioritized iteration, otherwise it performs normal iteration on top of PrIter ||
 || "priter.job.inmem" || boolean || true || in-memory PrIter system, no need to sort, otherwise on-disk PrIter, need to sort||
-
-
-
-|| "mapred.iterative.topk" || integer || 1000 || specify the number of interested top records ||
-|| "mapred.iterative.topk.scale" || integer || 4 || how many top records to be sent to the merge worker. scale to the average. ||
-|| "mapred.iterative.snapshot.interval" || integer || 10000 || the time interval of snapshot generation ||
+|| "priter.graph.partitions" || int || 2 * (# of tasktrackers) || the number of graph partitions ||
+|| "priter.graph.nodes" || int || --- || the number of graph nodes ||
+|| "priter.snapshot.interval" || long || 10000 || the time interval (ms) of snapshot generation for online query ||
+|| "priter.snapshot.topk" || integer || 1000 || specify the number of interested top records ||
+|| "priter.snapshot.topk.scale" || integer || 4 || (priter.snapshot.topk.scale)*(priter.snapshot.topk)/(priter.graph.partitions) number of top records on each MRPair will be sent to merge worker to merge top k result online. ||
+|| "priter.queue.portion" || float || --- || the activation queue length (portion of total nodes) ||
+|| "priter.queue.length" || integer || --- || the activation queue length ||
+|| "priter.queue.uniqlength" || integer || --- || the activation queue length (unique queue, with elements are unique) ||
+|| "priter.stop.difference" || float || --- || stop iteration by check difference between two continuous top result ||
+|| "priter.stop.maxiteration" || integer || --- || stop iteration when it iterates max rounds ||
+|| "priter.stop.maxtime" || long || --- || stop iteration when its iterates long enough ||
