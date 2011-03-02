@@ -1,6 +1,5 @@
-#summary of system parameters
 
-= General System Parameters =
+= General Framework Parameters =
 
 || *property* || *type* || *default* || *description* ||
 || "priter.job" || boolean || true || turn on priter framework, otherwise it does normal MapReduce job ||
