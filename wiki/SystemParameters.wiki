@@ -11,7 +11,8 @@
 || "priter.task.restart.threshold" || long || 40000 || how long (ms) is it should we wait to ensure some task is failed after receiving last task's iteration completion report||
 || "priter.task.checkrollback.frequency" || long || 2000 || the frequency for a task to check if should do roll back ||
 
-
+---- 
+---- 
 = Application Specific Parameters =
 || *property* || *type* || *default* || *description* ||
 || "priter.job.priority" || boolean || true || turn on prioritized iteration, otherwise it performs normal iteration on top of PrIter ||
