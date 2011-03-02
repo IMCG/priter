@@ -21,6 +21,7 @@
 || *property* || *type* || *default* || *description* ||
 || "priter.job.priority" || boolean || true || turn on prioritized iteration, otherwise it performs normal iteration on top of PrIter ||
 || "priter.job.inmem" || boolean || true || in-memory PrIter system, no need to sort, otherwise on-disk PrIter, need to sort||
+|| "priter.job.priorityclass" || class || --- || the priority data type ||
 
 == Graph Information ==
 || "priter.graph.partitions" || int || 2 x (# of tasktrackers) || the number of graph partitions ||
