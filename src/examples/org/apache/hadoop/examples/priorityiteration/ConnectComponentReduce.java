@@ -28,12 +28,7 @@ public class ConnectComponentReduce extends MapReduceBase implements
 		iter++;
 		System.out.println("iteration " + iter + " total parsed " + workload);
 	}
-
-	@Override
-	public IntWritable setDefaultKey() {
-		return new IntWritable(1);
-	}
-
+	
 	@Override
 	public IntWritable setDefaultcState(IntWritable arg0) {
 		return new IntWritable(Integer.MIN_VALUE);

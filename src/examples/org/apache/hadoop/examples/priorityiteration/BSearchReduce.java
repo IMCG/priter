@@ -7,7 +7,6 @@ import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapred.IterativeReducer;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
@@ -24,18 +23,8 @@ public class BSearchReduce extends MapReduceBase implements
 	}
 	
 	@Override
-	public void reduce(IntWritable arg0, Iterator<IntWritable> arg1,
-			OutputCollector<IntWritable, IntWritable> arg2, Reporter arg3) throws IOException {
-	}
-
-	@Override
 	public void iterate() {
 		iterate++;
-	}
-
-	@Override
-	public IntWritable setDefaultKey() {
-		return new IntWritable(1);
 	}
 	
 	@Override

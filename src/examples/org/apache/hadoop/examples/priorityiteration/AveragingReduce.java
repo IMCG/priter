@@ -83,15 +83,6 @@ public class AveragingReduce extends MapReduceBase implements
 		reader.close();
 	}
 	
-
-	@Override
-	public void reduce(IntWritable arg0, Iterator<DoubleWritable> arg1,
-			OutputCollector<IntWritable, DoubleWritable> arg2, Reporter arg3)
-			throws IOException {
-		// TODO Auto-generated method stub
-		
-	}
-
 	@Override
 	public void iterate() {
 		iterate++;
@@ -107,11 +98,6 @@ public class AveragingReduce extends MapReduceBase implements
 				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(initvalue));
 			}
 		}
-	}
-
-	@Override
-	public IntWritable setDefaultKey() {
-		return new IntWritable(0);
 	}
 
 	@Override
