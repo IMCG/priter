@@ -33,11 +33,6 @@ public class PageRankReduce extends MapReduceBase implements
 		initvalue = PageRank.RETAINFAC * nPages / startPages;
 		partitions = job.getInt("mapred.iterative.partitions", 0);
 	}
-	@Override
-	public void reduce(IntWritable arg0, Iterator<DoubleWritable> arg1,
-			OutputCollector<IntWritable, DoubleWritable> arg2, Reporter arg3)
-			throws IOException {
-	}
 
 	@Override
 	public void iterate() {
@@ -55,11 +50,6 @@ public class PageRankReduce extends MapReduceBase implements
 				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(0.0));
 			}	
 		}
-	}
-
-	@Override
-	public IntWritable setDefaultKey() {
-		return new IntWritable(0);
 	}
 
 	@Override
