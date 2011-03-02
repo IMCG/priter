@@ -1,38 +1,36 @@
 #summary PrIter API.
 
-= Configure JobConf ==
+= Configure Job ==
 
-void JobConf.setPriorityClass(Class<? extends Writable>);
+`void JobConf.setPriorityClass(Class<? extends Writable>);`
 
-Writable JobConf.getPriorityClass();
+void JobConf.setActivatorClass(Class<? extends Activator>);
 
-JobConf.setActivatorClass(Class<? extends PrIterActivator>);
-
-JobConf.setUpdatorClass(Class<? extends PrIterUpdator>);
+void JobConf.setUpdatorClass(Class<? extends Updator>);
 
 = User-Defined Functions =
 
 
-== Along with Map Task ==
+== Along with Activator ==
 
-void initStarter(InputPKVBuffer<IntWritable, V1> starter) throws IOException;
+void initStarter(InputPKVBuffer<V> starter) throws IOException;
 
-void map();
+void activate();
 
 void iterate();
 
 
-== Along with Reduce Task ==
+== Along with Updator ==
 
-void initStateTable(OutputPKVBuffer<P, V3> stateTable);
+void initStateTable(OutputPKVBuffer<P, V> stateTable);
 
-V3 setDefaultiState();
+V setDefaultiState();
 
-V3 setDefaultcState(IntWritable k);
+V setDefaultcState(IntWritable nodeid);
 
-P decidePriority(IntWritable key, V3 iState, boolean iornot);
+P decidePriority(IntWritable nodeid, V iState, boolean iornot);
 
-void updateState(K2 key, Iterator<V2> values, OutputPKVBuffer<P, V3> stateTable, Reporter reporter) throws IOException;	
+void updateState(K nodeid, Iterator<V> iState, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;	
 	
 void iterate();
 
