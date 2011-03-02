@@ -28,9 +28,11 @@ import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileHandle;
 import org.apache.hadoop.mapred.IFile;
 import org.apache.hadoop.mapred.IterativeReducer;
+import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.ReduceTask;
@@ -131,18 +133,26 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.valClass = valClass;
 		this.priClass = priClass;
 
-		int partitions = job.getInt("mapred.iterative.partitions", 0);
-		int totalkeys = job.getInt("mapred.iterative.totalkeys", -1) / partitions;
-		if(job.getFloat("mapred.iterative.exequeue.portion", -1) != -1){
-			this.queuelen = (int) (totalkeys * job.getFloat("mapred.iterative.exequeue.portion", 1));
-		}else if(job.getInt("mapred.iterative.exequeue.lenth", 1) != 1){
-			this.queuelen = job.getInt("mapred.iterative.exequeue.lenth", totalkeys);
-		}else if(job.getInt("mapred.iterative.exequeue.top", -1) != -1){
-			this.queuetop = job.getInt("mapred.iterative.exequeue.top", -1);
+		int partitions = job.getInt("priter.graph.partitions", 0);
+		if(partitions == 0){
+			JobClient jobclient = new JobClient(job);
+			ClusterStatus status = jobclient.getClusterStatus();
+			partitions = 2 * status.getTaskTrackers();
 		}
 		
-		this.topk = job.getInt("mapred.iterative.topk", 1000);
-		this.topk = this.topk * job.getInt("mapred.iterative.topk.scale", 4) / partitions;
+		int totalkeys = job.getInt("priter.graph.nodes", -1) / partitions;
+		if(totalkeys <= 0) throw new IOException("priter.graph.nodes not defined.");
+		
+		if(job.getFloat("priter.queue.portion", -1) != -1){
+			this.queuelen = (int) (totalkeys * job.getFloat("priter.queue.portion", 1));
+		}else if(job.getInt("priter.queue.length", -1) != -1){
+			this.queuelen = job.getInt("priter.queue.length", totalkeys);
+		}else if(job.getInt("priter.queue.uniqlength", -1) != -1){
+			this.queuetop = job.getInt("priter.queue.uniqlength", -1);
+		}
+		
+		this.topk = job.getInt("priter.snapshot.topk", 1000);
+		this.topk = this.topk * job.getInt("priter.snapshot.topk.scale", 4) / partitions;
 		
 		this.iterReducer.initStateTable(this);
 	}

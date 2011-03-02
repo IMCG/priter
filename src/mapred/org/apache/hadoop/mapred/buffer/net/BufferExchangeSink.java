@@ -39,7 +39,9 @@ import java.util.concurrent.Executors;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.InputCollector;
+import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.ReduceTask;
 import org.apache.hadoop.mapred.Task;
@@ -155,7 +157,12 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	    
 	    this.cursor = new HashMap<TaskID, Position>();
 	    this.syncMapPos = new HashMap<Long, Integer>();
-	    this.syncMaps = conf.getInt("mapred.iterative.partitions", 1);
+	    this.syncMaps = conf.getInt("priter.graph.partitions", 0);
+		if(syncMaps == 0){
+			JobClient jobclient = new JobClient(conf);
+			ClusterStatus status = jobclient.getClusterStatus();
+			syncMaps = 2 * status.getTaskTrackers();
+		}
 	    
 		this.executor = Executors.newFixedThreadPool(Math.min(maxConnections, Math.max(numInputs, 5)));
 		this.handlers = Collections.synchronizedSet(new HashSet<Handler>());
