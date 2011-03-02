@@ -868,11 +868,24 @@ public class TaskTracker
     private JobID jobId;
     private long lastFetchTime;
     private boolean fetchAgain;
+    private int partitions;
      
     public FetchStatus(JobID jobId, int numMaps) {
       this.fromEventId = new IntWritable(0);
       this.jobId = jobId;
       this.allEvents = new ArrayList<TaskCompletionEvent>(numMaps);
+      
+      try{
+    	  partitions = runningJobs.get(jobId).jobConf.getInt("priter.graph.partitions", 0);
+  		if(partitions == 0){
+  			JobClient jobclient = new JobClient(runningJobs.get(jobId).jobConf);
+  			ClusterStatus status = jobclient.getClusterStatus();
+  			partitions = status.getTaskTrackers();
+  		}
+      }catch (Exception e){
+    	  e.printStackTrace();
+      }
+		
     }
     
     /**
@@ -928,7 +941,7 @@ public class TaskTracker
         synchronized (allEvents) {
         	for (TaskCompletionEvent e : recentEvents) {
         		if ((e.isMap == isMap) && 
-        				(e.getTaskAttemptId().getId() <= runningJobs.get(jobId).jobConf.getInt("mapred.iterative.partitions", 0))){
+        				(e.getTaskAttemptId().getId() <= partitions)){
         			//LOG.info("add event : " + e + " is map? " + isMap);
         			allEvents.add(e);
         		}

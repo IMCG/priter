@@ -1975,7 +1975,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		for (TaskAttemptID taskid : trackerToTaskMap.get(trackerName)) {
         	if(currjob == null){
         		currjob = getJob(taskid.getJobID());
-        		partitions = currjob.getJobConf().getInt("mapred.iterative.partitions", 0);
+        		partitions = currjob.getJobConf().getInt("priter.graph.partitions", 0);
+        		if(partitions == 0){
+        			partitions = 2 * getClusterStatus().getTaskTrackers();
+        		}
         	}
         	
     		if(taskid.getTaskID().getId() >= partitions) continue;
@@ -3276,8 +3279,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					WritableComparable total = this.mergerMap.get(jobid).writeTopK(snapshotIndex);
 					
 					//stopcheck	
-					int maxiter = jobs.get(jobid).getJobConf().getInt("mapred.iterative.stop.maxiter", Integer.MAX_VALUE);
-					long maxtime = jobs.get(jobid).getJobConf().getLong("mapred.iterative.stop.timelimit", Long.MAX_VALUE);
+					int maxiter = jobs.get(jobid).getJobConf().getInt("priter.stop.maxiteration", Integer.MAX_VALUE);
+					long maxtime = jobs.get(jobid).getJobConf().getLong("priter.stop.maxtime", Long.MAX_VALUE);
+					float threshold = jobs.get(jobid).getJobConf().getFloat("priter.stop.difference", 0);
 					if(maxiter != Integer.MAX_VALUE){
 						//1. max iteration
 						if(iterIndex > maxiter){
@@ -3286,7 +3290,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						}
 					}else if(maxtime != Long.MAX_VALUE){
 						//2. max time
-						long currtime = snapshotIndex * jobs.get(jobid).getJobConf().getInt("mapred.iterative.snapshot.interval", 10000);
+						long currtime = snapshotIndex * jobs.get(jobid).getJobConf().getInt("priter.snapshot.interval", 20000);
 						
 						if(currtime > maxtime){
 							LOG.info("OK, max time reached, let kill job");
@@ -3300,7 +3304,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							int diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
-							int threshold = jobs.get(jobid).getJobConf().getInt("mapred.iterative.stop.threshold", 0);
 							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
@@ -3314,7 +3317,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							double diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
-							double threshold = jobs.get(jobid).getJobConf().getFloat("mapred.iterative.stop.threshold", 0);
 							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
@@ -3327,7 +3329,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							float diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
-							float threshold = jobs.get(jobid).getJobConf().getFloat("mapred.iterative.stop.threshold", 0);
 							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
@@ -3391,7 +3392,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		    this.valBuffer = new DataInputBuffer();
 		    
 		    descend = job.getBoolean("mapred.iterative.snapshot.descend", true) ? true : false;			
-			topk = job.getInt("mapred.iterative.topk", 1000);
+			topk = job.getInt("priter.snapshot.topk", 1000);
 			outputDir = job.get("mapred.output.dir");
 			if(outputDir == null) throw new IOException("no output dir");
 			/*
@@ -3630,7 +3631,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				
 				if(recoverIterations == 0) recoverIterations = jobs.get(jobid).getJobConf().getInt("priter.checkpoint.frequency", 10);
 				//migrate task
-				if(!taskReAssign && (iterIndex >= recoverIterations) && (com1.time - com2.time > jobs.get(jobid).getJobConf().getLong("mapred.iterative.lbtimethresh", 10000))){
+				if(!taskReAssign && (iterIndex >= recoverIterations) && (com1.time - com2.time > jobs.get(jobid).getJobConf().getLong("priter.task.migration.threshold", 20000))){
 					String fromTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com1.taskid);
 					String toTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com2.taskid);
 					int migrateTaskId = com1.taskid;

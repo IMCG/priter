@@ -163,17 +163,14 @@ public class ReduceTask extends Task {
 		private TaskUmbilicalProtocol trackerUmbilical;
 		private int lastiter = -1;
 		
-		public snapshotThread(TaskUmbilicalProtocol umbilical, Task task) {
+		public snapshotThread(TaskUmbilicalProtocol umbilical, Task task) throws IOException {
 			//topk = conf.getInt("mapred.iterative.topk", 1000);
 			//get number of tasktrackers
-			partitions = conf.getInt("mapred.iterative.partitions", -1);
-			if(partitions == -1){
-				try {
-					throw new Exception("should specify the number of partitions");
-				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}		
+			partitions = conf.getInt("priter.graph.partitions", 0);
+			if(partitions == 0){
+				JobClient jobclient = new JobClient(conf);
+				ClusterStatus status = jobclient.getClusterStatus();
+				partitions = 2 * status.getTaskTrackers();
 			}
 			  		  
 			this.trackerUmbilical = umbilical;
@@ -185,7 +182,7 @@ public class ReduceTask extends Task {
 			while(true) {
 				synchronized(this){
 					try{
-						this.wait(conf.getLong("mapred.iterative.snapshot.interval", 20000));
+						this.wait(conf.getLong("priter.snapshot.interval", 20000));
 						LOG.info("pkvBuffer size " + pkvBuffer.size() + " index " + snapshotIndex + " total maps is " + pkvBuffer.total_map);
 						
 						while((pkvBuffer == null) || (pkvBuffer.size() == 0)){
@@ -232,7 +229,7 @@ public class ReduceTask extends Task {
 		private Task task;
 		
 		public RollbackCheckThread(TaskUmbilicalProtocol umbilical, BufferExchangeSink sink, InputCollector buffer, Task task) {
-			interval = conf.getInt("mapred.iterative.rollback.frequency", 2000);		  
+			interval = conf.getInt("priter.task.checkrollback.frequency", 2000);		  
 			this.trackerUmbilical = umbilical;
 			this.buffersink = sink;
 			this.buffer = buffer;
@@ -511,7 +508,7 @@ public class ReduceTask extends Task {
 	protected void iteration(JobConf job, InputCollector inputCollector,
 			BufferExchangeSink sink, TaskUmbilicalProtocol taskUmbilical,
 			BufferUmbilicalProtocol umbilical) throws IOException {
-		int window = job.getInt("mapred.iterative.reduce.window", 1000);
+		int window = job.getInt("mapred.iterative.reduce.window", -1);
 		this.ftsupport = job.getBoolean("priter.checkpoint", true);
 
 		this.iterReducer = (IterativeReducer)ReflectionUtils.newInstance(job.getReducerClass(), job);

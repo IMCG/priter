@@ -180,7 +180,7 @@ public class MapTask extends Task {
 		private Task task;
 		
 		public RollbackCheckThread(TaskUmbilicalProtocol umbilical, BufferExchangeSink sink, Task task, InputPKVBuffer pkvBuffer) {
-			interval = conf.getInt("mapred.iterative.rollback.frequency", 2000);		  
+			interval = conf.getInt("priter.task.checkrollback.frequency", 2000);		  
 			this.trackerUmbilical = umbilical;
 			this.buffersink = sink;
 			this.task = task;
