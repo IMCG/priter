@@ -39,6 +39,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableFactories;
 import org.apache.hadoop.io.WritableFactory;
@@ -301,7 +302,7 @@ public class ReduceTask extends Task {
 	private boolean inputSnapshots = false;
 	private boolean stream = false;
 	private Reducer reducer = null;
-	private IterativeReducer iterReducer = null;
+	private Updator updator = null;
 	public boolean spillIter = false;
 	
 	private MapOutputFetcher fetcher = null;
@@ -511,12 +512,12 @@ public class ReduceTask extends Task {
 		int window = job.getInt("mapred.iterative.reduce.window", -1);
 		this.ftsupport = job.getBoolean("priter.checkpoint", true);
 
-		this.iterReducer = (IterativeReducer)ReflectionUtils.newInstance(job.getReducerClass(), job);
+		this.updator = (Updator)ReflectionUtils.newInstance(job.getUpdatorClass(), job);
 		if (this.pkvBuffer == null) {
 			Progress progress = sink.getProgress(); 				
 			this.pkvBuffer = new OutputPKVBuffer(umbilical, this, job, reporter, progress, 
 										priorityClass, outputValClass, 
-										this.iterReducer);
+										this.updator);
 		}
 		
 		if(this.checkpointIter > 0){
@@ -644,7 +645,7 @@ public class ReduceTask extends Task {
 					ValuesIterator values = input.valuesIterator();
 					while (values.more()) {	
 						count++;
-						iterReducer.updateState(values.getKey(), values, (OutputPKVBuffer)output, reporter);
+						updator.updateState((IntWritable)values.getKey(), values, (OutputPKVBuffer)output, reporter);
 
 						values.nextKey();
 						
@@ -715,7 +716,7 @@ public class ReduceTask extends Task {
 				OutputFile outputFile = pkvBuffer.spillTops();
 				if(outputFile != null){
 					umbilical.output(outputFile);
-					iterReducer.iterate();
+					updator.iterate();
 					LOG.info("output file " + outputFile);
 				}else{
 					LOG.info("no record is reduced, so wait!");

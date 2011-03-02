@@ -16,7 +16,6 @@ import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.IFile;
@@ -28,26 +27,25 @@ import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.util.Progress;
 
-public class InputPKVBuffer<K extends Object, V extends Object> implements
-		InputCollector<K, V> {
+public class InputPKVBuffer<V extends Object> implements
+		InputCollector<IntWritable, V> {
 
 	private static final Log LOG = LogFactory.getLog(InputPKVBuffer.class.getName());
 	
 	private int iteration = 0;
 	private FileSystem hdfs;
-	private K savedKey;
+	private IntWritable savedKey;
 	private V savedValue;			//for get K, V pair
 	private OutputFile.Header savedHeader = null;	
 	private Class<V> valClass;
-	private Deserializer keyDeserializer;	
+	private Deserializer<IntWritable> keyDeserializer;	
 	private Deserializer valDeserializer;	
 	private JobConf job;
-	private Queue<KVRecord<K, V>> recordsQueue = null;
+	private Queue<KVRecord<IntWritable, V>> recordsQueue = null;
 	public String exeQueueFile;
 
 	public InputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
-			Reporter reporter, Progress progress, 
-			Class<K> keyClass, Class<V> valClass) throws IOException{	
+			Reporter reporter, Progress progress, Class<V> valClass) throws IOException{	
 		
 		LOG.info("InputPKVBuffer is created for task " + task.getTaskID());
 		this.iteration = 0;
@@ -57,10 +55,10 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 
 		this.valClass = valClass;
 		SerializationFactory serializationFactory = new SerializationFactory(job);
-	    this.keyDeserializer = serializationFactory.getDeserializer(keyClass);
+	    this.keyDeserializer = serializationFactory.getDeserializer(IntWritable.class);
 	    this.valDeserializer = serializationFactory.getDeserializer(valClass);
 	    
-	    this.recordsQueue = new LinkedList<KVRecord<K, V>>();
+	    this.recordsQueue = new LinkedList<KVRecord<IntWritable, V>>();
 	    this.exeQueueFile = job.get("mapred.output.dir") + "/_ExeQueueTemp/" + 
 	    					task.getTaskID().getTaskID().getId() + "-exequeue";
 	}
@@ -85,9 +83,9 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 	}
 
 	//should be called in user-defined IterativeMapper.initPKVBuffer()
-	public synchronized void init(K key, V value) throws IOException {
+	public synchronized void init(IntWritable key, V value) throws IOException {
 		synchronized(this.recordsQueue){
-			KVRecord<K, V> rec = new KVRecord<K, V>(key, value);
+			KVRecord<IntWritable, V> rec = new KVRecord<IntWritable, V>(key, value);
 			this.recordsQueue.add(rec);
 		}
 	}
@@ -185,12 +183,12 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 				while (reader.next(key, value)) {
 					keyDeserializer.open(key);
 					valDeserializer.open(value);
-					Object keyObject = null;
+					IntWritable keyObject = null;
 					Object valObject = null;
 					keyObject = keyDeserializer.deserialize(keyObject);
 					valObject = valDeserializer.deserialize(valObject);
 
-					this.recordsQueue.add(new KVRecord<K, V>((K)keyObject, (V)valObject));
+					this.recordsQueue.add(new KVRecord<IntWritable, V>(keyObject, (V)valObject));
 				}
 				
 				long end = System.currentTimeMillis();
@@ -207,16 +205,11 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 	public OutputFile.Header getRecentHeader() {
 		return this.savedHeader;
 	}
-	
-	@Override
-	public ValuesIterator<K, V> valuesIterator() throws IOException {
-		return null;
-	}
 
 	public synchronized boolean next() {
 		//LOG.info("doing next, for map . size is " + this.recordsQueue.size());
 		synchronized(this.recordsQueue){
-			KVRecord<K, V> record = this.recordsQueue.poll();
+			KVRecord<IntWritable, V> record = this.recordsQueue.poll();
 			if(record == null){
 				this.recordsQueue.clear();
 				this.recordsQueue.notifyAll();
@@ -232,11 +225,17 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 	}
 	
 	
-	public K getTopKey() {
+	public IntWritable getTopKey() {
 		return this.savedKey;
 	}
 	
 	public V getTopValue() {
 		return this.savedValue;
+	}
+
+	@Override
+	public ValuesIterator<IntWritable, V> valuesIterator() throws IOException {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }

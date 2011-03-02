@@ -37,6 +37,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
@@ -50,6 +51,7 @@ import org.apache.hadoop.mapred.buffer.net.BufferExchange;
 import org.apache.hadoop.mapred.buffer.net.BufferRequest;
 import org.apache.hadoop.mapred.buffer.net.BufferExchangeSink;
 import org.apache.hadoop.mapred.buffer.net.ReduceBufferRequest;
+import org.apache.hadoop.mapred.lib.PrIterPartitioner;
 import org.apache.hadoop.util.ReflectionUtils;
 
 /** A Map task. */
@@ -397,6 +399,7 @@ public class MapTask extends Task {
 
 		//iterative version
 		if(this.iterative){
+			job.setPartitionerClass(PrIterPartitioner.class);
 			
 			setPhase(TaskStatus.Phase.PIPELINE); 
 			
@@ -412,7 +415,7 @@ public class MapTask extends Task {
 				if (conf.getCompressMapOutput()) {
 					codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
 				}
-				
+
 				if(job.getBoolean("priter.job.inmem", true)){
 					this.nsortBuffer = new UnSortOutputBuffer(bufferUmbilical, this, job, 
 							reporter, getProgress(), false, 
@@ -429,10 +432,9 @@ public class MapTask extends Task {
 			
 			ftsupport = job.getBoolean("priter.checkpoint", true);
 			
-			IterativeMapper mapper = (IterativeMapper) ReflectionUtils.newInstance(job.getMapperClass(), job);
+			Activator activator = (Activator) ReflectionUtils.newInstance(job.getActivatorClass(), job);
 			
-			InputPKVBuffer pkvBuffer = new InputPKVBuffer(bufferUmbilical, this, job, reporter, null, 
-					this.inputKeyClass, this.inputValClass);
+			InputPKVBuffer pkvBuffer = new InputPKVBuffer(bufferUmbilical, this, job, reporter, null, this.inputValClass);
 			
 		    /* This object will be the sink's input buffer. */
 			BufferExchangeSink sink = new BufferExchangeSink(job, pkvBuffer, this); 
@@ -463,7 +465,7 @@ public class MapTask extends Task {
 			//mapper.configure(job);
 			LOG.info("mapper initPKVBuffer phase");
 			if(this.checkpointIter <= 0){
-				mapper.initStarter(pkvBuffer);
+				activator.initStarter(pkvBuffer);
 			}
 		
 			if(ftsupport){
@@ -487,7 +489,7 @@ public class MapTask extends Task {
 						long processend;
 						while(true) {
 							while(!pkvBuffer.next()){
-								mapper.iterate();
+								activator.iterate();
 								if(counter == 0){
 									LOG.info("no records left, do nothing");
 								}else{		
@@ -515,9 +517,9 @@ public class MapTask extends Task {
 								workload = 0;
 							}
 											
-							Object keyObject = pkvBuffer.getTopKey();
+							IntWritable keyObject = pkvBuffer.getTopKey();
 							Object valObject = pkvBuffer.getTopValue();
-							mapper.map(keyObject, valObject, this.nsortBuffer, reporter);
+							activator.activate(keyObject, valObject, this.nsortBuffer, reporter);
 							reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
 							workload++;
 							counter++;										
@@ -527,7 +529,7 @@ public class MapTask extends Task {
 						while(true) {
 							while(!pkvBuffer.next()){
 								LOG.info("total workload is " + workload);
-								mapper.iterate();
+								activator.iterate();
 								if(counter == 0){
 									LOG.info("sort no records left, do nothing");
 								}else{		
@@ -547,10 +549,10 @@ public class MapTask extends Task {
 							
 							}
 							
-							Object keyObject = pkvBuffer.getTopKey();
+							IntWritable keyObject = pkvBuffer.getTopKey();
 							Object valObject = pkvBuffer.getTopValue();
 							if(keyObject != null && valObject != null){
-								mapper.map(keyObject, valObject, this.buffer, reporter);
+								activator.activate(keyObject, valObject, this.buffer, reporter);
 								reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
 								workload++;
 								counter++;	

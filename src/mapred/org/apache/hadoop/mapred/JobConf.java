@@ -748,6 +748,24 @@ public class JobConf extends Configuration {
   public void setMapperClass(Class<? extends Mapper> theClass) {
     setClass("mapred.mapper.class", theClass, Mapper.class);
   }
+  
+  /**
+   * Get the {@link Mapper} class for the job.
+   * 
+   * @return the {@link Mapper} class for the job.
+   */
+  public Class<? extends Activator> getActivatorClass() {
+    return getClass("priter.activator.class", null, Activator.class);
+  }
+  
+  /**
+   * Set the {@link Mapper} class for the job.
+   * 
+   * @param theClass the {@link Mapper} class for the job.
+   */
+  public void setActivatorClass(Class<? extends Activator> theClass) {
+    setClass("priter.activator.class", theClass, Activator.class);
+  }
 
   /**
    * Get the {@link MapRunnable} class for the job.
@@ -808,6 +826,25 @@ public class JobConf extends Configuration {
    */
   public void setReducerClass(Class<? extends Reducer> theClass) {
     setClass("mapred.reducer.class", theClass, Reducer.class);
+  }
+  
+  /**
+   * Get the {@link Reducer} class for the job.
+   * 
+   * @return the {@link Reducer} class for the job.
+   */
+  public Class<? extends Updator> getUpdatorClass() {
+    return getClass("priter.updator.class",
+                    null, Updator.class);
+  }
+  
+  /**
+   * Set the {@link Reducer} class for the job.
+   * 
+   * @param theClass the {@link Reducer} class for the job.
+   */
+  public void setUpdatorClass(Class<? extends Updator> theClass) {
+    setClass("priter.updator.class", theClass, Updator.class);
   }
 
   /**

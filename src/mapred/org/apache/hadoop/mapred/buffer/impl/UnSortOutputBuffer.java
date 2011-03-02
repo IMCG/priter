@@ -37,6 +37,7 @@ import org.apache.hadoop.mapred.Merger.Segment;
 import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.mapred.buffer.impl.Buffer;
+import org.apache.hadoop.mapred.lib.PrIterPartitioner;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.Progress;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -587,6 +588,7 @@ public class UnSortOutputBuffer<K extends Object, V extends Object>
 		partitions = taskid.isMap() ? job.getNumReduceTasks() : 1;
 		partitioner = (Partitioner)
 		ReflectionUtils.newInstance(job.getPartitionerClass(), job);
+
 		// sanity checks
 		final float spillper = job.getFloat("io.sort.spill.percent",(float)0.8);
 		final float recper = job.getFloat("io.sort.record.percent",(float)0.05);
