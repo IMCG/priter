@@ -2,6 +2,31 @@
 
 = User-Defined Functions =
 
+== Along with Map Task ==
+
+void initStarter(InputPKVBuffer<IntWritable, V1> starter) throws IOException;
+
+void map();
+
+void iterate();
+
+
+== Along with Reduce Task ==
+
+void initStateTable(OutputPKVBuffer<P, V3> stateTable);
+
+V3 setDefaultiState();
+
+V3 setDefaultcState(IntWritable k);
+
+P decidePriority(IntWritable key, V3 iState, boolean iornot);
+
+void updateState(K2 key, Iterator<V2> values, OutputPKVBuffer<P, V3> stateTable, Reporter reporter) throws IOException;	
+	
+void iterate();
+
+
+
 || *function* || *input* || *output* || *description* || *invoked* ||
 || Map.initStateTable() || StateTable || na || initialize the StateTable || in the init phase ||
 || Map.loadStaticData() || static data path || na || load the static data to memory || in the init phase ||
