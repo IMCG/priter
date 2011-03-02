@@ -13,18 +13,30 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
+
 public class PageRankReduce extends MapReduceBase implements
 		IterativeReducer<IntWritable, DoubleWritable, IntWritable, DoubleWritable, DoubleWritable> {
 	
 	private JobConf job;
 	private int nPages;
+	private int startPages;
 	private int workload = 0;
 	private int iterate = 0;
+	private double initvalue;
+	private int partitions;
 
 	@Override
 	public void configure(JobConf job) {		
-		nPages = job.getInt(MainDriver.PG_TOTAL_PAGES, 0);	
+		nPages = job.getInt("priter.graph.nodes", 0);	
+		startPages = job.getInt(MainDriver.START_NODE, nPages);
 		this.job = job;
+		initvalue = PageRank.RETAINFAC * nPages / startPages;
+		partitions = job.getInt("mapred.iterative.partitions", 0);
+	}
+	@Override
+	public void reduce(IntWritable arg0, Iterator<DoubleWritable> arg1,
+			OutputCollector<IntWritable, DoubleWritable> arg2, Reporter arg3)
+			throws IOException {
 	}
 
 	@Override
@@ -36,11 +48,12 @@ public class PageRankReduce extends MapReduceBase implements
 	public void initStateTable(
 			OutputPKVBuffer<DoubleWritable, DoubleWritable> stateTable) {
 		int n = Util.getTaskId(job);
-		int ttnum = Util.getTTNum(job);
-		for(int i=n; i<nPages; i=i+ttnum){
-			if(i<100){
-				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(0.2));
-			}
+		for(int i=n; i<nPages; i=i+partitions){
+			if(i < startPages){
+				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(initvalue));
+			}else{
+				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(0.0));
+			}	
 		}
 	}
 
@@ -53,27 +66,19 @@ public class PageRankReduce extends MapReduceBase implements
 	public DoubleWritable setDefaultiState() {
 		return new DoubleWritable(0.0);
 	}
-	
+
 	@Override
 	public DoubleWritable setDefaultcState(IntWritable key) {
-		if(key.get() < 100){
-			return new DoubleWritable(0.2);
+		if(key.get() < startPages){
+			return new DoubleWritable(initvalue);
 		}else{
 			return new DoubleWritable(0.0);
 		}	
 	}
-
+	
 	@Override
-	public DoubleWritable setPriority(IntWritable key, DoubleWritable iState, boolean iorc) {
-		return new DoubleWritable(iState.get());
-	}
-
-	@Override
-	public void reduce(IntWritable key, Iterator<DoubleWritable> values,
-			OutputCollector<IntWritable, DoubleWritable> output,
-			Reporter reporter) throws IOException {
-		// TODO Auto-generated method stub
-		
+	public DoubleWritable decidePriority(IntWritable key, DoubleWritable arg0, boolean iorc) {
+		return new DoubleWritable(arg0.get());
 	}
 
 	@Override
@@ -81,6 +86,8 @@ public class PageRankReduce extends MapReduceBase implements
 			OutputPKVBuffer<DoubleWritable, DoubleWritable> buffer, Reporter report)
 			throws IOException {
 		workload++;		
+		report.setStatus(String.valueOf(workload));
+		
 		double delta = 0.0;
 		while(values.hasNext()){				
 			delta += values.next().get();	
@@ -97,7 +104,9 @@ public class PageRankReduce extends MapReduceBase implements
 		}else{
 			pkvRecord = new PriorityRecord<DoubleWritable, DoubleWritable>(
 					new DoubleWritable(delta), new DoubleWritable(delta), new DoubleWritable(delta));
-			buffer.stateTable.put(key, pkvRecord);
+			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
 		}
 	}
+
+
 }
