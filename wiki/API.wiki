@@ -26,7 +26,7 @@ _to be invoked before iteration starts, init the starter for iterative compuatti
 
 ====`void activate(IntWritable nodeid, V value, OutputCollector<IntWritable, V> output, Reporter reporter);`====
 
-_to be invoked when activating node with value, the neighbors of node will be affected_
+_to be invoked when activating node with value, the neighbors of node will be affected, users specify the values sent to neighbors to realize their algorithm logic_
 
 ====`void iterate();`====
 
@@ -34,24 +34,17 @@ _to be invoked after emitting all the results to neighbors after each iteation, 
 
 == Along with Updator ==
 
-void initStateTable(OutputPKVBuffer<P, V> stateTable);
+====`void initStateTable(OutputPKVBuffer<P, V> stateTable);`====
+_to be invoked before iteration starts, init statetable_
 
-V setDefaultiState();
+====`V resetiState();`====
+_to be invoked when node record reset, reset the node's iState_
 
-V setDefaultcState(IntWritable nodeid);
+====`P decidePriority(IntWritable nodeid, V iState, boolean iornot);`====
+_to be invoked when updating statetable or extracting top k result, decide node's execution priority (based on iState) or priority for online top k query (based on cState)_
 
-P decidePriority(IntWritable nodeid, V iState, boolean iornot);
-
-void updateState(K nodeid, Iterator<V> iState, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;	
+====`void updateState(K nodeid, Iterator<V> iState, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;`====
+_to be invoked when updating StateTable, users specify the update rule to realize their algorithm logic_
 	
-void iterate();
-
-
-
-|| *function* || *input* || *output* || *description* || *invoked* ||
-|| Map.initStateTable() || StateTable || na || initialize the StateTable || in the init phase ||
-|| Map.loadStaticData() || static data path || na || load the static data to memory || in the init phase ||
-|| Map.iterate() || na || na || do some summarization || after each map-reduce iteration ||
-|| Reduce.updateState() || output key-value pair || iState & cState || set each output key-value pair's state || after reduce operation ||
-|| Reduce.setPriority() || output key-value pair || priority || set each output key-value pair's priority || before enqueue ||
-|| Reduce.iterate() || na || na || do some summarization || after each map-reduce iteration ||
+====`void iterate();`====
+_to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes_
