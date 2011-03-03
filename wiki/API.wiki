@@ -3,7 +3,7 @@
 = Configure Job ==
 
 
-#`void JobConf.setActivatorClass(Class<? extends Activator>);`
+====`void JobConf.setActivatorClass(Class<? extends Activator>);`====
 
 _set the activator class_
 
