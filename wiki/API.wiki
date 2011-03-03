@@ -3,12 +3,15 @@
 = Configure Job ==
 
 _set the activator class_
+
 `void JobConf.setActivatorClass(Class<? extends Activator>);`
 
 _set the updator class_
+
 `void JobConf.setUpdatorClass(Class<? extends Updator>);`
 
 _set the priority class_
+
 `void JobConf.setPriorityClass(Class<? extends Writable>);`
 
 
@@ -19,12 +22,15 @@ _set the priority class_
 == Along with Activator class ==
 
 _to be invoked before iteration starts, init the starter for iterative compuattion_
+
 `void initStarter(InputPKVBuffer<V> starter) throws IOException;`
 
 _to be invoked when activating node with value, the neighbors of node will be affected_
+
 `void activate(IntWritable nodeid, V value, OutputCollector<IntWritable, V> output, Reporter reporter);``
 
 _to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes_
+
 `void iterate();`
 
 
