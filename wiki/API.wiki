@@ -24,14 +24,13 @@ _set the priority class_
 
 _to be invoked before iteration starts, init the starter for iterative compuattion_
 
+====`void activate(IntWritable nodeid, V value, OutputCollector<IntWritable, V> output, Reporter reporter);`====
+
 _to be invoked when activating node with value, the neighbors of node will be affected_
 
-`void activate(IntWritable nodeid, V value, OutputCollector<IntWritable, V> output, Reporter reporter);``
+====`void iterate();`====
 
 _to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes_
-
-`void iterate();`
-
 
 == Along with Updator ==
 
