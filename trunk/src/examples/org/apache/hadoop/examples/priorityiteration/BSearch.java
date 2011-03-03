@@ -50,15 +50,13 @@ public class BSearch extends Configured implements Tool {
 	    
 	    
 	    job.setJarByClass(BSearch.class);
-	    job.setMapperClass(BSearchMap.class);	
-	    job.setReducerClass(BSearchReduce.class);
+	    job.setActivatorClass(BSearchActivator.class);	
+	    job.setUpdatorClass(BSearchUpdator.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(IntWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
 	    job.setOutputValueClass(IntWritable.class);
-	    job.setPriorityClass(IntWritable.class);
-	    job.setPartitionerClass(UniDistIntPartitioner.class);
-	    
+	    job.setPriorityClass(IntWritable.class);    
 
 	    job.setNumMapTasks(partitions);
 	    job.setNumReduceTasks(partitions);

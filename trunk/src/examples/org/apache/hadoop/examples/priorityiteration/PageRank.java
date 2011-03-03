@@ -57,15 +57,13 @@ public class PageRank extends Configured implements Tool {
 	    		
 	          
 	    job.setJarByClass(PageRank.class);
-	    job.setMapperClass(PageRankMap.class);	
-	    job.setReducerClass(PageRankReduce.class);
+	    job.setActivatorClass(PageRankActivator.class);	
+	    job.setUpdatorClass(PageRankUpdator.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(DoubleWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
 	    job.setOutputValueClass(DoubleWritable.class);
 	    job.setPriorityClass(DoubleWritable.class);
-	    
-	    job.setPartitionerClass(UniDistIntPartitioner.class);
 
 	    job.setNumMapTasks(partitions);
 	    job.setNumReduceTasks(partitions);

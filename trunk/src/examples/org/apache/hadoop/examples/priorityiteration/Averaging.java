@@ -56,15 +56,13 @@ public class Averaging extends Configured implements Tool {
 	    
 	        
 	    job.setJarByClass(Averaging.class);
-	    job.setMapperClass(AveragingMap.class);	
-	    job.setReducerClass(AveragingReduce.class);
+	    job.setActivatorClass(AveragingActivator.class);	
+	    job.setUpdatorClass(AveragingUpdator.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(DoubleWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
 	    job.setOutputValueClass(DoubleWritable.class);
 	    job.setPriorityClass(DoubleWritable.class);
-	    
-	    job.setPartitionerClass(UniDistIntPartitioner.class);
 
 	    job.setNumMapTasks(partitions);
 	    job.setNumReduceTasks(partitions);
