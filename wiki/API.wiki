@@ -10,44 +10,48 @@
 
  * `void JobConf.setUpdatorClass(Class<? extends Updator>);`
 
-    _set the updator class_
+    set the updator class
 
 
  * `void JobConf.setPriorityClass(Class<? extends Writable>);`
 
-    _set the priority class_
+    set the priority class
 
 
 = User-Defined Functions =
 
-
 == Along with Activator class ==
 
-====`void initStarter(InputPKVBuffer<V> starter) throws IOException;`====
+ * `void initStarter(InputPKVBuffer<V> starter) throws IOException;`
 
-_to be invoked before iteration starts, init the starter for iterative compuattion_
+    to be invoked before iteration starts, init the starter for iterative compuattion
 
-====`void activate(IntWritable nodeid, V value, OutputCollector<IntWritable, V> output, Reporter reporter);`====
+ * `void activate(IntWritable nodeid, V value, OutputCollector<IntWritable, V> output, Reporter reporter);`
 
-_to be invoked when activating node with value, the neighbors of node will be affected, users specify the values sent to neighbors to realize their algorithm logic_
+    to be invoked when activating node with value, the neighbors of node will be affected, users specify the values sent to neighbors to realize their algorithm logic
 
-====`void iterate();`====
+ * `void iterate();`
 
-_to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes_
+    to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes
 
 == Along with Updator ==
 
-====`void initStateTable(OutputPKVBuffer<P, V> stateTable);`====
-_to be invoked before iteration starts, init statetable_
+ * `void initStateTable(OutputPKVBuffer<P, V> stateTable);`
 
-====`V resetiState();`====
-_to be invoked when node record reset, reset the node's iState_
+    to be invoked before iteration starts, init statetable
 
-====`P decidePriority(IntWritable nodeid, V iState, boolean iornot);`====
-_to be invoked when updating statetable or extracting top k result, decide node's execution priority (based on iState) or priority for online top k query (based on cState)_
+ * `V resetiState();`
 
-====`void updateState(K nodeid, Iterator<V> iState, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;`====
-_to be invoked when updating StateTable, users specify the update rule to realize their algorithm logic_
+    to be invoked when node record reset, reset the node's iState
+
+ * `P decidePriority(IntWritable nodeid, V iState, boolean iornot);`
+
+    to be invoked when updating statetable or extracting top k result, decide node's execution priority (based on iState) or priority for online top k query (based on cState)
+
+ * `void updateState(K nodeid, Iterator<V> iState, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;`
+
+    to be invoked when updating StateTable, users specify the update rule to realize their algorithm logic
 	
-====`void iterate();`====
-_to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes_
+ * `void iterate();`
+
+    to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes
