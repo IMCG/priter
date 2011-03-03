@@ -49,14 +49,13 @@ public class ConnectComponent extends Configured implements Tool {
 
 	    
 	    job.setJarByClass(ConnectComponent.class);
-	    job.setMapperClass(ConnectComponentMap.class);	
-	    job.setReducerClass(ConnectComponentReduce.class);
+	    job.setActivatorClass(ConnectComponentActivator.class);	
+	    job.setUpdatorClass(ConnectComponentUpdator.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(IntWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
 	    job.setOutputValueClass(IntWritable.class);
 	    job.setPriorityClass(IntWritable.class);
-	    job.setPartitionerClass(UniDistIntPartitioner.class);
 
 	    job.setNumMapTasks(partitions);
 	    job.setNumReduceTasks(partitions);
