@@ -7,11 +7,11 @@
 
 _set the activator class_
 
-`void JobConf.setUpdatorClass(Class<? extends Updator>);`
+====`void JobConf.setUpdatorClass(Class<? extends Updator>);`====
 
 _set the updator class_
 
-`void JobConf.setPriorityClass(Class<? extends Writable>);`
+====`void JobConf.setPriorityClass(Class<? extends Writable>);`====
 
 _set the priority class_
 
@@ -20,9 +20,9 @@ _set the priority class_
 
 == Along with Activator class ==
 
-_to be invoked before iteration starts, init the starter for iterative compuattion_
+====`void initStarter(InputPKVBuffer<V> starter) throws IOException;`====
 
-`void initStarter(InputPKVBuffer<V> starter) throws IOException;`
+_to be invoked before iteration starts, init the starter for iterative compuattion_
 
 _to be invoked when activating node with value, the neighbors of node will be affected_
 
