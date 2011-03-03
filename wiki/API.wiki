@@ -5,7 +5,7 @@
 
  * `void JobConf.setActivatorClass(Class<? extends Activator>);`
 
-    _set the activator class_
+    set the activator class
 
 
  * `void JobConf.setUpdatorClass(Class<? extends Updator>);`
