@@ -2,19 +2,18 @@
 
 = Configure Job ==
 
-_set the activator class_
 
 `void JobConf.setActivatorClass(Class<? extends Activator>);`
 
-_set the updator class_
+_set the activator class_
 
 `void JobConf.setUpdatorClass(Class<? extends Updator>);`
 
-_set the priority class_
+_set the updator class_
 
 `void JobConf.setPriorityClass(Class<? extends Writable>);`
 
-
+_set the priority class_
 
 = User-Defined Functions =
 
