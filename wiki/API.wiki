@@ -4,16 +4,16 @@
 
 
 ====`void JobConf.setActivatorClass(Class<? extends Activator>);`====
-
 _set the activator class_
 
-====`void JobConf.setUpdatorClass(Class<? extends Updator>);`====
 
+====`void JobConf.setUpdatorClass(Class<? extends Updator>);`====
 _set the updator class_
 
-====`void JobConf.setPriorityClass(Class<? extends Writable>);`====
 
+====`void JobConf.setPriorityClass(Class<? extends Writable>);`====
 _set the priority class_
+
 
 = User-Defined Functions =
 
