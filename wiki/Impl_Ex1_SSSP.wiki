@@ -9,17 +9,17 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 
 = Details =
 
-*_Map_* 
+*_Activator_* 
 
-Input: Key n, Value distance(n)
+Input: NodeID n, Value distance(n)
 {{{
-Set(links)=lookup n outlinks;
+Set(links)=lookup n's outlinks;
 for link in Set(links) do
   Output(link.endnode, distance(n)+link.weight);
 end for
 }}}
 
-*_Reduce_*
+*_Updator_*
 
 Input: Key n, Set (values)
 {{{
