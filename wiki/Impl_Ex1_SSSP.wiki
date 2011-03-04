@@ -49,8 +49,6 @@ public class SSSPActivator extends PrIterBase implements Activator<IntWritable> 
 *_Updator_*
 {{{
 public class SSSPUpdator extends PrIterBase implements Updator<IntWritable, IntWritable> {
-    private int iteration = 0;
-
     public void updateState(IntWritable node, IntWritable value, OutputPKVBuffer<IntWritable, IntWritable> buffer, Reporter report){
         int nodeid = node.get();
         int distance = value.get();
