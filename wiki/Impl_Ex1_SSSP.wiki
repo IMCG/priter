@@ -12,22 +12,22 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 *_Activator_* 
 {{{
 public class SSSPActivator extends PrIterBase implements Activator<IntWritable> {
-    HashMap<Integer, ArrayList<Link>> graph;
-    int startNode;
-    int activatedTimes = 0;
-    int activatedNodes = 0;
+    private HashMap<Integer, ArrayList<Link>> graph;
+    private int startNode;
+    private int activatedTimes = 0;
+    private int activatedNodes = 0;
 
-    void configure(JobConf job){
+    public void configure(JobConf job){
         String graphPath = job.get("priter.graph.path");
         graph = loadWeightedGraph(graphPath);
         startNode = job.get("priter.sssp.startnode");
     }
 
-    void initStarter(ActivateBuffer<IntWritable> starter) {
+    public void initStarter(ActivateBuffer<IntWritable> starter) {
         starter.init(new IntWritable(startNode), new IntWritable(0));
     }
 
-    void activate(IntWritable node, IntWritable value, OutputCollector<IntWritable, IntWritable> output, Reporter report){
+    public void activate(IntWritable node, IntWritable value, OutputCollector<IntWritable, IntWritable> output, Reporter report){
         int nodeid = node.get();
         int distance = value.get();
         ArrayList<Integer> linklist = graph.get(nodeid);
@@ -39,7 +39,7 @@ public class SSSPActivator extends PrIterBase implements Activator<IntWritable> 
         activatedNodes++;
     }
 
-    void iterate(){
+    public void iterate(){
         activatedTimes++;
         System.out.println("activate times: " + activatedTime + ", total activated node: " + activatedNode);
     }
@@ -48,51 +48,34 @@ public class SSSPActivator extends PrIterBase implements Activator<IntWritable> 
 
 *_Updator_*
 {{{
+public class SSSPUpdator extends PrIterBase implements Updator<IntWritable, IntWritable> {
+    private int iteration = 0;
 
+    public void initStateTable(OutputPKVBuffer<IntWritable, IntWritable> buffer){
+    }
 
+    public void updateState(IntWritable node, IntWritable value, OutputPKVBuffer<IntWritable, IntWritable> buffer, Reporter report){
+    int nodeid = node.get();
+    int distance = value.get();
+    
+    PriorityRecord<IntWritable, IntWritable> pkvRecord;	
+    if(buffer.stateTable.containsKey(node)){
+        pkvRecord = buffer.stateTable.get(node);
+	int cState = pkvRecord.getcState().get();
+	if(distance < cState){
+            buffer.stateTable.get(key).getiState().set(distance);
+	    buffer.stateTable.get(key).getcState().set(distance);
+	    buffer.stateTable.get(key).getPriority().set(-distance);
+	}else{
+	    pkvRecord = new PriorityRecord<IntWritable, IntWritable>(new IntWritable(-distance), new IntWritable(distance), new IntWritable(distance));
+	    buffer.stateTable.put(node, pkvRecord);
+	}
+}
 
-
-
-
-
-
-
-
-
-
-
-}}}
-
-Input: Key n, Set (values)
-{{{
-Output(n, min(Set(values)));
-}}}
-
-*_InitStateTable_*
-
-Input: sourcenode s
-{{{
-for n in nodeset V do
-  StateTable(n).iState = maxValue;
-  StateTable(n).cState = maxValue;
-end for
-StateTable(s).iState = 0;
-StateTable(s).cState = 0;
-}}}
-
-*_StateUpdate_*
-
-Input: Key n, Value distance(n)
-{{{
-StateTable(n).iState = min(StateTable(n).iState, distance(n));
-StateTable(n).cState = min(StateTable(n).cState, distance(n));
-}}}
-
-*_PriorityDecision_*
-
-Input: Key n, Value iState
-{{{
-n.priority = -iState;
+    public IntWritable decidePriority(IntWritable node, IntWritable distance, boolean iornot){
+        return new IntWritable(-distance.get());
+    }
+}
 }}}
 
 *_Main_*
