@@ -81,7 +81,7 @@ public class PageRankUpdator extends PrIterBase implements Updator<IntWritable, 
 
 *_Main_*
 {{{
-public class SSSP{
+public class PageRank{
     public static void main(String[] args){
         Job job = new Job();
 
