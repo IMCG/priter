@@ -10,6 +10,26 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 = Details =
 
 *_Activator_* 
+{{{
+HashMap graphlinks;
+int iteration = 0;
+int activatednode = 0;
+
+void initStarter(InputPKVBuffer<V> starter) {
+    starter.init(*startnode*, 0));
+}
+
+void activate(nodeid, value, output, report){
+    
+    activatednode++;
+}
+
+void iterate(){
+    iteration++;
+    System.out.println("iteration: " + iteration + ", total activated node: " + activatednode);
+}
+}}}
+
 
 Input: NodeID n, Value distance(n)
 {{{
