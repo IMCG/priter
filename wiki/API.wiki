@@ -48,7 +48,7 @@
 
     to be invoked when updating statetable or extracting top k result, decide node's execution priority (based on iState) or priority for online top k query (based on cState)
 
- * `void updateState(K nodeid, Iterator<V> iState, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;`
+ * `void updateState(K nodeid, V iState, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;`
 
     to be invoked when updating StateTable, users specify the update rule to realize their algorithm logic
 	
