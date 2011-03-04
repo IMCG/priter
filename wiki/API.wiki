@@ -17,6 +17,22 @@
 
     set the priority class
 
+= PrIterBase Class =
+
+Every Activator class and Updator class should extend PrIterBase class, so that the following methods can be used.
+
+ * `ArrayList<Integer, Integer> readUnWeightedGraph(Path graphPath) throws IOException;`
+
+    load unweighted graph
+
+ * `ArrayList<Integer, Link<Integer, W>> readWeightedGraph(Path graphPath) throws IOException;`
+
+    load weighted graph
+
+ * `int getPartitionID();`
+
+    get the assigned graph partition ID
+
 
 = User-Defined Functions =
 
