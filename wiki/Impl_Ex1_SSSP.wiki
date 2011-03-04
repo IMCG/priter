@@ -30,7 +30,7 @@ public class SSSPActivator extends PrIterBase implements Activator<IntWritable> 
     public void activate(IntWritable node, IntWritable value, OutputCollector<IntWritable, IntWritable> output, Reporter report){
         int nodeid = node.get();
         int distance = value.get();
-        ArrayList<Integer> linklist = graph.get(nodeid);
+        ArrayList<Link> linklist = graph.get(nodeid);
 
         for(Link link: linklist){
             output.collect(new IntWritable(link.end), new IntWritable(distance+link.length));
