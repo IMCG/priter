@@ -11,12 +11,20 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 
 *_Activator_* 
 {{{
+public class SSSPActivator extends PrIterBase implements Activator<IntWritable> {
 HashMap<Integer, ArrayList<Link>> graph;
-int iteration = 0;
-int activatednode = 0;
+int startNode;
+int activatedTimes = 0;
+int activatedNodes = 0;
+
+void configure(JobConf job){
+    String graphPath = job.get("priter.graph.path");
+    graph = loadWeightedGraph(graphPath);
+    startNode = job.get("priter.sssp.startnode");
+}
 
 void initStarter(ActivateBuffer<IntWritable> starter) {
-    starter.init(new IntWritable(startnode), new IntWritable(0));
+    starter.init(new IntWritable(startNode), new IntWritable(0));
 }
 
 void activate(IntWritable node, IntWritable value, OutputCollector<IntWritable, IntWritable> output, Reporter report){
@@ -28,25 +36,32 @@ void activate(IntWritable node, IntWritable value, OutputCollector<IntWritable, 
         output.collect(new IntWritable(link.end), new IntWritable(distance+link.length));
     }
 
-    activatednode++;
+    activatedNodes++;
+}
 }
 
 void iterate(){
-    iteration++;
-    System.out.println("iteration: " + iteration + ", total activated node: " + activatednode);
+    activatedTimes++;
+    System.out.println("activate times: " + activatedTime + ", total activated node: " + activatedNode);
 }
 }}}
 
-
-Input: NodeID n, Value distance(n)
-{{{
-Set(links)=lookup n's outlinks;
-for link in Set(links) do
-  Output(link.endnode, distance(n)+link.weight);
-end for
-}}}
-
 *_Updator_*
+{{{
+
+
+
+
+
+
+
+
+
+
+
+
+
+}}}
 
 Input: Key n, Set (values)
 {{{
