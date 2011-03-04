@@ -7,62 +7,107 @@ PageRank algorithm is widely used for many applications such as web search and p
 To extract priority property from PageRank problem, we change PageRank to another form, which will get the same results. The changed PageRank form is called incremental PageRank, which does not iterate ranking score but iterate a delta ranking score. These partial delta is accumulated to get a final ranking score. 
 
 = Details =
-*_Map_* 
 
-Input: Key n, Value delta R
+*_Activator_* 
 {{{
-Set(links)=lookup n outlinks;
-for link in Set(links) do
-  Output(link.endnode, (d*delta R)/|Set(links)|);
-end for
+public class PageRankActivator extends PrIterBase implements Activator<DoubleWritable> {
+    private HashMap<Integer, Integer> graph;
+    private HashMap<Integer, Double> startPages;
+    private int activatedTimes = 0;
+    private int activatedNodes = 0;
+
+    public void configure(JobConf job){
+        String graphPath = job.get("priter.graph.path");
+        graph = loadUnWeightedGraph(graphPath);
+        String starterPath = job.get("priter.graph.starter.path");
+        startPages = loadStarters(starterPath);
+    }
+
+    public void initStarter(ActivateBuffer<IntWritable> starter) {
+        for(Map.Entry<Integer, Double> entry: startPages.entrySet()){
+            starter.init(new IntWritable(entry.getKey()), new DoubleWritable(entry.getValue()));
+        } 
+    }
+
+    public void activate(IntWritable node, DoubleWritable value, OutputCollector<IntWritable, DoubleWritable> output, Reporter report){
+        int nodeid = node.get();
+        double inDeltaR = value.get();
+        ArrayList<Integer> linkTo = graph.get(nodeid);
+
+        double outDeltaR = inDeltaR * 0.85 / linkTo.size();
+        for(int linkend: linkTo){
+            output.collect(new IntWritable(linkend), new DoubleWritable(outDeltaR));
+        }
+
+        activatedNodes++;
+    }
+
+    public void iterate(){
+        activatedTimes++;
+        System.out.println("activate times: " + activatedTime + ", total activated node: " + activatedNode);
+    }
+}
 }}}
 
-*_Reduce_*
-
-Input: Key n, Set (values)
+*_Updator_*
 {{{
-Output(n, sum(Set(values)));
-}}}
+public class PageRankUpdator extends PrIterBase implements Updator<IntWritable, DoubleWritable> {
+    private int iteration = 0;
 
-*_InitStateTable_*
+    public void updateState(IntWritable node, DoubleWritable value, OutputPKVBuffer<IntWritable, DoubleWritable> buffer, Reporter report){
+        int nodeid = node.get();
+        double deltaR = value.get();
+    
+        PriorityRecord<IntWritable, DoubleWritable> pkvRecord;	
+	if(buffer.stateTable.containsKey(node)){
+	    pkvRecord = buffer.stateTable.get(node);
+	    double iState = pkvRecord.getiState().get() + deltaR;
+	    double cState = pkvRecord.getcState().get() + deltaR;
+   	    buffer.stateTable.get(node).getiState().set(iState);
+            buffer.stateTable.get(node).getcState().set(cState);
+	    buffer.stateTable.get(node).getPriority().set(iState);
+        }else{
+	    pkvRecord = new PriorityRecord<DoubleWritable, DoubleWritable>(
+	    new DoubleWritable(deltaR), new DoubleWritable(deltaR), new DoubleWritable(deltaR));
+	    buffer.stateTable.put(new IntWritable(nodeid), pkvRecord);
+	}
+    }
 
-Input: Personal preferred nodeset Vp
-{{{
-for n in nodeset V do
-  StateTable(n).iState = 0;
-  StateTable(n).cState = 0;
-end for
-StateTable(s).iState = (1-d)/|Vp|;
-StateTable(s).cState = (1-d)/|Vp|;
-}}}
-
-*_StateUpdate_*
-
-Input: Key n, Value delta R
-{{{
-StateTable(n).iState = sum(StateTable(n).iState, delta R);
-StateTable(n).cState = sum(StateTable(n).cState, delta R);
-}}}
-
-*_PriorityDecision_*
-
-Input: Key n, Value iState
-{{{
-n.priority = iState;
+    public IntWritable decidePriority(IntWritable node, DoubleWritable deltaR, boolean iornot){
+        return new IntWritable(deltaR);
+    }
+}
 }}}
 
 *_Main_*
-
 {{{
-Job job = new Job();
-job.setMap(Map);
-job.setReduce(Reduce);
-job.setStaticDataPath(graphpath);
-job.setInitState(InitStateTable);
-job.setState(StateUpdate);
-job.setPriority(PriorityDecision);
-job.setFactorc(10);
-job.setTopK(1000);
-job.setSnapshotInterval(20);
-job.submit();
+public class SSSP{
+    public static void main(String[] args){
+        Job job = new Job();
+
+        FileOutputFormat.setOutputPath(job, new Path("PageRank_output"));
+        job.setOutputFormat(TextOutputFormat.class);
+
+        job.setBoolean("priter.job", true);
+        job.set("priter.graph.path", "PageRank_input/google_graph");
+        job.set("priter.graph.starter.path", "PageRank_input/google_startpages");
+        job.setInt("priter.graph.partitions", 4);	
+        job.setInt("priter.graph.nodes", 875713);
+        job.setLong("priter.snapshot.interval", 20000);
+        job.setInt("priter.snapshot.topk", 1000);
+        job.setInt("priter.queue.portion", 0.2);
+        job.setFloat("priter.stop.difference", 1);	
+
+        job.setJarByClass(PageRank.class);
+        job.setActivatorClass(PageRankActivator.class);	
+        job.setUpdatorClass(PageRankUpdator.class);
+        job.setMapOutputKeyClass(IntWritable.class);
+        job.setMapOutputValueClass(DoubleWritable.class);
+        job.setOutputKeyClass(IntWritable.class);
+        job.setOutputValueClass(DoubleWritable.class);
+        job.setPriorityClass(DoubleWritable.class);      
+
+        jobClient.runJob(job);
+    }
+}
 }}}
