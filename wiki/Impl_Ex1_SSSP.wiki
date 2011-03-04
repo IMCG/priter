@@ -67,6 +67,7 @@ public class SSSPUpdator extends PrIterBase implements Updator<IntWritable, IntW
 	        pkvRecord = new PriorityRecord<IntWritable, IntWritable>(new IntWritable(-distance), new IntWritable(distance), new IntWritable(distance));
 	        buffer.stateTable.put(node, pkvRecord);
 	    }
+        }
     }
 
     public IntWritable decidePriority(IntWritable node, IntWritable distance, boolean iornot){
