@@ -86,9 +86,9 @@ public class SSSP{
         job.setOutputFormat(TextOutputFormat.class);
 
         job.setBoolean("priter.job", true);
-        job.set("priter.graph.path", "SSSP_input/googlegraph");
+        job.set("priter.graph.path", "SSSP_input/facebook_graph");
         job.setInt("priter.graph.partitions", 4);	
-        job.setInt("priter.graph.nodes", 875713);
+        job.setInt("priter.graph.nodes", 1204004);
         job.setLong("priter.snapshot.interval", 5000);
         job.setInt("priter.snapshot.topk", 100000);
         job.setInt("priter.queue.lenth", 10000);
