@@ -20,7 +20,7 @@ public class SSSPActivator extends PrIterBase implements Activator<IntWritable> 
     public void configure(JobConf job){
         String graphPath = job.get("priter.graph.path");
         graph = loadWeightedGraph(graphPath);
-        startNode = job.get("priter.sssp.startnode");
+        startNode = job.getInt("priter.sssp.startnode", 0);
     }
 
     public void initStarter(ActivateBuffer<IntWritable> starter) {
@@ -51,26 +51,23 @@ public class SSSPActivator extends PrIterBase implements Activator<IntWritable> 
 public class SSSPUpdator extends PrIterBase implements Updator<IntWritable, IntWritable> {
     private int iteration = 0;
 
-    public void initStateTable(OutputPKVBuffer<IntWritable, IntWritable> buffer){
-    }
-
     public void updateState(IntWritable node, IntWritable value, OutputPKVBuffer<IntWritable, IntWritable> buffer, Reporter report){
-    int nodeid = node.get();
-    int distance = value.get();
+        int nodeid = node.get();
+        int distance = value.get();
     
-    PriorityRecord<IntWritable, IntWritable> pkvRecord;	
-    if(buffer.stateTable.containsKey(node)){
-        pkvRecord = buffer.stateTable.get(node);
-	int cState = pkvRecord.getcState().get();
-	if(distance < cState){
-            buffer.stateTable.get(key).getiState().set(distance);
-	    buffer.stateTable.get(key).getcState().set(distance);
-	    buffer.stateTable.get(key).getPriority().set(-distance);
-	}else{
-	    pkvRecord = new PriorityRecord<IntWritable, IntWritable>(new IntWritable(-distance), new IntWritable(distance), new IntWritable(distance));
-	    buffer.stateTable.put(node, pkvRecord);
-	}
-}
+        PriorityRecord<IntWritable, IntWritable> pkvRecord;	
+        if(buffer.stateTable.containsKey(node)){
+            pkvRecord = buffer.stateTable.get(node);
+	    int cState = pkvRecord.getcState().get();
+	    if(distance < cState){
+                buffer.stateTable.get(key).getiState().set(distance);
+	        buffer.stateTable.get(key).getcState().set(distance);
+	        buffer.stateTable.get(key).getPriority().set(-distance);
+	    }else{
+	        pkvRecord = new PriorityRecord<IntWritable, IntWritable>(new IntWritable(-distance), new IntWritable(distance), new IntWritable(distance));
+	        buffer.stateTable.put(node, pkvRecord);
+	    }
+    }
 
     public IntWritable decidePriority(IntWritable node, IntWritable distance, boolean iornot){
         return new IntWritable(-distance.get());
@@ -79,17 +76,34 @@ public class SSSPUpdator extends PrIterBase implements Updator<IntWritable, IntW
 }}}
 
 *_Main_*
-
 {{{
-Job job = new Job();
-job.setMap(Map);
-job.setReduce(Reduce);
-job.setStaticDataPath(graphpath);
-job.setInitState(InitStateTable);
-job.setState(StateUpdate);
-job.setPriority(PriorityDecision);
-job.setFactorc(10);
-job.setTopK(10000);
-job.setSnapshotInterval(5);
-job.submit();
+public class SSSP{
+    public static void main(String[] args){
+        Job job = new Job();
+
+        FileOutputFormat.setOutputPath(job, new Path("SSSP_output"));
+        job.setOutputFormat(TextOutputFormat.class);
+
+        job.setBoolean("priter.job", true);
+        job.set("priter.graph.path", "SSSP_input/googlegraph");
+        job.setInt("priter.graph.partitions", 4);	
+        job.setInt("priter.graph.nodes", 875713);
+        job.setLong("priter.snapshot.interval", 5000);
+        job.setInt("priter.snapshot.topk", 100000);
+        job.setInt("priter.queue.lenth", 10000);
+        job.setFloat("priter.stop.difference", 0);	
+        job.setInt("priter.sssp.startnode", 0);
+
+        job.setJarByClass(SSSP.class);
+        job.setActivatorClass(SSSPActivator.class);	
+        job.setUpdatorClass(SSSPUpdator.class);
+        job.setMapOutputKeyClass(IntWritable.class);
+        job.setMapOutputValueClass(IntWritable.class);
+        job.setOutputKeyClass(IntWritable.class);
+        job.setOutputValueClass(IntWritable.class);
+        job.setPriorityClass(IntWritable.class);      
+
+        jobClient.runJob(job);
+    }
+}
 }}}
