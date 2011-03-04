@@ -29,7 +29,7 @@ Every Activator class and Updator class should extend PrIterBase class, so that 
 
     load weighted graph partition
 
- * `ArrayList<V> readInitState(Path initStatePath) throws IOException;`
+ * `HashMap<Integer, V> readStarters(Path startersPath) throws IOException;`
 
     load initial state into a vector partition
 
