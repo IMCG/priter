@@ -52,8 +52,6 @@ public class PageRankActivator extends PrIterBase implements Activator<DoubleWri
 *_Updator_*
 {{{
 public class PageRankUpdator extends PrIterBase implements Updator<IntWritable, DoubleWritable> {
-    private int iteration = 0;
-
     public void updateState(IntWritable node, DoubleWritable value, OutputPKVBuffer<IntWritable, DoubleWritable> buffer, Reporter report){
         int nodeid = node.get();
         double deltaR = value.get();
