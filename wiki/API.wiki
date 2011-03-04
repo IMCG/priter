@@ -23,11 +23,15 @@ Every Activator class and Updator class should extend PrIterBase class, so that 
 
  * `ArrayList<Integer, Integer> readUnWeightedGraph(Path graphPath) throws IOException;`
 
-    load unweighted graph
+    load unweighted graph partition
 
- * `ArrayList<Integer, Link<Integer, W>> readWeightedGraph(Path graphPath) throws IOException;`
+ * `ArrayList<Integer, Link<Integer, V>> readWeightedGraph(Path graphPath) throws IOException;`
 
-    load weighted graph
+    load weighted graph partition
+
+ * `ArrayList<V> readInitState(Path initStatePath) throws IOException;`
+
+    load initial state into a vector partition
 
  * `int getPartitionID();`
 
