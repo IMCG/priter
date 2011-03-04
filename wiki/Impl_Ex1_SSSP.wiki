@@ -12,37 +12,37 @@ A prioritized execution of the SSSP algorithm can be described as follows. In ea
 *_Activator_* 
 {{{
 public class SSSPActivator extends PrIterBase implements Activator<IntWritable> {
-HashMap<Integer, ArrayList<Link>> graph;
-int startNode;
-int activatedTimes = 0;
-int activatedNodes = 0;
+    HashMap<Integer, ArrayList<Link>> graph;
+    int startNode;
+    int activatedTimes = 0;
+    int activatedNodes = 0;
 
-void configure(JobConf job){
-    String graphPath = job.get("priter.graph.path");
-    graph = loadWeightedGraph(graphPath);
-    startNode = job.get("priter.sssp.startnode");
-}
-
-void initStarter(ActivateBuffer<IntWritable> starter) {
-    starter.init(new IntWritable(startNode), new IntWritable(0));
-}
-
-void activate(IntWritable node, IntWritable value, OutputCollector<IntWritable, IntWritable> output, Reporter report){
-    int nodeid = node.get();
-    int distance = value.get();
-    ArrayList<Integer> linklist = graph.get(nodeid);
-
-    for(Link link: linklist){
-        output.collect(new IntWritable(link.end), new IntWritable(distance+link.length));
+    void configure(JobConf job){
+        String graphPath = job.get("priter.graph.path");
+        graph = loadWeightedGraph(graphPath);
+        startNode = job.get("priter.sssp.startnode");
     }
 
-    activatedNodes++;
-}
-}
+    void initStarter(ActivateBuffer<IntWritable> starter) {
+        starter.init(new IntWritable(startNode), new IntWritable(0));
+    }
 
-void iterate(){
-    activatedTimes++;
-    System.out.println("activate times: " + activatedTime + ", total activated node: " + activatedNode);
+    void activate(IntWritable node, IntWritable value, OutputCollector<IntWritable, IntWritable> output, Reporter report){
+        int nodeid = node.get();
+        int distance = value.get();
+        ArrayList<Integer> linklist = graph.get(nodeid);
+
+        for(Link link: linklist){
+            output.collect(new IntWritable(link.end), new IntWritable(distance+link.length));
+        }
+
+        activatedNodes++;
+    }
+
+    void iterate(){
+        activatedTimes++;
+        System.out.println("activate times: " + activatedTime + ", total activated node: " + activatedNode);
+    }
 }
 }}}
 
