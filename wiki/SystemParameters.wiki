@@ -24,6 +24,8 @@
 || "priter.job.priorityclass" || class || --- || the priority data type ||
 
 == Graph Information ==
+|| "priter.graph.path" || String || --- || the graph path ||
+|| "priter.graph.starter.path" || String || the starter path || the initial state path ||
 || "priter.graph.partitions" || int || 2 x (# of tasktrackers) || the number of graph partitions ||
 || "priter.graph.nodes" || int || --- || the number of graph nodes ||
 
