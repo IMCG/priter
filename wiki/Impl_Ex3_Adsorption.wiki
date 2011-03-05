@@ -1,40 +1,51 @@
 #summary Adsorption implementation with priority
 
 = Introduction =
+Adsorption is a graph-based label propagation algorithm, which provides personalized recommendation for contents (e.g., video, music, document, product). The concept of _label_ indicates a certain common feature of the entities. Adsorption's label propagation proceeds to label all of the nodes based on the graph structure, ultimately producing a probability distribution over labels for each node.
 
+Given a weighted graph, each node carries a probability distribution on the label, and it is initially assigned with an _initial distribution_. The algorithm proceeds as follows. For each
+node, it iteratively computes the weighted average of label distributions from its neighboring nodes, and then uses the random walk probabilities to estimate a new label distribution for a node.
 
 
 = Details =
 
 *_Activator_* 
 {{{
-public class PageRankActivator extends PrIterBase implements Activator<DoubleWritable> {
-    private HashMap<Integer, Integer> graph;
-    private HashMap<Integer, Double> startPages;
+public class AdsorptionActivator extends PrIterBase implements Activator<MapWritable> {
+    private HashMap<Integer, Link> graph;
+    private HashMap<Integer, HashMap<Integer, Double>> startNodes;
     private int activatedTimes = 0;
     private int activatedNodes = 0;
 
     public void configure(JobConf job){
         String graphPath = job.get("priter.graph.path");
-        graph = loadUnWeightedGraph(graphPath);
+        graph = loadWeightedGraph(graphPath);
         String starterPath = job.get("priter.graph.starter.path");
-        startPages = loadStarters(starterPath);
+        startNodes = loadMapStarters(starterPath);
     }
 
-    public void initStarter(ActivateBuffer<IntWritable> starter) {
-        for(Map.Entry<Integer, Double> entry: startPages.entrySet()){
-            starter.init(new IntWritable(entry.getKey()), new DoubleWritable(entry.getValue()));
+    public void initStarter(ActivateBuffer<MapWritable> starter) {
+        for(Map.Entry<Integer, HashMap<Integer, Double>>> entry: startNodes.entrySet()){
+            MapWritable labels = new MapWritable();
+            for(Map.Entry<Integer, Double> label : entry.getValue()){
+                labels.put(new IntWritable(label.getKey()), new DoubleWritable(label.getValue()));
+            }
+            starter.init(new IntWritable(entry.getKey()), labels);
         } 
     }
 
-    public void activate(IntWritable node, DoubleWritable value, OutputCollector<IntWritable, DoubleWritable> output, Reporter report){
+    public void activate(IntWritable node, MapWritable value, OutputCollector<IntWritable, MapWritable> output, Reporter report){
         int nodeid = node.get();
-        double inDeltaR = value.get();
-        ArrayList<Integer> linkTo = graph.get(nodeid);
+        MapWritable labels = value.get();
+        ArrayList<Link> links = graph.get(nodeid);
 
-        double outDeltaR = inDeltaR * 0.85 / linkTo.size();
-        for(int linkend: linkTo){
-            output.collect(new IntWritable(linkend), new DoubleWritable(outDeltaR));
+        for(Link link: links){
+            MapWritable<Writable, Writable> outLabels = new MapWritable<Writable, Writable>();
+            for(Map.Entry<Writable, Writable> entry : labels){
+                double distribution = ((DoubleWritable)entry.getValue()).get();
+                outLabels.put(entry.getKey(), new DoubleWritable(distribution × link.weight));
+            }
+            output.collect(new IntWritable(link.end), outLabels);
         }
 
         activatedNodes++;
@@ -49,58 +60,86 @@ public class PageRankActivator extends PrIterBase implements Activator<DoubleWri
 
 *_Updator_*
 {{{
-public class PageRankUpdator extends PrIterBase implements Updator<IntWritable, DoubleWritable> {
-    public void updateState(IntWritable node, DoubleWritable value, OutputPKVBuffer<IntWritable, DoubleWritable> buffer, Reporter report){
+public class AdsorptionUpdator extends PrIterBase implements Updator<DoubleWritable, MapWritable> {
+    private HashMap<Integer, Double> inWeights;
+
+    public void configure(JobConf job){
+        String graphPath = job.get("priter.graph.path");
+        inWeights = loadInWeights(graphPath);
+    }
+
+    public void updateState(IntWritable node, MapWritable value, OutputPKVBuffer<DoubleWritable, MapWritable> buffer, Reporter report){
         int nodeid = node.get();
-        double deltaR = value.get();
+        MapWritable labels = value.get();
     
-        PriorityRecord<IntWritable, DoubleWritable> pkvRecord;	
+        PriorityRecord<DoubleWritable, MapWritable> pkvRecord;	
 	if(buffer.stateTable.containsKey(node)){
-	    pkvRecord = buffer.stateTable.get(node);
-	    double iState = pkvRecord.getiState().get() + deltaR;
-	    double cState = pkvRecord.getcState().get() + deltaR;
-   	    buffer.stateTable.get(node).getiState().set(iState);
-            buffer.stateTable.get(node).getcState().set(cState);
-	    buffer.stateTable.get(node).getPriority().set(iState);
+            MapWritable<Writable, Writable> outiLabels = new MapWritable<Writable, Writable>();
+            MapWritable<Writable, Writable> outcLabels = new MapWritable<Writable, Writable>();
+            double l1norm = 0.0;
+
+            for(Map.Entry<Writable, Writable> entry : labels){
+                double distribution = ((DoubleWritable)entry.getValue()).get();
+                outiLabels.put(entry.getKey(), new DoubleWritable(distribution/inWeights.get(nodeid)+pkvRecord.getiState().get(entry.getKey())));
+                outcLabels.put(entry.getKey(), new DoubleWritable(distribution/inWeights.get(nodeid)+pkvRecord.getcState().get(entry.getKey())));
+                l1norm += distribution;
+            }            
+
+   	    buffer.stateTable.get(node).getiState().set(outiLabels);
+            buffer.stateTable.get(node).getcState().set(outcLabels);
+	    buffer.stateTable.get(node).getPriority().set(l1norm);
         }else{
-	    pkvRecord = new PriorityRecord<DoubleWritable, DoubleWritable>(
-	    new DoubleWritable(deltaR), new DoubleWritable(deltaR), new DoubleWritable(deltaR));
+            MapWritable<Writable, Writable> outiLabels = new MapWritable<Writable, Writable>();
+            MapWritable<Writable, Writable> outcLabels = new MapWritable<Writable, Writable>();
+            for(Map.Entry<Writable, Writable> entry : labels){
+                double distribution = ((DoubleWritable)entry.getValue()).get();
+                outiLabels.put(entry.getKey(), new DoubleWritable(distribution/inWeights.get(nodeid)));
+                outcLabels.put(entry.getKey(), new DoubleWritable(distribution/inWeights.get(nodeid)));
+                l1norm += distribution;
+            } 
+
+	    pkvRecord = new PriorityRecord<MapWritable, DoubleWritable>(
+	    new DoubleWritable(l1norm), new MapWritable(outiLabels), new MapWritable(outcLabels));
 	    buffer.stateTable.put(new IntWritable(nodeid), pkvRecord);
 	}
     }
 
-    public IntWritable decidePriority(IntWritable node, DoubleWritable deltaR, boolean iornot){
-        return new IntWritable(deltaR);
+    public DoubleWritable decidePriority(IntWritable node, MapWritable deltaR, boolean iornot){
+        for(Map.Entry<Writable, Writable> entry : labels){
+            double distribution = ((DoubleWritable)entry.getValue()).get();
+            l1norm += distribution;
+        }
+        return new DoubleWritable(l1norm);
     }
 }
 }}}
 
 *_Main_*
 {{{
-public class PageRank{
+public class Adsorption{
     public static void main(String[] args){
         Job job = new Job();
 
-        FileOutputFormat.setOutputPath(job, new Path("PageRank_output"));
+        FileOutputFormat.setOutputPath(job, new Path("Adsorption_output"));
         job.setOutputFormat(TextOutputFormat.class);
 
         job.setBoolean("priter.job", true);
-        job.set("priter.graph.path", "PageRank_input/google_graph");
-        job.set("priter.graph.starter.path", "PageRank_input/google_startpages");
+        job.set("priter.graph.path", "Adsorption_input/facebook_graph");
+        job.set("priter.graph.starter.path", "Adsorption_input/facebook_initialdistribution");
         job.setInt("priter.graph.partitions", 4);	
-        job.setInt("priter.graph.nodes", 875713);
+        job.setInt("priter.graph.nodes", 1204004);
         job.setLong("priter.snapshot.interval", 20000);
         job.setInt("priter.snapshot.topk", 1000);
         job.setInt("priter.queue.portion", 0.2);
         job.setFloat("priter.stop.difference", 1);	
 
-        job.setJarByClass(PageRank.class);
-        job.setActivatorClass(PageRankActivator.class);	
-        job.setUpdatorClass(PageRankUpdator.class);
+        job.setJarByClass(Adsorption.class);
+        job.setActivatorClass(AdsorptionActivator.class);	
+        job.setUpdatorClass(AdsorptionUpdator.class);
         job.setMapOutputKeyClass(IntWritable.class);
-        job.setMapOutputValueClass(DoubleWritable.class);
+        job.setMapOutputValueClass(MapWritable.class);
         job.setOutputKeyClass(IntWritable.class);
-        job.setOutputValueClass(DoubleWritable.class);
+        job.setOutputValueClass(MapWritable.class);
         job.setPriorityClass(DoubleWritable.class);      
 
         jobClient.runJob(job);
