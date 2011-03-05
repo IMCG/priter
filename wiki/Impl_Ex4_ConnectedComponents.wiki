@@ -1,13 +1,104 @@
-#summary One-sentence summary of this page.
+#summary Connected Components implementation with priority.
 
 = Introduction =
+Connected Components is an algorithm for finding the connected components in large graphs. The main idea is as follows. For every node  in the graph, it is associated with a component id, which is initially set to be its own node id. In each iteration, each node propagates its current component id to its neighbors. Then the component id of each node, is set to be the maximum value among its current component id and the received component ids. Finally, no node in the graph updates its component id where the algorithm converges, and the connected nodes have the same component id.
 
-Add your content here.
-
+In the prioritized Connected Components algorithm, we let the nodes with larger component ids propagate their component ids rather than letting all the nodes do the propagation together. In this way, the unnecessary propagation of the small component ids are avoided since those small component ids will probably be updated with larger ones in the future. The prioritized Connected Components algorithm can be described using MapReduce model as follows.
 
 = Details =
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+*_Activator_* 
+{{{
+public class ConnCompActivator extends PrIterBase implements Activator<IntWritable> {
+    private HashMap<Integer, ArrayList<Integer>> graph;
+    private int activatedTimes = 0;
+    private int activatedNodes = 0;
+
+    public void configure(JobConf job){
+        String graphPath = job.get("priter.graph.path");
+        graph = loadUnWeightedGraph(graphPath);
+    }
+
+    public void initStarter(ActivateBuffer<IntWritable> starter) {
+        for(int nodeid : graph.keySet()){
+            starter.init(new IntWritable(nodeid), new IntWritable(nodeid));
+        }
+    }
+
+    public void activate(IntWritable node, IntWritable value, OutputCollector<IntWritable, IntWritable> output, Reporter report){
+        int nodeid = node.get();
+        int distance = value.get();
+        ArrayList<Link> linklist = graph.get(nodeid);
+
+        for(int linkend: linklist){
+            output.collect(new IntWritable(link.end), new IntWritable(nodeid));
+        }
+
+        activatedNodes++;
+    }
+
+    public void iterate(){
+        activatedTimes++;
+        System.out.println("activate times: " + activatedTime + ", total activated node: " + activatedNode);
+    }
+}
+}}}
+
+*_Updator_*
+{{{
+public class ConnCompUpdator extends PrIterBase implements Updator<IntWritable, IntWritable> {
+    public void updateState(IntWritable node, IntWritable value, OutputPKVBuffer<IntWritable, IntWritable> buffer, Reporter report){
+        int nodeid = node.get();
+        int componentid = value.get();
+    
+        PriorityRecord<IntWritable, IntWritable> pkvRecord;	
+        if(buffer.stateTable.containsKey(node)){
+            pkvRecord = buffer.stateTable.get(node);
+	    int cState = pkvRecord.getcState().get();
+	    if(componentid > cState){
+                buffer.stateTable.get(key).getiState().set(componentid);
+	        buffer.stateTable.get(key).getcState().set(componentid);
+	          buffer.stateTable.get(key).getPriority().set(componentid);
+	    }else{
+	        pkvRecord = new PriorityRecord<IntWritable, IntWritable>(new IntWritable(componentid), new IntWritable(componentid), new IntWritable(componentid));
+	        buffer.stateTable.put(node, pkvRecord);
+	    }
+        }
+    }
+
+    public IntWritable decidePriority(IntWritable node, IntWritable componentid, boolean iornot){
+        return new IntWritable(componentid.get());
+    }
+}
+}}}
+
+*_Main_*
+{{{
+public class ConnComp{
+    public static void main(String[] args){
+        Job job = new Job();
+
+        FileOutputFormat.setOutputPath(job, new Path("ConnComp_output"));
+        job.setOutputFormat(TextOutputFormat.class);
+
+        job.setBoolean("priter.job", true);
+        job.set("priter.graph.path", "ConnComp_input/wikitalk_graph");
+        job.setInt("priter.graph.partitions", 4);	
+        job.setInt("priter.graph.nodes", 2394385);
+        job.setLong("priter.snapshot.interval", 10000);
+        job.setInt("priter.queue.uniqlenth", 100);
+        job.setFloat("priter.stop.difference", 0);	
+
+        job.setJarByClass(ConnComp.class);
+        job.setActivatorClass(ConnCompActivator.class);	
+        job.setUpdatorClass(ConnCompUpdator.class);
+        job.setMapOutputKeyClass(IntWritable.class);
+        job.setMapOutputValueClass(IntWritable.class);
+        job.setOutputKeyClass(IntWritable.class);
+        job.setOutputValueClass(IntWritable.class);
+        job.setPriorityClass(IntWritable.class);      
+
+        jobClient.runJob(job);
+    }
+}
+}}}
