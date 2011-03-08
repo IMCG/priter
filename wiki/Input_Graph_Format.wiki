@@ -1,4 +1,4 @@
- # the format of input graphs.
+# the format of input graphs.
 
 = Introduction =
 
