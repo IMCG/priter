@@ -13,8 +13,7 @@ public interface Updator<P extends WritableComparable, V> extends JobConfigurabl
 	 */
 	
 	void initStateTable(OutputPKVBuffer<P, V> stateTable);
-	V setDefaultiState();
-	V setDefaultcState(IntWritable k);
+	V resetiState();
 	P decidePriority(IntWritable key, V iState, boolean iornot);
 	void updateState(IntWritable key, Iterator<V> values, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;	
 	

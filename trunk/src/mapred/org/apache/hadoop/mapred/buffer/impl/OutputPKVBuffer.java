@@ -119,7 +119,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.outputHandle.setConf(job);
 		this.updator = updator;		
 		this.defaultKey = new IntWritable(0);
-		this.defaultiState = (V)updator.setDefaultiState();
+		this.defaultiState = (V)updator.resetiState();
 		
 		this.bPriExec = job.getBoolean("priter.job.priority", true);
 		this.ftSupport = job.getBoolean("priter.checkpoint", true);
@@ -184,7 +184,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				P pri = stateTable.get(k).getPriority();
 				
 				records.add(new KVRecord<IntWritable, V>(k, v));
-				V iState = (V)updator.setDefaultiState();
+				V iState = (V)updator.resetiState();
 				this.stateTable.get(k).setiState(iState);
 				P p = (P) updator.decidePriority(k, iState, true);
 				this.stateTable.get(k).setPriority(p);
@@ -205,7 +205,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 
 			int activations = 0;
 			ArrayList<KVRecord<IntWritable, V>> records = new ArrayList<KVRecord<IntWritable, V>>();
-			P threshold = (P) updator.decidePriority(new IntWritable(0), (V)updator.setDefaultiState(), true);
+			P threshold = (P) updator.decidePriority(new IntWritable(0), (V)updator.resetiState(), true);
 			
 			if(queuetop != -1){
 				//queue top extraction
@@ -238,7 +238,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					P pri = stateTable.get(k).getPriority();
 					if(pri.compareTo(threshold) > 0){
 						records.add(new KVRecord<IntWritable, V>(k, v));
-						V iState = (V)updator.setDefaultiState();
+						V iState = (V)updator.resetiState();
 						this.stateTable.get(k).setiState(iState);
 						P p = (P) updator.decidePriority(k, iState, true);
 						this.stateTable.get(k).setPriority(p);
@@ -256,7 +256,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 						P pri = stateTable.get(k).getPriority();
 						if(pri.compareTo(threshold) > 0){
 							records.add(new KVRecord<IntWritable, V>(k, v));
-							V iState = (V)updator.setDefaultiState();
+							V iState = (V)updator.resetiState();
 							this.stateTable.get(k).setiState(iState);
 							P p = (P) updator.decidePriority(k, iState, true);
 							this.stateTable.get(k).setPriority(p);
@@ -294,7 +294,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 						P pri = stateTable.get(k).getPriority();
 						if(pri.compareTo(threshold) > 0){
 							records.add(new KVRecord<IntWritable, V>(k, v));
-							V iState = (V)updator.setDefaultiState();
+							V iState = (V)updator.resetiState();
 							this.stateTable.get(k).setiState(iState);
 							P p = (P) updator.decidePriority(k, iState, true);
 							this.stateTable.get(k).setPriority(p);
