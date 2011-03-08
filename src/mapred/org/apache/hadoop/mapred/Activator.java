@@ -13,7 +13,7 @@ public interface Activator<P extends WritableComparable, V> extends JobConfigura
 	
 	void initStarter(InputPKVBuffer<V> starter) throws IOException;
 	
-	void activate(IntWritable key, V value, OutputCollector<IntWritable, V> output, Reporter reporter) throws IOException;
+	void activate(IntWritable nodeid, V value, OutputCollector<IntWritable, V> output, Reporter reporter) throws IOException;
 	
 	void iterate();
 }
