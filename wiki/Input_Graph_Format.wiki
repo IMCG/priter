@@ -2,7 +2,7 @@
 
 = Introduction =
 
-Users should format the graph as follows, otherwise users should specify their own read graph functions. The integrating of load graph functions to framework is in progress. Currently, the graph is loaded in users codes.
+Input graphs are formatted as normal text format. Users should format the graph as follows, otherwise users should specify their own read graph functions. The integrating of load graph functions to framework is in progress. Currently, the graph is loaded in users codes.
 
 
 = Details =
