@@ -25,10 +25,10 @@
   <property file="${basedir}/build.properties" />
  
   <property name="Name" value="Hadoop"/>
-  <property name="name" value="hadoop-hop"/>
-  <property name="version" value="0.2"/>
+  <property name="name" value="hadoop-priter"/>
+  <property name="version" value="0.1"/>
   <property name="final.name" value="${name}-${version}"/>
-  <property name="year" value="2008"/>
+  <property name="year" value="2010"/>
   <property name="libhdfs.version" value="1"/>
 
   <property name="src.dir" value="${basedir}/src"/>  	
