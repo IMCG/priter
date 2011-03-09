@@ -7,12 +7,14 @@
 
 # The java implementation to use.  Required.
 # export JAVA_HOME=/usr/lib/j2sdk1.5-sun
+#export JAVA_HOME=/System/Library/Frameworks/JavaVM.framework/Versions/1.6/Home/
+export JAVA_HOME=/mnt/data/yzhang/lib/jdk1.6.0_18
 
 # Extra Java CLASSPATH elements.  Optional.
-# export HADOOP_CLASSPATH=
+export HADOOP_CLASSPATH=/mnt/data/yzhang/lib/jsc.jar
 
 # The maximum amount of heap to use, in MB. Default is 1000.
-# export HADOOP_HEAPSIZE=2000
+export HADOOP_HEAPSIZE=2000
 
 # Extra Java runtime options.  Empty by default.
 # export HADOOP_OPTS=-server
