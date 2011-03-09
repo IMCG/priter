@@ -30,7 +30,7 @@ public class PageRankUpdator extends MapReduceBase implements
 		startPages = job.getInt(MainDriver.START_NODE, nPages);
 		this.job = job;
 		initvalue = PageRank.RETAINFAC * nPages / startPages;
-		partitions = job.getInt("mapred.iterative.partitions", 0);
+		partitions = job.getInt("priter.graph.partitions", 0);
 	}
 
 	@Override
