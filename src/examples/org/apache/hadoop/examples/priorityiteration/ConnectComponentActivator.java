@@ -38,8 +38,8 @@ public class ConnectComponentActivator extends MapReduceBase implements
 	public void configure(JobConf job) {
 		this.job = job;
 		int taskid = Util.getTaskId(job);
-		nNodes = job.getInt("mapred.iterative.totalkeys", 0);
-		partitions = job.getInt("mapred.iterative.partitions", 0);
+		nNodes = job.getInt("priter.graph.nodes", 0);
+		partitions = job.getInt("priter.graph.partitions", 0);
 		loadGraphToMem(job, taskid);
 	}
 	
