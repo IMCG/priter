@@ -97,7 +97,7 @@ public class BSearchActivator extends MapReduceBase implements Activator<IntWrit
 	public void configure(JobConf job){   
 	    startnode = job.getInt(MainDriver.START_NODE, 0);
 	    int taskid = Util.getTaskId(job);
-	    partitions = job.getInt("mapred.iterative.partitions", -1);
+	    partitions = job.getInt("priter.graph.partitions", -1);
 		this.loadGraphToMem(job, taskid);
 	}
 	

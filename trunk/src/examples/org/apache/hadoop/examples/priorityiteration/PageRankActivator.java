@@ -36,26 +36,6 @@ public class PageRankActivator extends MapReduceBase implements
 	//graph in local memory
 	private HashMap<Integer, ArrayList<Integer>> linkList = new HashMap<Integer, ArrayList<Integer>>();
 	
-	public static int getTaskId(JobConf conf) throws IllegalArgumentException{
-       if (conf == null) {
-           throw new NullPointerException("conf is null");
-       }
-
-       String taskId = conf.get("mapred.task.id");
-       if (taskId == null) {
-    	   throw new IllegalArgumentException("Configutaion does not contain the property mapred.task.id");
-       }
-
-       String[] parts = taskId.split("_");
-       if (parts.length != 6 ||
-    		   !parts[0].equals("attempt") ||
-    		   (!"m".equals(parts[3]) && !"r".equals(parts[3]))) {
-    	   throw new IllegalArgumentException("TaskAttemptId string : " + taskId + " is not properly formed");
-       }
-
-       return Integer.parseInt(parts[4]);
-	}
-	 
 	private synchronized void loadGraphToMem(JobConf conf, int n){
 		FileSystem hdfs = null;
 	    try {
@@ -102,14 +82,14 @@ public class PageRankActivator extends MapReduceBase implements
 		nPages = job.getInt("priter.graph.nodes", 0);
 		startPages = job.getInt(MainDriver.START_NODE, nPages);
 		initvalue = PageRank.RETAINFAC * nPages / startPages;
-		partitions = job.getInt("mapred.iterative.partitions", 1);
+		partitions = job.getInt("priter.graph.partitions", 1);
 		loadGraphToMem(job, taskid);
 	}
 	
 	@Override
 	public void initStarter(InputPKVBuffer<DoubleWritable> starter)
 			throws IOException {	
-		int n = getTaskId(job);
+		int n = Util.getTaskId(job);
 		for(int i=n; i<startPages; i=i+partitions){
 			starter.init(new IntWritable(i), new DoubleWritable(initvalue));
 		}
