@@ -1,7 +1,0 @@
-#summary Residual Belief Propagation implementation with priority
-
-= Introduction =
-
-
-
-= Details =
