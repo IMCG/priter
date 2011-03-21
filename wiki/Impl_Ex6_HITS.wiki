@@ -2,7 +2,12 @@
 
 = Introduction =
 
-Hyperlink-Induced Topic Search (HITS) (also known as Hubs and authorities) is a link analysis algorithm that rates Web pages.
+Hyperlink-Induced Topic Search (HITS) (also known as Hubs and authorities) is a link analysis algorithm that rates Web pages. HITS, like Page and Brin's PageRank, is an iterative algorithm based on the linkage of the documents on the web. However it does have some major differences:
+
+ * It is executed at query time, not at indexing time, with the associated hit on performance that accompanies query-time processing. Thus, the hub and authority scores assigned to a page are query-specific.
+ * It is not commonly used by search engines. (Though a similar algorithm was said to be used by Teoma [3], which was acquired by Ask.com.)
+ * It computes two scores per document, hub and authority, as opposed to a single score.
+ * It is processed on a small subset of ‘relevant’ documents, not all documents as was the case with PageRank.
 
 
 = Details =
