@@ -1,4 +1,4 @@
-#summary Hyperlink-Induced Topic Search (HITS)
+#summary Hyperlink-Induced Topic Search (HITS) implementation with priority
 
 = Introduction =
 
