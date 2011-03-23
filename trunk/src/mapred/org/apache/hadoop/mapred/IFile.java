@@ -24,6 +24,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -49,6 +51,8 @@ import org.apache.hadoop.io.serializer.Serializer;
 public class IFile {
 
   private static final int EOF_MARKER = -1;
+  
+  private static final Log LOG = LogFactory.getLog(IFile.class.getName());
   
   public static class Writer<K extends Object, V extends Object> {
 	    FSDataOutputStream out;
@@ -177,6 +181,9 @@ public class IFile {
 	        throw new IOException("Negative value-length not allowed: " + 
 	                              valueLength + " for " + value);
 	      }
+	      
+	      //test
+	      LOG.info("key length " + keyLength + " value length " + valueLength);
 	      
 	      // Write the record out
 	      WritableUtils.writeVInt(out, keyLength);                  // key length

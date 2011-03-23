@@ -153,6 +153,7 @@ public class MapTask extends Task {
 										bufferUmbilical.request(request);
 										if (event.getTaskStatus() == Status.SUCCEEDED) return;
 									} catch (IOException e) {
+										e.printStackTrace();
 										LOG.warn("BufferUmbilical problem sending request " + request + ". " + e);
 									}
 								}
