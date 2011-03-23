@@ -1,4 +1,4 @@
-#summary prioritized implementation of Hitting time/Commute Time/Escape Probability
+#summary prioritized implementation of Hitting time/Commute Time/Escape Probability/Rooted PageRank
 
 = Introduction =
 
