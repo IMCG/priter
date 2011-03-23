@@ -551,7 +551,41 @@ public class ReduceTask extends Task {
 				windowTimeStamp = System.currentTimeMillis();
 				
 				synchronized(rollbackLock){
-					reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
+					int updated = reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
+					this.pkvBuffer.updatedEdges += updated;
+					
+					if(this.spillIter || this.checkpointIter > 0){
+						//retrieve the top records, and generate a file
+						OutputFile outputFile = pkvBuffer.spillTops();
+						if(outputFile != null){
+							umbilical.output(outputFile);
+							updator.iterate();
+							LOG.info("output file " + outputFile);
+						}else{
+							LOG.info("no record is reduced, so wait!");
+						}
+						this.spillIter = false;
+						this.pkvBuffer.updatedEdges = 0;
+						
+						if(ftsupport){
+							//send iteration completetion event to jobtracker for load balance and faulttolerance
+							if(iterindex > 5){
+								//after the system is stable
+								int id = this.getTaskID().getTaskID().getId();
+								
+								IterationCompletionEvent event = new IterationCompletionEvent(iterindex, id, pkvBuffer.checkpointIter, pkvBuffer.checkpointSnapshot, getJobID());
+								try {
+									taskUmbilical.afterIterCommit(event);
+								} catch (Exception e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
+							}
+						}
+						
+						//LOG.info("iteration " + iterindex + "emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
+						iterindex++;
+					}
 				}
 				
 				inputCollector.free(); // Free current data
@@ -688,10 +722,11 @@ public class ReduceTask extends Task {
 	}
 	
 	@SuppressWarnings("unchecked")
-	private void reduce(JobConf job, final Reporter reporter, InputCollector inputCollector, 
+	private int reduce(JobConf job, final Reporter reporter, InputCollector inputCollector, 
 						TaskUmbilicalProtocol taskUmbilical, BufferUmbilicalProtocol umbilical, 
 			            Progress inputProgress,  Progress reduceProgress) throws IOException {
 		boolean snapshot = snapshotFreq < 1f;
+		int count = 0;
 		
 		if(iterative) {
 			long processstart = new Date().getTime();
@@ -700,50 +735,10 @@ public class ReduceTask extends Task {
 			LOG.info("reduce read flush use time " + (flushend-processstart));
 
 			//LOG.info("ReduceTask: " + getTaskID() + " start iterative reduce phase.");
-			int count = reduce(job, inputCollector, pkvBuffer, reporter, reduceProgress);	
+			count = reduce(job, inputCollector, pkvBuffer, reporter, reduceProgress);	
 			long processend = new Date().getTime();
 			long processtime = processend - processstart;
 			LOG.info("processed " + count + " use time " + processtime);
-
-			if(this.spillIter || this.checkpointIter > 0){
-				long sortstart = new Date().getTime();
-				
-				//LOG.info("average processing " + pkvBuffer.actualEmit + " takes time " + (sortstart-lasttime));
-				lasttime = sortstart;
-				
-				//retrieve the top records, and generate a file
-				OutputFile outputFile = pkvBuffer.spillTops();
-				if(outputFile != null){
-					umbilical.output(outputFile);
-					updator.iterate();
-					LOG.info("output file " + outputFile);
-				}else{
-					LOG.info("no record is reduced, so wait!");
-				}
-				this.spillIter = false;
-				long sortend = new Date().getTime();
-				long sorttime = sortend - sortstart;
-				
-				if(ftsupport){
-					//send iteration completetion event to jobtracker for load balance and faulttolerance
-					if(iterindex > 5){
-						//after the system is stable
-						int id = this.getTaskID().getTaskID().getId();
-						
-						IterationCompletionEvent event = new IterationCompletionEvent(iterindex, id, pkvBuffer.checkpointIter, pkvBuffer.checkpointSnapshot, getJobID());
-						try {
-							taskUmbilical.afterIterCommit(event);
-						} catch (Exception e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-				}
-				
-				//LOG.info("iteration " + iterindex + "emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
-				iterindex++;
-			}
-			
 			LOG.debug("Reduce phase complete.");			
 		} else if (reducePipeline) {
 			inputCollector.flush();
@@ -756,7 +751,7 @@ public class ReduceTask extends Task {
 			}
 			
 			LOG.debug("ReduceTask: " + getTaskID() + " start pipelined reduce phase.");
-			reduce(job, inputCollector, outputBuffer, reporter, reduceProgress);
+			count = reduce(job, inputCollector, outputBuffer, reporter, reduceProgress);
 			
 			OutputFile outputFile = null;
 			if (snapshot) {
@@ -787,9 +782,11 @@ public class ReduceTask extends Task {
 				}
 			};
 			LOG.debug("ReduceTask: create final output file " + filename);
-			reduce(job, inputCollector, outputCollector, reporter, reduceProgress);
+			count = reduce(job, inputCollector, outputCollector, reporter, reduceProgress);
 			out.close(reporter);
 		}
+		
+		return count;
 	}
 	
 	

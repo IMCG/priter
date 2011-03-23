@@ -34,7 +34,11 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 			return new SnapshotSource(rfs, conf, request);
 		}
 		if (request.bufferType() == BufferType.STREAM) {
-			return new StreamSource(rfs, conf, request);
+			if(conf.getBoolean("priter.job.async.time", false) || conf.getBoolean("priter.job.async.self", false)){
+				return new AsyncStreamSource(rfs, conf, request);
+			}else{
+				return new StreamSource(rfs, conf, request);
+			}
 		}
 		if (request.bufferType() == BufferType.PKVBUF) {
 			return new PKVBufSource(rfs, conf, request);
@@ -409,6 +413,62 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 						if (position != next) {
 							position = next;
 						}
+					} catch (IOException e) { e.printStackTrace(); LOG.error(e); }
+
+					if (response == Transfer.SUCCESS) {
+						cursor.put(taskid, position);
+						LOG.debug("Transfer complete. New position " + cursor.get(taskid) + ". Destination " + destination());
+					}
+					else if (response == Transfer.IGNORE){
+						cursor.put(taskid, position); // Update my cursor position
+					}
+					else {
+						LOG.debug("Unsuccessful send. Transfer response: " + response);
+					}
+
+					return response;
+				}
+				else {
+					return Transfer.RETRY;
+				}
+			}
+			else {
+				LOG.info("Stream transfer ignore " + header + 
+						" current sequence " + cursor.get(taskid));
+				return Transfer.IGNORE;
+			}
+		}
+
+	}
+	
+	private static class AsyncStreamSource extends BufferExchangeSource<OutputFile.StreamHeader> {
+		private Map<TaskID, Long> cursor;
+		
+		public AsyncStreamSource(FileSystem rfs, JobConf conf, BufferRequest request) {
+			super(rfs, conf, request);
+			this.cursor = new HashMap<TaskID, Long>();
+		}
+		
+		@Override
+		protected final Transfer transfer(OutputFile file) {
+			OutputFile.StreamHeader header = (OutputFile.StreamHeader) file.header();
+			TaskID taskid = header.owner().getTaskID();
+			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.sequence()) { 
+				//LOG.info("before send");
+				BufferExchange.Connect result = open(BufferType.STREAM);
+				//LOG.info("after send");
+				
+				if (result == Connect.OPEN) {
+					LOG.info("Transfer stream file " + file + ". Destination " + destination());
+					Transfer response = transmit(file);
+					if (response == Transfer.TERMINATE) {
+						return Transfer.TERMINATE;
+					}
+
+					/* Update my next cursor position. */
+					long position = header.sequence() + 1;
+					try { 
+						istream.readLong();
 					} catch (IOException e) { e.printStackTrace(); LOG.error(e); }
 
 					if (response == Transfer.SUCCESS) {

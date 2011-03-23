@@ -183,7 +183,7 @@ public class IFile {
 	      }
 	      
 	      //test
-	      LOG.info("key length " + keyLength + " value length " + valueLength);
+	      //LOG.info("key length " + keyLength + " value length " + valueLength);
 	      
 	      // Write the record out
 	      WritableUtils.writeVInt(out, keyLength);                  // key length
