@@ -1186,15 +1186,7 @@ public class JobClient extends Configured implements MRConstants, Tool  {
       running = jc.submitJob(job);
       JobID jobId = running.getID();
       LOG.info("Running job: " + jobId);
-      boolean mapPipeline = job.getBoolean("mapred.map.pipeline", false);
-      boolean reducePipeline = job.getBoolean("mapred.reduce.pipeline", false);
-      boolean snapshotInput = job.getBoolean("mapred.job.input.snapshots", false);
-      float snapshotFreq = job.getFloat("mapred.snapshot.frequency", -1.0f);
-      LOG.info("Job configuration (HOP): \n" +
-    		   "     map pipeline    = " + mapPipeline + "\n" +
-    		   "     reduce pipeline = " + reducePipeline + "\n" +
-    		   "     snapshot input  = " + snapshotInput + "\n" +
-    		   "     snapshot freq   = " + snapshotFreq);
+
       int eventCounter = 0;
       boolean profiling = job.getProfileEnabled();
       Configuration.IntegerRanges mapRanges = job.getProfileTaskRange(true);

@@ -9,8 +9,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -74,17 +72,9 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	private ArrayList<KVRecord<IntWritable, V>> priorityQueue = new ArrayList<KVRecord<IntWritable, V>>();
 	private IntWritable defaultKey;
     private V defaultiState;
-    
-	private Iterator<IntWritable> iteratedKeys;
-	private IntWritable iterKey;
-	private V iteriState;
-	private V itercState;
 	
 	private Class<P> priClass;
 	private Class<V> valClass;
-    //Serializer<K> keySerializer;
-    //Serializer<V> valueSerializer;
-    //DataOutputBuffer buffer = new DataOutputBuffer();
       
 	private int topk;
 	private int queuelen = 0;
@@ -95,9 +85,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	public int total_reduce = 0;
 	public boolean start = false;
 	
-	//for expanding size determination
-	public long timeComp;
-	public long timeSync;
+	public int totalEdges = 0;
+	public int updatedEdges = 0;
 	
 	public static int WAIT_ITER = 0;
 	
@@ -195,14 +184,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		}
 	}
 	private synchronized ArrayList<KVRecord<IntWritable, V>> getTopRecords() {
+		
 		synchronized(this.stateTable){	
-			/*
-			if(actualEmit == 0){
-				actualEmit = job.getInt("mapred.iterative.startkeys", 0) / this.ttnum;
-				actualEmit = (actualEmit == 0) ? 1 : actualEmit;
-			}
-			*/
-
 			int activations = 0;
 			ArrayList<KVRecord<IntWritable, V>> records = new ArrayList<KVRecord<IntWritable, V>>();
 			P threshold = (P) updator.decidePriority(new IntWritable(0), (V)updator.resetiState(), true);
@@ -249,6 +232,11 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 				
 			}else{
+				//for asynchronous execution, determine the queue size based on how much portion of information received (from edges)
+				if(job.getBoolean("priter.job.async.self", false) || job.getBoolean("priter.job.async.time", false)){
+					this.queuelen = (int) (queuelen * updatedEdges / totalEdges);
+				}
+				
 				//queulen extraction
 				if((this.stateTable.size() <= queuelen) || (this.stateTable.size() <= SAMPLESIZE)){
 					for(IntWritable k : stateTable.keySet()){		
@@ -357,6 +345,15 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	public synchronized OutputFile spillTops() throws IOException {
 		start = true;
 		
+		if(this.updatedEdges == 0){
+			return null;
+		}else{
+			if(this.updatedEdges > this.totalEdges){
+				this.totalEdges = this.updatedEdges;
+				LOG.info("total edges is " + this.totalEdges);
+			}	
+		}
+			
 		Path filename = null;
 		Path indexFilename = null;
 		try{

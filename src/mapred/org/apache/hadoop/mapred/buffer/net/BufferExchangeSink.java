@@ -131,9 +131,6 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	//for synchronization
 	private Map<Long, Integer> syncMapPos;
 	private int syncMaps;
-	
-	private long compStart;
-	private long syncStart;
 
 	/* The task that owns this sink and is receiving the input. */
 	private Task task;
@@ -170,9 +167,6 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		this.server = ServerSocketChannel.open();
 		this.server.configureBlocking(true);
 		this.server.socket().bind(new InetSocketAddress(0));
-		
-		/* recording the time */
-		this.compStart = System.currentTimeMillis();
 	}
 
 	public InetSocketAddress getAddress() {
@@ -520,24 +514,14 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						
 						if(header.owner().getTaskID().getId() == task.getTaskID().getTaskID().getId()){
 							long current = System.currentTimeMillis();
-							((ReduceTask)task).pkvBuffer.timeComp = current - compStart;
-							syncStart = System.currentTimeMillis();
-							LOG.info("synchronization start. " + syncStart +
+							LOG.info("synchronization start. " + current +
 									"task id " + header.owner().getTaskID().getId() +
 									" and " + task.getTaskID().getTaskID().getId());
 						}
 							
-						if(recMaps == syncMaps){
-							long current = System.currentTimeMillis();
-							((ReduceTask)task).pkvBuffer.timeSync = current - syncStart;
-							
-							LOG.info("iteration " + pos + 
-									" compute time " + ((ReduceTask)task).pkvBuffer.timeComp +
-									" synchronization time " + (current - syncStart));
-							
+						if(recMaps == syncMaps){					
 							syncMapPos.remove(position.longValue());	
 							((ReduceTask)task).spillIter = true;	
-							compStart = System.currentTimeMillis();
 							task.notifyAll();								
 						}else if(conf.getBoolean("priter.job.inmem", true)){
 							// no need to be synchronized, the state is stored in hashmap
@@ -587,22 +571,8 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					
 					if (collector.read(istream, header)) {
 						updateProgress(header);
-						/*
-						if(conf.getBoolean("mapred.iterative.mapsync", false)){
-							int recReduces = (syncReducePos.containsKey(position.longValue())) ? syncReducePos.get(position.longValue()) + 1 : 1;
+						task.notifyAll();	
 
-							LOG.info("recReduces: " + recReduces + " syncReduces: " + syncReduces);
-							if(recReduces >= syncReduces){
-								syncReducePos.remove(position.longValue());								
-								task.notifyAll();
-							}else{
-								syncReducePos.put(position.longValue(), recReduces);
-							}
-						}else{
-						*/
-							task.notifyAll();	
-							
-						//}
 						position.set(header.iteration() + 1);
 						LOG.debug("PKVBuffer handler " + " done receiving up to position " + position.longValue());
 					}else {
@@ -623,12 +593,13 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		private int bufferedMap = 0;
 		private long lastRec = Long.MAX_VALUE;
 		private TriggerThread triggerThread;
+		private boolean init = true;
 		
 		private class TriggerThread extends Thread {
 			
 			private long triggerThreshold;
 			public TriggerThread() throws IOException {
-				triggerThreshold = conf.getLong("priter.job.async.time.triggerThresh", 1000);
+				triggerThreshold = conf.getLong("priter.job.async.time.thresh", 1000);
 			}
 			
 			public void run() {  
@@ -636,8 +607,12 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					synchronized(task){
 						try{
 							this.wait(1000);
+							
+							if(init) continue;
+							
 							long curr = System.currentTimeMillis();
 							if((curr - lastRec > triggerThreshold) && (bufferedMap > 0)){
+								LOG.info("threshold time elapsed, trigger map" + bufferedMap + " map outputs are buffered");
 								((ReduceTask)task).spillIter = true;
 								bufferedMap = 0;
 								task.notifyAll();
@@ -660,55 +635,41 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		}
 
 		public void receive(OutputFile.StreamHeader header) throws IOException {
-			//Get my position for this source taskid. 
-			Position position = null;
-			TaskID inputTaskID = header.owner().getTaskID();
-			synchronized (cursor) {
-				if (!cursor.containsKey(inputTaskID)) {
-					cursor.put(inputTaskID, new Position(-1));
-				}
-				position = cursor.get(inputTaskID);
-			}
-
 			synchronized (task) {			
-				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
-				LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
-				if (pos == header.sequence()) {
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
-					ostream.flush();
-					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
-					if (collector.read(istream, header)) {
-						updateProgress(header);
-						bufferedMap++;
+				WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
+				ostream.flush();
+				LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
+				if (collector.read(istream, header)) {
+					updateProgress(header);
+					bufferedMap++;
+					
+					if(bufferedMap == syncMaps){
+						LOG.info("all map outputs are collected, trigger map");
+						((ReduceTask)task).spillIter = true;
+						bufferedMap = 0;
 						
-						if(bufferedMap == syncMaps){
-							((ReduceTask)task).spillIter = true;
-							bufferedMap = 0;
-						}
-						
-						task.notifyAll();
-						
-						lastRec = System.currentTimeMillis();
-
-						position.set(header.sequence() + 1);
-						LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
-					}else {
-						LOG.debug(this + " ignoring -- " + header);
-						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
+						if(init) init = false;
 					}
-					// Indicate the next spill file that I expect.
-					pos = position.longValue();
-					LOG.debug("Updating source position to " + pos);
-					ostream.writeLong(pos);
-					ostream.flush();
+					
+					task.notifyAll();
+					
+					lastRec = System.currentTimeMillis();
+				}else {
+					LOG.debug(this + " ignoring -- " + header);
+					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
 				}
+
+				ostream.writeLong(-1);		//used to write the expected position, but no use in asynchronous iteration
+				ostream.flush();
 			}
 		}		
 	}
 	
 	final class AsyncSelfTriggerStreamHandler extends Handler<OutputFile.StreamHeader> {
-		private int bufferedMap = 0;
+
 		private long lastRec = Long.MAX_VALUE;
+		private int bufferedMap = 0;
+		private boolean init = true;
 		
 		public AsyncSelfTriggerStreamHandler(InputCollector<K, V> collector,
 				           DataInputStream istream, DataOutputStream ostream) throws IOException {
@@ -716,49 +677,49 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		}
 
 		public void receive(OutputFile.StreamHeader header) throws IOException {
-			//Get my position for this source taskid. 
-			Position position = null;
-			TaskID inputTaskID = header.owner().getTaskID();
-			synchronized (cursor) {
-				if (!cursor.containsKey(inputTaskID)) {
-					cursor.put(inputTaskID, new Position(-1));
-				}
-				position = cursor.get(inputTaskID);
-			}
 
 			synchronized (task) {			
-				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
-				LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
-				if (pos == header.sequence()) {
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
-					ostream.flush();
-					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
-					if (collector.read(istream, header)) {
-						updateProgress(header);
-						bufferedMap++;
-						
+				WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
+				ostream.flush();
+				LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
+				if (collector.read(istream, header)) {
+					updateProgress(header);
+					
+					//we collect all the map outputs in the first round
+					if(init){
 						if(bufferedMap == syncMaps){
+							LOG.info("all map outputs are collected, trigger map");
 							((ReduceTask)task).spillIter = true;
 							bufferedMap = 0;
+							init = false;
+						}else{
+							bufferedMap++;
 						}
-						
-						task.notifyAll();
-						
-						lastRec = System.currentTimeMillis();
+					}else{
+						if(header.owner().getTaskID().getId() == task.getTaskID().getTaskID().getId()){
+							bufferedMap++;
+							long current = System.currentTimeMillis();
 
-						position.set(header.sequence() + 1);
-						LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
-					}else {
-						LOG.debug(this + " ignoring -- " + header);
-						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
+							LOG.info("self map received, trigger map " + (current - lastRec) +
+									"ms " + bufferedMap + " map outputs are buffered");
+							lastRec = System.currentTimeMillis();
+							((ReduceTask)task).spillIter = true;
+							bufferedMap = 0;
+						}else{
+							bufferedMap++;
+						}
 					}
-					// Indicate the next spill file that I expect.
-					pos = position.longValue();
-					LOG.debug("Updating source position to " + pos);
-					ostream.writeLong(pos);
-					ostream.flush();
+					
+					task.notifyAll();
+				}else {
+					LOG.debug(this + " ignoring -- " + header);
+					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
 				}
+
+				ostream.writeLong(-1);
+				ostream.flush();
 			}
+			
 		}		
 	}
 }
