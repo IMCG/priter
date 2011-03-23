@@ -485,6 +485,7 @@ public class ReduceTask extends Task {
 				rollbackCheckThread.interrupt();
 				rollbackCheckThread = null;
 			}
+			sink.close();
 			reducePhase.complete();
 			setProgressFlag();
 			inputCollector.free();
@@ -509,12 +510,11 @@ public class ReduceTask extends Task {
 	protected void iteration(JobConf job, InputCollector inputCollector,
 			BufferExchangeSink sink, TaskUmbilicalProtocol taskUmbilical,
 			BufferUmbilicalProtocol umbilical) throws IOException {
-		int window = job.getInt("mapred.iterative.reduce.window", -1);
 		this.ftsupport = job.getBoolean("priter.checkpoint", true);
-
+		
 		this.updator = (Updator)ReflectionUtils.newInstance(job.getUpdatorClass(), job);
 		if (this.pkvBuffer == null) {
-			Progress progress = sink.getProgress(); 				
+			Progress progress = sink.getProgress(); 	
 			this.pkvBuffer = new OutputPKVBuffer(umbilical, this, job, reporter, progress, 
 										priorityClass, outputValClass, 
 										this.updator);
@@ -525,7 +525,7 @@ public class ReduceTask extends Task {
 			LOG.info("load statetable with " + records + " records");
 			sink.resetCursorPosition(checkpointIter);
 		}
-		
+
 		//termination check thread, also do generating snapshot work
 		this.termCheckThread = new snapshotThread(taskUmbilical, this);
 		this.termCheckThread.setDaemon(true);
@@ -537,7 +537,7 @@ public class ReduceTask extends Task {
 			this.rollbackCheckThread.setDaemon(true);
 			this.rollbackCheckThread.start();
 		}
-		
+
 		synchronized (this) {	
 			LOG.info("ReduceTask " + getTaskID() + ": in iterative process function.");
 			sink.open();
@@ -559,12 +559,11 @@ public class ReduceTask extends Task {
 				this.checkpointIter = 0;
 				LOG.info("has finished the first reduce");
 
-				if(window == -1){
-					try { this.wait();
-					} catch (InterruptedException e) { }
-				}else{
-					try { this.wait(window);
-					} catch (InterruptedException e) { }
+				try {
+					this.wait();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
 			}
 		}	

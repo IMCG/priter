@@ -391,10 +391,12 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 			OutputFile.StreamHeader header = (OutputFile.StreamHeader) file.header();
 			TaskID taskid = header.owner().getTaskID();
 			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.sequence()) { 
+				//LOG.info("before send");
 				BufferExchange.Connect result = open(BufferType.STREAM);
+				//LOG.info("after send");
 				
 				if (result == Connect.OPEN) {
-					//LOG.info("Transfer stream file " + file + ". Destination " + destination());
+					LOG.info("Transfer stream file " + file + ". Destination " + destination());
 					Transfer response = transmit(file);
 					if (response == Transfer.TERMINATE) {
 						return Transfer.TERMINATE;

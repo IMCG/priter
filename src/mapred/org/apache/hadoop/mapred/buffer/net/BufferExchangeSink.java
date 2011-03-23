@@ -28,7 +28,6 @@ import java.net.UnknownHostException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -59,7 +58,6 @@ import org.apache.hadoop.util.Progress;
  * 
  * If the input consists of snapshots, then we will create a SnapshotManager
  * object.
- * @author tcondie
  *
  * @param <K> The input key type.
  * @param <V> The input value type.
@@ -228,7 +226,13 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 								handler = new SnapshotHandler(collector, istream, ostream);
 							}
 							else if (BufferType.STREAM == type) {
-								handler = new StreamHandler(collector, istream, ostream);
+								if(conf.getBoolean("priter.job.async.time", false)){
+									handler = new AsyncTimeTriggerStreamHandler(collector, istream, ostream);
+								}else if(conf.getBoolean("priter.job.async.self", false)){
+									handler = new AsyncSelfTriggerStreamHandler(collector, istream, ostream);
+								}else{
+									handler = new StreamHandler(collector, istream, ostream);
+								}
 							}
 							else if (BufferType.PKVBUF == type) {
 								handler =  new PKVBufferHandler(collector, istream, ostream);
@@ -358,6 +362,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		public final void run() {
 			try {
 				int open = Integer.MAX_VALUE;
+				
 				while (open == Integer.MAX_VALUE) {
 					try {
 						//LOG.info("Waiting for open signal.");
@@ -377,6 +382,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					}
 					LOG.info("open ? " + open + " " + (open == Integer.MAX_VALUE));
 				}
+
 			} finally {
 				//LOG.info("Handler done: " + this);
 				done(this);
@@ -474,51 +480,12 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	}
 	
 	final class StreamHandler extends Handler<OutputFile.StreamHeader> {
+		
 		public StreamHandler(InputCollector<K, V> collector,
 				           DataInputStream istream, DataOutputStream ostream) {
 			super(collector, istream, ostream);
 		}
-		/*
-		public void receive(OutputFile.StreamHeader header) throws IOException {
-			//Get my position for this source taskid. 
-			Position position = null;
-			TaskID inputTaskID = header.owner().getTaskID();
-			synchronized (cursor) {
-				if (!cursor.containsKey(inputTaskID)) {
-					cursor.put(inputTaskID, new Position(-1));
-				}
-				position = cursor.get(inputTaskID);
-			}
 
-			// I'm the only one that should be updating this position.
-			synchronized (task) {			
-				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
-				if (pos <= header.sequence()) {
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
-					ostream.flush();
-					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
-					if (collector.read(istream, header)) {
-						updateProgress(header);
-						synchronized (task) {
-							task.notifyAll();
-						}
-					}
-					position.set(header.sequence() + 1);
-					LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
-				}
-				else {
-					LOG.debug(this + " ignoring -- " + header);
-					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
-				}
-				// Indicate the next spill file that I expect.
-				pos = position.longValue();
-				LOG.debug("Updating source position to " + pos);
-				ostream.writeLong(pos);
-				ostream.flush();
-			}
-		}
-		*/
-		
 		//synchronization
 		public void receive(OutputFile.StreamHeader header) throws IOException {
 			//Get my position for this source taskid. 
@@ -591,72 +558,6 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					ostream.flush();
 				}
 			}
-			
-			/*
-			if(conf.getBoolean("mapred.iterative.reducesync", false)){
-				synchronized (task) {			
-					long pos = position.longValue() < 0 ? header.sequence() : position.longValue();
-					if (pos <= header.sequence()) {
-						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
-						ostream.flush();
-						LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
-						if (collector.read(istream, header)) {
-							updateProgress(header);
-							
-							int recMaps = (syncPos.containsKey(position.longValue())) ? syncPos.get(position.longValue()) + 1 : 1;
-
-							LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
-							if(recMaps >= syncMaps){
-								syncPos.remove(position.longValue());
-								
-								task.notifyAll();
-								
-							}else{
-								syncPos.put(position.longValue(), recMaps);
-							}
-							
-						}
-						position.set(header.sequence() + 1);
-						LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
-					}
-					else {
-						LOG.debug(this + " ignoring -- " + header);
-						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
-					}
-					// Indicate the next spill file that I expect.
-					pos = position.longValue();
-					LOG.debug("Updating source position to " + pos);
-					ostream.writeLong(pos);
-					ostream.flush();
-				}
-			}else{
-				// I'm the only one that should be updating this position.
-				synchronized (task) {			
-					long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
-					if (pos <= header.sequence()) {
-						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
-						ostream.flush();
-						LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
-						if (collector.read(istream, header)) {
-							updateProgress(header);
-							
-							task.notifyAll();			
-						}
-						position.set(header.sequence() + 1);
-						LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
-					}
-					else {
-						LOG.debug(this + " ignoring -- " + header);
-						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
-					}
-					// Indicate the next spill file that I expect.
-					pos = position.longValue();
-					LOG.debug("Updating source position to " + pos);
-					ostream.writeLong(pos);
-					ostream.flush();
-				}
-			}
-			*/
 		}		
 	}
 	
@@ -716,5 +617,148 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 				}
 			}
 		}
+	}
+	
+	final class AsyncTimeTriggerStreamHandler extends Handler<OutputFile.StreamHeader> {
+		private int bufferedMap = 0;
+		private long lastRec = Long.MAX_VALUE;
+		private TriggerThread triggerThread;
+		
+		private class TriggerThread extends Thread {
+			
+			private long triggerThreshold;
+			public TriggerThread() throws IOException {
+				triggerThreshold = conf.getLong("priter.job.async.time.triggerThresh", 1000);
+			}
+			
+			public void run() {  
+				while(true) {
+					synchronized(task){
+						try{
+							this.wait(1000);
+							long curr = System.currentTimeMillis();
+							if((curr - lastRec > triggerThreshold) && (bufferedMap > 0)){
+								((ReduceTask)task).spillIter = true;
+								bufferedMap = 0;
+								task.notifyAll();
+							}
+						}catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+					}
+				}
+			}
+		}
+		
+		public AsyncTimeTriggerStreamHandler(InputCollector<K, V> collector,
+				           DataInputStream istream, DataOutputStream ostream) throws IOException {
+			super(collector, istream, ostream);
+			
+			triggerThread = new TriggerThread();
+			triggerThread.setDaemon(true);
+			triggerThread.start();
+		}
+
+		public void receive(OutputFile.StreamHeader header) throws IOException {
+			//Get my position for this source taskid. 
+			Position position = null;
+			TaskID inputTaskID = header.owner().getTaskID();
+			synchronized (cursor) {
+				if (!cursor.containsKey(inputTaskID)) {
+					cursor.put(inputTaskID, new Position(-1));
+				}
+				position = cursor.get(inputTaskID);
+			}
+
+			synchronized (task) {			
+				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
+				LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
+				if (pos == header.sequence()) {
+					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
+					ostream.flush();
+					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
+					if (collector.read(istream, header)) {
+						updateProgress(header);
+						bufferedMap++;
+						
+						if(bufferedMap == syncMaps){
+							((ReduceTask)task).spillIter = true;
+							bufferedMap = 0;
+						}
+						
+						task.notifyAll();
+						
+						lastRec = System.currentTimeMillis();
+
+						position.set(header.sequence() + 1);
+						LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
+					}else {
+						LOG.debug(this + " ignoring -- " + header);
+						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
+					}
+					// Indicate the next spill file that I expect.
+					pos = position.longValue();
+					LOG.debug("Updating source position to " + pos);
+					ostream.writeLong(pos);
+					ostream.flush();
+				}
+			}
+		}		
+	}
+	
+	final class AsyncSelfTriggerStreamHandler extends Handler<OutputFile.StreamHeader> {
+		private int bufferedMap = 0;
+		private long lastRec = Long.MAX_VALUE;
+		
+		public AsyncSelfTriggerStreamHandler(InputCollector<K, V> collector,
+				           DataInputStream istream, DataOutputStream ostream) throws IOException {
+			super(collector, istream, ostream);
+		}
+
+		public void receive(OutputFile.StreamHeader header) throws IOException {
+			//Get my position for this source taskid. 
+			Position position = null;
+			TaskID inputTaskID = header.owner().getTaskID();
+			synchronized (cursor) {
+				if (!cursor.containsKey(inputTaskID)) {
+					cursor.put(inputTaskID, new Position(-1));
+				}
+				position = cursor.get(inputTaskID);
+			}
+
+			synchronized (task) {			
+				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
+				LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
+				if (pos == header.sequence()) {
+					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
+					ostream.flush();
+					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
+					if (collector.read(istream, header)) {
+						updateProgress(header);
+						bufferedMap++;
+						
+						if(bufferedMap == syncMaps){
+							((ReduceTask)task).spillIter = true;
+							bufferedMap = 0;
+						}
+						
+						task.notifyAll();
+						
+						lastRec = System.currentTimeMillis();
+
+						position.set(header.sequence() + 1);
+						LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
+					}else {
+						LOG.debug(this + " ignoring -- " + header);
+						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
+					}
+					// Indicate the next spill file that I expect.
+					pos = position.longValue();
+					LOG.debug("Updating source position to " + pos);
+					ostream.writeLong(pos);
+					ostream.flush();
+				}
+			}
+		}		
 	}
 }
