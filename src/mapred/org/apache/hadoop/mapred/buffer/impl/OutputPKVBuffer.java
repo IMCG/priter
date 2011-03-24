@@ -85,13 +85,12 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	public int total_reduce = 0;
 	public boolean start = false;
 	
-	public int totalEdges = 0;
+	public int totalEdges;
 	public int updatedEdges = 0;
 	
 	public static int WAIT_ITER = 0;
 	
 	//for termination check
-
 
 	public OutputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
 			Reporter reporter, Progress progress, Class<P> priClass, Class<V> valClass, 
@@ -131,9 +130,13 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		
 		int totalkeys = job.getInt("priter.graph.nodes", -1) / partitions;
 		if(totalkeys <= 0) throw new IOException("priter.graph.nodes not defined.");
+		totalEdges = job.getInt("priter.graph.edges", -1) / partitions;
+		
 		
 		if(job.getFloat("priter.queue.portion", -1) != -1){
 			this.queuelen = (int) (totalkeys * job.getFloat("priter.queue.portion", 1));
+			this.totalEdges = (int) (totalEdges * job.getFloat("priter.queue.portion", 1));
+			LOG.info("total edges is " + totalEdges);
 		}else if(job.getInt("priter.queue.length", -1) != -1){
 			this.queuelen = job.getInt("priter.queue.length", totalkeys);
 		}else if(job.getInt("priter.queue.uniqlength", -1) != -1){
@@ -232,13 +235,16 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 				
 			}else{
+				int actualqueuelen = this.queuelen;
 				//for asynchronous execution, determine the queue size based on how much portion of information received (from edges)
 				if(job.getBoolean("priter.job.async.self", false) || job.getBoolean("priter.job.async.time", false)){
-					this.queuelen = (int) (queuelen * updatedEdges / totalEdges);
+					actualqueuelen = (int) (queuelen * ((double)updatedEdges / totalEdges));
+					LOG.info("actual queue len " + actualqueuelen + " queuelen " + queuelen + " updated edges " + updatedEdges);
+					if(actualqueuelen > queuelen) actualqueuelen = queuelen;	
 				}
 				
 				//queulen extraction
-				if((this.stateTable.size() <= queuelen) || (this.stateTable.size() <= SAMPLESIZE)){
+				if((this.stateTable.size() <= actualqueuelen) || (this.stateTable.size() <= SAMPLESIZE)){
 					for(IntWritable k : stateTable.keySet()){		
 						V v = stateTable.get(k).getiState();
 						P pri = stateTable.get(k).getPriority();
@@ -251,7 +257,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							activations++;	
 						}
 					}
-					LOG.info("iteration " + iteration + "queuelen is " + queuelen + " expend " + activations + " k-v pairs");
+					LOG.info("iteration " + iteration + "queuelen is " + actualqueuelen + " expend " + activations + " k-v pairs");
 				}else{
 					Random rand = new Random();
 					List<IntWritable> randomkeys = new ArrayList<IntWritable>(SAMPLESIZE);
@@ -272,10 +278,11 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 								}
 							});
 					
-					int cutindex = queuelen * SAMPLESIZE / this.stateTable.size();
-					threshold = stateTable.get(randomkeys.get(cutindex)).getPriority();
-					LOG.info("queuelen " + queuelen + " table size " + stateTable.size() + 
+					int cutindex = actualqueuelen * SAMPLESIZE / this.stateTable.size();
+					LOG.info("queuelen " + actualqueuelen + " table size " + stateTable.size() + 
 							" cut index " + cutindex);
+					threshold = stateTable.get(randomkeys.get(cutindex)).getPriority();
+
 					
 					for(IntWritable k : stateTable.keySet()){		
 						V v = stateTable.get(k).getiState();
@@ -344,15 +351,6 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	 */
 	public synchronized OutputFile spillTops() throws IOException {
 		start = true;
-		
-		if(this.updatedEdges == 0){
-			return null;
-		}else{
-			if(this.updatedEdges > this.totalEdges){
-				this.totalEdges = this.updatedEdges;
-				LOG.info("total edges is " + this.totalEdges);
-			}	
-		}
 			
 		Path filename = null;
 		Path indexFilename = null;

@@ -131,6 +131,8 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	//for synchronization
 	private Map<Long, Integer> syncMapPos;
 	private int syncMaps;
+	private boolean init = true;
+	private long lastRec = 0;
 
 	/* The task that owns this sink and is receiving the input. */
 	private Task task;
@@ -666,10 +668,6 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	}
 	
 	final class AsyncSelfTriggerStreamHandler extends Handler<OutputFile.StreamHeader> {
-
-		private long lastRec = Long.MAX_VALUE;
-		private int bufferedMap = 0;
-		private boolean init = true;
 		
 		public AsyncSelfTriggerStreamHandler(InputCollector<K, V> collector,
 				           DataInputStream istream, DataOutputStream ostream) throws IOException {
@@ -687,26 +685,43 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					
 					//we collect all the map outputs in the first round
 					if(init){
-						if(bufferedMap == syncMaps){
+						int recMaps = 0;
+						if(!syncMapPos.containsKey((long)1)){
+							LOG.info("no key exist");
+							recMaps = 1;
+						}else{
+							recMaps = syncMapPos.get((long)1) + 1;
+						}
+						
+						LOG.info("init phase, " + recMaps + " map outputs are received");
+						syncMapPos.put((long)1, recMaps);
+						
+						if(recMaps == syncMaps){
 							LOG.info("all map outputs are collected, trigger map");
 							((ReduceTask)task).spillIter = true;
-							bufferedMap = 0;
+							syncMapPos.put((long)1, 0);
 							init = false;
-						}else{
-							bufferedMap++;
+							lastRec = System.currentTimeMillis();
 						}
 					}else{
+						int recMaps = 0;
+						if(!syncMapPos.containsKey((long)1)){
+							recMaps = 1;
+						}else{
+							recMaps = syncMapPos.get((long)1) + 1;
+						}
+						
+						LOG.info("running phase, " + recMaps + " map outputs are received");
+						syncMapPos.put((long)1, recMaps);
+						
 						if(header.owner().getTaskID().getId() == task.getTaskID().getTaskID().getId()){
-							bufferedMap++;
 							long current = System.currentTimeMillis();
 
 							LOG.info("self map received, trigger map " + (current - lastRec) +
-									"ms " + bufferedMap + " map outputs are buffered");
+									"ms " + recMaps + " map outputs are buffered");
 							lastRec = System.currentTimeMillis();
 							((ReduceTask)task).spillIter = true;
-							bufferedMap = 0;
-						}else{
-							bufferedMap++;
+							syncMapPos.put((long)1, 0);
 						}
 					}
 					
