@@ -236,6 +236,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				
 			}else{
 				int actualqueuelen = this.queuelen;
+				
 				//for asynchronous execution, determine the queue size based on how much portion of information received (from edges)
 				if(job.getBoolean("priter.job.async.self", false) || job.getBoolean("priter.job.async.time", false)){
 					actualqueuelen = (int) (queuelen * ((double)updatedEdges / totalEdges));
