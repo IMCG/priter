@@ -169,7 +169,7 @@ public class MapTask extends Task {
 
 				try {
 					Thread.sleep(1000);
-				} catch (InterruptedException e) { }
+				} catch (InterruptedException e) { return; }
 			}
 		}
 	}
@@ -214,7 +214,7 @@ public class MapTask extends Task {
 					}catch(IOException ioe){
 						ioe.printStackTrace();
 					}catch (InterruptedException e) {
-						e.printStackTrace();
+						return;
 					}
 				}
 			}

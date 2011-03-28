@@ -125,6 +125,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
   private Map<JobID, WritableComparable> lastTotal = new HashMap<JobID, WritableComparable>();
+  private Map<JobID, Boolean> SnapshotIndexChanged = new HashMap<JobID, Boolean>();
   
   public boolean taskReAssign = false;
   public int checkpointIter;
@@ -156,6 +157,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   private Map<String, List<Integer>> taskReAssignMap = new HashMap<String, List<Integer>>();
   private long lastIterTime = 0;
   private int recoverIterations = 0;
+  private Map<JobID, FailureCheckThread> migrateCheckMap = new HashMap<JobID, FailureCheckThread>();
 
   
   class TimeSeq{
@@ -2668,6 +2670,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	this.recTimeSeq.remove(jobid);
 	this.taskReAssign = false;
 	this.taskReAssignMap.clear();
+	this.migrateCheckMap.get(jobid).interrupt();
+	this.migrateCheckMap.remove(jobid);
 	
     // Inform the listeners if the job is killed
     // Note : 
@@ -3277,6 +3281,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				if(tasks.size() == this.totalReduces) {
 					//do merge sort
 					WritableComparable total = this.mergerMap.get(jobid).writeTopK(snapshotIndex);
+					this.SnapshotIndexChanged.put(jobid, true);
 					
 					//stopcheck	
 					int maxiter = jobs.get(jobid).getJobConf().getInt("priter.stop.maxiteration", Integer.MAX_VALUE);
@@ -3600,6 +3605,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			int snapshotCheckpoint = event.getSnapshotCheckpoint();
 			JobID jobid = event.getJob();
 	
+			//for fault tolerance
+			if(migrateCheckMap.get(jobid) == null){
+				long checkinterval = jobs.get(jobid).getJobConf().getLong("priter.task.restart.threshold", 50000);
+				FailureCheckThread migrateThread = new FailureCheckThread(jobid, checkinterval);
+				migrateCheckMap.put(jobid, migrateThread);
+				migrateThread.setDaemon(true);
+				migrateThread.start();
+			}
+			
 			if(this.recTimeSeq.get(jobid) == null){			
 				Map<Integer, List<TimeSeq>> jobiterComplete = new HashMap<Integer, List<TimeSeq>>();
 				this.recTimeSeq.put(jobid, jobiterComplete);
@@ -3618,6 +3632,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			
 			long currtime = System.currentTimeMillis() - lastIterTime;
 			recTimeSeq.get(jobid).get(iterIndex).add(new TimeSeq(taskid, currtime));
+			
+			//for fault tolerance
+			synchronized(migrateCheckMap.get(jobid)){
+				migrateCheckMap.get(jobid).receviedOne = true;
+				migrateCheckMap.get(jobid).event = event;
+				migrateCheckMap.get(jobid).notifyAll();
+			}
+
 			LOG.info("get iteration " + iterIndex + " complete report for " + taskid + " it takes " + currtime);
 			
 			if(recTimeSeq.get(jobid).get(iterIndex).size() == totalReduces){
@@ -3631,12 +3653,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				
 				if(recoverIterations == 0) recoverIterations = jobs.get(jobid).getJobConf().getInt("priter.checkpoint.frequency", 10);
 				//migrate task
-				if(!taskReAssign && (iterIndex >= recoverIterations) && (com1.time - com2.time > jobs.get(jobid).getJobConf().getLong("priter.task.migration.threshold", 20000))){
+				if(!taskReAssign && (iterIndex >= recoverIterations) 
+						&& (com1.time - com2.time > jobs.get(jobid).getJobConf().getLong("priter.task.migration.threshold", 20000))
+						&& !SnapshotIndexChanged.get(jobid)){
 					String fromTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com1.taskid);
 					String toTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(com2.taskid);
 					int migrateTaskId = com1.taskid;
 					
 					if(fromTT.equals(toTT)){
+						lastIterTime = System.currentTimeMillis();
 						recTimeSeq.get(jobid).remove(iterIndex);
 						return;
 					}
@@ -3694,8 +3719,112 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 								
 				recTimeSeq.get(jobid).remove(iterIndex);
 				lastIterTime = System.currentTimeMillis();
+				SnapshotIndexChanged.put(jobid, false);
+				migrateCheckMap.get(jobid).newRound = true;
 			}
 		}
 	}
 
+	private class FailureCheckThread extends Thread {
+		
+		public IterationCompletionEvent event;
+		private JobID jobid;
+		private long interval;
+		public boolean receviedOne;
+		public boolean newRound;
+		
+		public FailureCheckThread(JobID jobid, long interval) throws IOException {
+			this.jobid = jobid;
+			this.interval = interval;
+			receviedOne = true;
+			newRound = true;
+		}
+		
+		private synchronized void migrate(){
+			int partitions = jobs.get(jobid).getJobConf().getInt("priter.graph.partitions", -1);
+			List<TimeSeq> seq = recTimeSeq.get(jobid).get(event.getIteration());
+			Set<Integer> failTasks = new HashSet<Integer>();
+			
+			//some task failed
+			if(seq.size() < partitions){
+				for(int i=0; i<partitions; i++){
+					boolean match = false;
+					
+					for(TimeSeq s : seq){
+						if(s.taskid == i){
+							match = true;
+							break;
+						}
+					}
+					
+					if(!match){
+						failTasks.add(i);
+					}
+				}
+				
+				int index = 0;
+				for(int failtaskid : failTasks){
+					String fromTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(failtaskid);
+					String toTT = ((PrIterTaskScheduler)taskScheduler).taskidTTMap.get(jobid).get(index);
+					int migrateTaskId = failtaskid;
+					
+        			//find the task attempid basded on task id
+        			TaskAttemptID migratemAttemptid = null;
+        			TaskAttemptID migraterAttemptid = null;
+        			for(TaskAttemptID attemptid : taskidToTrackerMap.keySet()){
+        				if(attemptid.getTaskID().getId() == migrateTaskId){
+        					if(attemptid.isMap()){
+        						migratemAttemptid = attemptid;
+        					}else{
+        						migraterAttemptid = attemptid;
+        					}       					
+        				}
+        			}
+        			
+					migrateTasks.clear();
+					snapshotCompletionMap.get(jobid).clear();
+					SnapshotIndexChanged.put(jobid, false);
+					
+        			if((migratemAttemptid != null) && (migraterAttemptid != null)){
+        				migrateTasks.put(new TaskMigrate(fromTT, toTT, migrateTaskId, migratemAttemptid, migraterAttemptid), 0);
+        			}else{
+        				try {
+							throw new IOException("no matched attemptid");
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+        			}
+        			
+        			LOG.info("task failure, do task migration from " + fromTT + " to " + toTT + " for task " + migrateTaskId);
+				}
+				taskReAssign = true;
+				checkpointIter = event.getCheckPoint();;
+				checkpointSnapshot = event.getSnapshotCheckpoint();
+				
+				index++;
+			}
+		}
+		
+		public void run() {
+
+			while(true) {
+				synchronized(this){
+					try{
+						this.wait(interval);
+	
+						if(receviedOne) newRound = false;
+						
+						if(!newRound && !receviedOne){
+							migrate();
+						}
+						receviedOne = false;
+						
+					}catch (InterruptedException e) {
+						return;
+					}
+				}
+			}
+		}
+	}
 }

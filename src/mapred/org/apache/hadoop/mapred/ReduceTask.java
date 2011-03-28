@@ -214,7 +214,7 @@ public class ReduceTask extends Task {
 					}catch(IOException ioe){
 						ioe.printStackTrace();
 					}catch (InterruptedException e) {
-						e.printStackTrace();
+						return;
 					}
 				}
 			}
@@ -264,7 +264,7 @@ public class ReduceTask extends Task {
 					}catch(IOException ioe){
 						ioe.printStackTrace();
 					}catch (InterruptedException e) {
-						e.printStackTrace();
+						return;
 					}
 				}
 			}
