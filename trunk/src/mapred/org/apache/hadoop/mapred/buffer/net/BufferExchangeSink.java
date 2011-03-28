@@ -620,7 +620,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 								task.notifyAll();
 							}
 						}catch (InterruptedException e) {
-							e.printStackTrace();
+							return;
 						}
 					}
 				}
