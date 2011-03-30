@@ -19,8 +19,12 @@
 package org.apache.hadoop.examples;
 import org.apache.hadoop.examples.dancing.DistributedPentomino;
 import org.apache.hadoop.examples.dancing.Sudoku;
+import org.apache.hadoop.examples.priorityiteration.Averaging;
 import org.apache.hadoop.examples.priorityiteration.BSearch;
+import org.apache.hadoop.examples.priorityiteration.ConnectComponent;
+import org.apache.hadoop.examples.priorityiteration.GenGraph;
 import org.apache.hadoop.examples.priorityiteration.PageRank;
+import org.apache.hadoop.examples.priorityiteration.PreProcess;
 import org.apache.hadoop.examples.terasort.TeraGen;
 import org.apache.hadoop.examples.terasort.TeraSort;
 import org.apache.hadoop.examples.terasort.TeraValidate;
@@ -72,8 +76,13 @@ public class ExampleDriver {
       pgd.addClass("terasort", TeraSort.class, "Run the terasort");
       pgd.addClass("teravalidate", TeraValidate.class, "Checking results of terasort");
       
+      //for priority examples
       pgd.addClass("shortestpath", BSearch.class, "BFS shortest path");
       pgd.addClass("pagerank", PageRank.class, "pagerank");
+      pgd.addClass("averaging", Averaging.class, "averaging");
+      pgd.addClass("conncomp", ConnectComponent.class, "conncomp");
+      pgd.addClass("preprocess", PreProcess.class, "preprocess");
+      pgd.addClass("gengraph", GenGraph.class, "gengraph");
       pgd.driver(argv);
 
       // Success
