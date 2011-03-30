@@ -14,7 +14,9 @@ public class MainDriver {
 	public static final int INDEX_BLOCK_SIZE = 100;
 	public static final String VALUE_CLASS = "data.val.class";
 	
-	public static final String START_NODE = "start.nodes";
+	public static final String CORRECT = "preprocess.correct.data";
+	public static final String TOTAL_NODE = "preprocess.total.nodes";
+	public static final String START_NODE = "preprocess.start.nodes";
 	
 	//for kmeans
 	public static final String KMEANS_INITCENTERS_DIR = "kmeans.initcenters.dir";
