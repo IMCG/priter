@@ -21,6 +21,7 @@ package org.apache.hadoop.mapred.buffer;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.SortedSet;
@@ -29,13 +30,15 @@ import java.util.TreeSet;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.mapred.TaskID;
 import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
+import org.apache.hadoop.mapred.buffer.impl.KVRecord;
 
-public class OutputFile implements Comparable<OutputFile>, Writable {
+public class OutputFile<V extends Object> implements Comparable<OutputFile>, Writable {
 	public static enum Type {FILE, SNAPSHOT, STREAM, PKVBUF};
 	public int STOP = -100;
 	public int RUN = -200;
@@ -416,6 +419,8 @@ public class OutputFile implements Comparable<OutputFile>, Writable {
 	private int partitions;
 	
 	private transient Set<TaskAttemptID> serviced = new HashSet<TaskAttemptID>();
+	
+	public ArrayList<KVRecord<IntWritable, V>> outputMemQueue =  new ArrayList<KVRecord<IntWritable, V>>();
 
 	public OutputFile() { 	}
 	
@@ -426,7 +431,7 @@ public class OutputFile implements Comparable<OutputFile>, Writable {
 		this.partitions = partitions;					
 		this.header = new PKVBufferHeader(owner, iteration);
 	}
-	
+
 	public OutputFile(TaskAttemptID owner, long sequence, Path data, Path index, int partitions) {
 		this.type = Type.STREAM;
 		this.data = data;
@@ -560,6 +565,12 @@ public class OutputFile implements Comparable<OutputFile>, Writable {
 		}
 	}
 
+	public Header seek2() throws IOException {
+		header.decompressed(100);
+		header.compressed(100);
+		return header;
+	}
+	
 	public FSDataInputStream dataInputStream() {
 		return this.dataIn;
 	}

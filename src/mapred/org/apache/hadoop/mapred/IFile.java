@@ -18,6 +18,7 @@
 package org.apache.hadoop.mapred;
 
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -233,6 +234,110 @@ public class IFile {
 	    
 	    public long getCompressedLength() {
 	      return compressedBytesWritten;
+	    }
+	  }
+  
+  
+  public static class SocketWriter<K extends Object, V extends Object> {
+	    DataOutputStream out;
+	    boolean ownOutputStream = false;
+	    long start = 0;
+	    DataOutputStream rawOut;
+	    
+	    long decompressedBytesWritten = 0;
+	    long compressedBytesWritten = 0;
+
+	    // Count records written to disk
+	    private long numRecordsWritten = 0;
+	    private final Counters.Counter writtenRecordsCounter;
+
+	    Class<K> keyClass;
+	    Class<V> valueClass;
+	    Serializer<K> keySerializer;
+	    Serializer<V> valueSerializer;
+	    
+	    private boolean bLenWritten = false;
+	    
+	    DataOutputBuffer buffer = new DataOutputBuffer();
+
+	    public SocketWriter(Configuration conf, DataOutputStream out, 
+	        Class<K> keyClass, Class<V> valueClass,
+	        CompressionCodec codec, Counters.Counter writesCounter)
+	        throws IOException {
+	      this.writtenRecordsCounter = writesCounter;
+	      this.out = out;
+	      
+	      this.keyClass = keyClass;
+	      this.valueClass = valueClass;
+	      SerializationFactory serializationFactory = new SerializationFactory(conf);
+	      this.keySerializer = serializationFactory.getSerializer(keyClass);
+	      this.keySerializer.open(buffer);
+	      this.valueSerializer = serializationFactory.getSerializer(valueClass);
+	      this.valueSerializer.open(buffer);
+	    }
+	    
+	    public void close() throws IOException {
+
+          keySerializer.close();
+          valueSerializer.close();
+
+          WritableUtils.writeVInt(out, EOF_MARKER);
+          WritableUtils.writeVInt(out, EOF_MARKER);
+          decompressedBytesWritten += 2 * WritableUtils.getVIntSize(EOF_MARKER);	
+	      
+	      //Flush the stream
+	      out.flush();
+	      
+	      out = null;
+	      if(writtenRecordsCounter != null) {
+	        writtenRecordsCounter.increment(numRecordsWritten);
+	      }
+	    }
+
+	    public void append(K key, V value) throws IOException {
+	      if (key.getClass() != keyClass)
+		        throw new IOException("wrong key class: "+ key.getClass()
+		                              +" is not "+ keyClass);
+		      if (value.getClass() != valueClass)
+		        throw new IOException("wrong value class: "+ value.getClass()
+		                              +" is not "+ valueClass);
+
+		      // Append the 'key'
+		      keySerializer.serialize(key);
+		      int keyLength = buffer.getLength();
+		      if (keyLength < 0) {
+		        throw new IOException("Negative key-length not allowed: " + keyLength + 
+		                              " for " + key);
+		      }
+
+		      // Append the 'value'
+		      valueSerializer.serialize(value);
+		      int valueLength = buffer.getLength() - keyLength;
+		      if (valueLength < 0) {
+		        throw new IOException("Negative value-length not allowed: " + 
+		                              valueLength + " for " + value);
+		      }
+		      
+		      //test
+		      //LOG.info("key length " + keyLength + " value length " + valueLength);
+		      
+		      // Write the record out
+		      WritableUtils.writeVInt(out, keyLength);                  // key length
+		      WritableUtils.writeVInt(out, valueLength);                // value length
+		      out.write(buffer.getData(), 0, buffer.getLength());       // data
+		      //out.flush();
+		      // Reset
+		      buffer.reset();
+		      
+		      // Update bytes written
+		      decompressedBytesWritten += keyLength + valueLength + 
+		                                  WritableUtils.getVIntSize(keyLength) + 
+		                                  WritableUtils.getVIntSize(valueLength);
+		      ++numRecordsWritten;
+	    }	    
+	    
+	    public long getRawLength() {
+	      return decompressedBytesWritten;
 	    }
 	  }
   /**
@@ -652,6 +757,203 @@ public class IFile {
 	     * @throws IOException
 	     */
 	    public Reader(Configuration conf, DataInputStream in, long length, 
+	                  CompressionCodec codec,
+	                  Counters.Counter readsCounter) throws IOException {
+	      readRecordsCounter = readsCounter;
+	      checksumIn = new IFileInputStream(in,length);
+	      if (codec != null) {
+	        decompressor = CodecPool.getDecompressor(codec);
+	        this.in = codec.createInputStream(checksumIn, decompressor);
+	      } else {
+	        this.in = checksumIn;
+	      }
+	      this.fileLength = length;
+	      
+	      if (conf != null) {
+	        bufferSize = conf.getInt("io.file.buffer.size", DEFAULT_BUFFER_SIZE);
+	      }
+	    }
+	    
+	    public long getLength() { 
+	      return fileLength - checksumIn.getSize();
+	    }
+	    
+	    public long getPosition() throws IOException {    
+	      return checksumIn.getPosition(); 
+	    }
+	    
+	    /**
+	     * Read upto len bytes into buf starting at offset off.
+	     * 
+	     * @param buf buffer 
+	     * @param off offset
+	     * @param len length of buffer
+	     * @return the no. of bytes read
+	     * @throws IOException
+	     */
+	    private int readData(byte[] buf, int off, int len) throws IOException {
+	      int bytesRead = 0;
+	      while (bytesRead < len) {
+	        int n = in.read(buf, off+bytesRead, len-bytesRead);
+	        if (n < 0) {
+	          return bytesRead;
+	        }
+	        bytesRead += n;
+	      }
+	      return len;
+	    }
+	    
+	    void readNextBlock(int minSize) throws IOException {
+	      if (buffer == null) {
+	        buffer = new byte[bufferSize];
+	        dataIn.reset(buffer, 0, 0);
+	      }
+	      buffer = 
+	        rejigData(buffer, 
+	                  (bufferSize < minSize) ? new byte[minSize << 1] : buffer);
+	      bufferSize = buffer.length;
+	    }
+	    
+	    private byte[] rejigData(byte[] source, byte[] destination) 
+	    throws IOException{
+	      // Copy remaining data into the destination array
+	      int bytesRemaining = dataIn.getLength()-dataIn.getPosition();
+	      if (bytesRemaining > 0) {
+	        System.arraycopy(source, dataIn.getPosition(), 
+	            destination, 0, bytesRemaining);
+	      }
+	      
+	      // Read as much data as will fit from the underlying stream 
+	      int n = readData(destination, bytesRemaining, 
+	                       (destination.length - bytesRemaining));
+	      dataIn.reset(destination, 0, (bytesRemaining + n));
+	      
+	      return destination;
+	    }
+	    
+	    public boolean next(DataInputBuffer key, DataInputBuffer value) 
+	    throws IOException {
+	      // Sanity check
+	      if (eof) {
+	        throw new EOFException("Completed reading " + bytesRead);
+	      }
+	      
+	      // Check if we have enough data to read lengths
+	      if ((dataIn.getLength() - dataIn.getPosition()) < 2*MAX_VINT_SIZE) {
+	        readNextBlock(2*MAX_VINT_SIZE);
+	      }
+	      
+	      // Read key and value lengths
+	      int oldPos = dataIn.getPosition();
+	      int keyLength = WritableUtils.readVInt(dataIn);
+	      int valueLength = WritableUtils.readVInt(dataIn);
+	      int pos = dataIn.getPosition();
+	      bytesRead += pos - oldPos;
+	      
+	      // Check for EOF
+	      if (keyLength == EOF_MARKER && valueLength == EOF_MARKER) {
+	        eof = true;
+	        return false;
+	      }
+	      
+	      // Sanity check
+	      if (keyLength < 0) {
+	        throw new IOException("Rec# " + recNo + ": Negative key-length: " + 
+	                              keyLength);
+	      }
+	      if (valueLength < 0) {
+	        throw new IOException("Rec# " + recNo + ": Negative value-length: " + 
+	                              valueLength);
+	      }
+	      
+	      final int recordLength = keyLength + valueLength;
+	      
+	      // Check if we have the raw key/value in the buffer
+	      if ((dataIn.getLength()-pos) < recordLength) {
+	        readNextBlock(recordLength);
+	        
+	        // Sanity check
+	        if ((dataIn.getLength() - dataIn.getPosition()) < recordLength) {
+	          throw new EOFException("Rec# " + recNo + ": Could read the next " +
+	          		                   " record");
+	        }
+	      }
+
+	      // Setup the key and value
+	      pos = dataIn.getPosition();
+	      byte[] data = dataIn.getData();
+	      key.reset(data, pos, keyLength);
+	      value.reset(data, (pos + keyLength), valueLength);
+	      
+	      // Position for the next record
+	      long skipped = dataIn.skip(recordLength);
+	      if (skipped != recordLength) {
+	        throw new IOException("Rec# " + recNo + ": Failed to skip past record " +
+	        		                  "of length: " + recordLength);
+	      }
+	      
+	      // Record the bytes read
+	      bytesRead += recordLength;
+
+	      ++recNo;
+	      ++numRecordsRead;
+
+	      return true;
+	    }
+	    
+	    public void close() throws IOException {
+	      // Return the decompressor
+	      if (decompressor != null) {
+	        decompressor.reset();
+	        CodecPool.returnDecompressor(decompressor);
+	        decompressor = null;
+	      }
+	      
+	      // Close the underlying stream
+	      in.close();
+	      
+	      // Release the buffer
+	      dataIn = null;
+	      buffer = null;
+	      if(readRecordsCounter != null) {
+	        readRecordsCounter.increment(numRecordsRead);
+	      }
+	    }
+	  } 
+  
+  public static class SocketReader<K extends Object, V extends Object> {
+	    private static final int DEFAULT_BUFFER_SIZE = 128*1024;
+	    private static final int MAX_VINT_SIZE = 9;
+
+	    // Count records read from disk
+	    private long numRecordsRead = 0;
+	    private final Counters.Counter readRecordsCounter;
+
+	    final InputStream in;        // Possibly decompressed stream that we read
+	    Decompressor decompressor;
+	    protected long bytesRead = 0;
+	    final long fileLength;
+	    boolean eof = false;
+	    final IFileInputStream checksumIn;
+	    
+	    byte[] buffer = null;
+	    int bufferSize = DEFAULT_BUFFER_SIZE;
+	    DataInputBuffer dataIn = new DataInputBuffer();
+
+	    int recNo = 1;
+
+	    /**
+	     * Construct an IFile Reader.
+	     * 
+	     * @param conf Configuration File 
+	     * @param in   The input stream
+	     * @param length Length of the data in the stream, including the checksum
+	     *               bytes.
+	     * @param codec codec
+	     * @param readsCounter Counter for records read from disk
+	     * @throws IOException
+	     */
+	    public SocketReader(Configuration conf, DataInputStream in, long length, 
 	                  CompressionCodec codec,
 	                  Counters.Counter readsCounter) throws IOException {
 	      readRecordsCounter = readsCounter;
