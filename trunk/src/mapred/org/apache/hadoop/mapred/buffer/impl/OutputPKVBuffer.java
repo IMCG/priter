@@ -40,6 +40,7 @@ import org.apache.hadoop.mapred.Updator;
 import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.mapred.buffer.OutputFile.Header;
+import org.apache.hadoop.mapred.buffer.net.BufferExchangeSource;
 import org.apache.hadoop.util.Progress;
 
 
@@ -84,6 +85,9 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	public int total_map = 0;
 	public int total_reduce = 0;
 	public boolean start = false;
+	
+	private boolean bMemTrans = false;
+	private BufferExchangeSource source;
 	
 	public int totalEdges;
 	public int updatedEdges = 0;
@@ -146,6 +150,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.topk = job.getInt("priter.snapshot.topk", 1000);
 		this.topk = this.topk * job.getInt("priter.snapshot.topk.scale", 4) / partitions;
 		
+		this.bMemTrans = job.getBoolean("priter.transfer.mem", false);
+		
 		this.updator.initStateTable(this);
 	}
 
@@ -167,10 +173,9 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.stateTable.put(key, newpkvRecord);
 	}
 	
-	private synchronized ArrayList<KVRecord<IntWritable, V>> getAllRecords() {
+	private synchronized void getAllRecords(ArrayList<KVRecord<IntWritable, V>> records) {
 		synchronized(this.stateTable){	
 			int activations = 0;
-			ArrayList<KVRecord<IntWritable, V>> records = new ArrayList<KVRecord<IntWritable, V>>();
 			for(IntWritable k : stateTable.keySet()){		
 				V v = stateTable.get(k).getiState();
 				P pri = stateTable.get(k).getPriority();
@@ -183,14 +188,12 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				activations++;
 			}
 			LOG.info("iteration " + iteration + " activate " + activations + " k-v pairs");
-			return records;
 		}
 	}
-	private synchronized ArrayList<KVRecord<IntWritable, V>> getTopRecords() {
+	private synchronized void getTopRecords(ArrayList<KVRecord<IntWritable, V>> records) {
 		
 		synchronized(this.stateTable){	
 			int activations = 0;
-			ArrayList<KVRecord<IntWritable, V>> records = new ArrayList<KVRecord<IntWritable, V>>();
 			P threshold = (P) updator.decidePriority(new IntWritable(0), (V)updator.resetiState(), true);
 			
 			if(queuetop != -1){
@@ -301,7 +304,6 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 				}
 			}
-			return records;
 		}
 	}
 	/*
@@ -352,101 +354,136 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	 */
 	public synchronized OutputFile spillTops() throws IOException {
 		start = true;
-			
-		Path filename = null;
-		Path indexFilename = null;
-		try{
-			filename = outputHandle.getSpillFileForWrite(this.taskAttemptID, this.iteration, -1);
-			indexFilename = outputHandle.getSpillIndexFileForWrite(
-					this.taskAttemptID, this.iteration, 24);
-		}catch(IOException e){
-			e.printStackTrace();
-		}
 		
-		if (localFs.exists(filename)) {
-			throw new IOException("PartitionBuffer::sortAndSpill -- spill file exists! " + filename);
-		}
-
-		FSDataOutputStream out = null;
-		FSDataOutputStream indexOut = null;
-		IFile.Writer<IntWritable, V> writer = null;
-		
-		try{		
-			out = localFs.create(filename, false);
-			indexOut = localFs.create(indexFilename, false);
-	
-			if (out == null ) throw new IOException("Unable to create spill file " + filename);
+		if(bMemTrans){
+			OutputFile outfile = new OutputFile(this.taskAttemptID, this.iteration, new Path("/tmp/t1"), new Path("/tmp/t1"), 1);
 			
 			synchronized(this.stateTable){
-	
-				ArrayList<KVRecord<IntWritable, V>> entries = null;
-				if(this.bPriExec){
-					entries = getTopRecords();
-				}else{
-					entries = getAllRecords();
-				}
-					
-				writer = new IFile.Writer<IntWritable, V>(job, out, IntWritable.class, valClass, null, null);
-
-				if(entries != null) this.priorityQueue.addAll(entries);
-				int count = 0;
-						
-				if(priorityQueue.size() == 0){
-					LOG.info("no records to send");
-					writer.append(this.defaultKey, this.defaultiState);
-				}else{
-					for(KVRecord<IntWritable, V> entry : priorityQueue){		
-						writer.append(entry.k, entry.v);
-						//LOG.info("send records: " + entry.k + " : " + entry.v);
-						entry = null;
-						count++;
+				synchronized(outfile.outputMemQueue){
+					if(this.bPriExec){
+						getTopRecords(outfile.outputMemQueue);
+					}else{
+						getAllRecords(outfile.outputMemQueue);
 					}
 					
-					total_map += count;
-				}		
-				writer.close();
+					if(outfile.outputMemQueue.size() == 0){
+						LOG.info("no records to send");
+						outfile.outputMemQueue.add(new KVRecord(this.defaultKey, this.defaultiState));
+					}else{
+						total_map += outfile.outputMemQueue.size();
+					}
+					
+					LOG.info("iteration " + this.iteration + " expand " + outfile.outputMemQueue.size() + " k-v pairs, " +
+							"total maps " + total_map + " total collected " + total_reduce);
+
+					//periodically dump statetable and execution queue
+					if(ftSupport && iteration != 0 && (iteration % checkFreq == 0) && (checkpointIter < iteration)){
+						dumpStateTable();
+						checkpointIter = iteration;
+						checkpointSnapshot = this.relatedTask.snapshotIndex;
+					}
+					
+					this.iteration++;
+				}
+			}
+
+			return outfile;
+		
+		}else{
+			Path filename = null;
+			Path indexFilename = null;
+			try{
+				filename = outputHandle.getSpillFileForWrite(this.taskAttemptID, this.iteration, -1);
+				indexFilename = outputHandle.getSpillIndexFileForWrite(
+						this.taskAttemptID, this.iteration, 24);
+			}catch(IOException e){
+				e.printStackTrace();
+			}
+			
+			if (localFs.exists(filename)) {
+				throw new IOException("PartitionBuffer::sortAndSpill -- spill file exists! " + filename);
+			}
+
+			FSDataOutputStream out = null;
+			FSDataOutputStream indexOut = null;
+			IFile.Writer<IntWritable, V> writer = null;
+			
+			try{		
+				out = localFs.create(filename, false);
+				indexOut = localFs.create(indexFilename, false);
+		
+				if (out == null ) throw new IOException("Unable to create spill file " + filename);
 				
-				LOG.info("iteration " + this.iteration + " expand " + count + " k-v pairs, " +
-						"total maps " + total_map + " total collected " + total_reduce);
-				writeIndexRecord(indexOut, out, 0, writer);
-				writer = null;
-				
-				
-				//periodically dump statetable and execution queue
-				if(ftSupport && iteration != 0 && (iteration % checkFreq == 0) && (checkpointIter < iteration)){
-					//dumpExeQueue();
-					dumpStateTable();
-					checkpointIter = iteration;
-					checkpointSnapshot = this.relatedTask.snapshotIndex;
+				synchronized(this.stateTable){
+		
+					//ArrayList<KVRecord<IntWritable, V>> entries = null;
+					if(this.bPriExec){
+						getTopRecords(priorityQueue);
+					}else{
+						getAllRecords(priorityQueue);
+					}
+						
+					writer = new IFile.Writer<IntWritable, V>(job, out, IntWritable.class, valClass, null, null);
+
+					//if(entries != null) this.priorityQueue.addAll(entries);
+					int count = 0;
+							
+					if(priorityQueue.size() == 0){
+						LOG.info("no records to send");
+						writer.append(this.defaultKey, this.defaultiState);
+					}else{
+						for(KVRecord<IntWritable, V> entry : priorityQueue){		
+							writer.append(entry.k, entry.v);
+							//LOG.info("send records: " + entry.k + " : " + entry.v);
+							entry = null;
+							count++;
+						}
+						
+						total_map += count;
+					}		
+					writer.close();
+					
+					LOG.info("iteration " + this.iteration + " expand " + count + " k-v pairs, " +
+							"total maps " + total_map + " total collected " + total_reduce);
+					writeIndexRecord(indexOut, out, 0, writer);
+					writer = null;
+					
+					
+					//periodically dump statetable and execution queue
+					if(ftSupport && iteration != 0 && (iteration % checkFreq == 0) && (checkpointIter < iteration)){
+						//dumpExeQueue();
+						dumpStateTable();
+						checkpointIter = iteration;
+						checkpointSnapshot = this.relatedTask.snapshotIndex;
+					}
+					
+					this.iteration++;
+					priorityQueue.clear();
+				}
+			} catch(IOException e){
+				e.printStackTrace();
+			}finally {
+				if (null != writer) {
+					writer.close();
+					writer = null;
 				}
 				
-				this.iteration++;
-				priorityQueue.clear();
-			}
-		} catch(IOException e){
-			e.printStackTrace();
-		}finally {
-			if (null != writer) {
-				writer.close();
-				writer = null;
-			}
-			
-			if (out != null){
-				out.close();
-				out = null;
-			}
-			if (indexOut != null) {
-				indexOut.close();
-				indexOut = null;
-			}
-			
-			//LOG.info("generated a spill file " + filename);
-			//LOG.info("generated a spill index file " + indexFilename);
-		}
+				if (out != null){
+					out.close();
+					out = null;
+				}
+				if (indexOut != null) {
+					indexOut.close();
+					indexOut = null;
+				}
 				
-		int partitions = 1;
-		return new OutputFile(this.taskAttemptID, this.iteration, filename, indexFilename, partitions);
-		
+				//LOG.info("generated a spill file " + filename);
+				//LOG.info("generated a spill index file " + indexFilename);
+			}
+					
+			int partitions = 1;
+			return new OutputFile(this.taskAttemptID, this.iteration, filename, indexFilename, partitions);
+		}
 	}
 	
 	private void writeIndexRecord(FSDataOutputStream indexOut,

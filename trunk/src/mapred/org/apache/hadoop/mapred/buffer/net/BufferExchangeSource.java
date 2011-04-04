@@ -7,6 +7,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,11 +15,14 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.mapred.IFile;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.mapred.TaskID;
 import org.apache.hadoop.mapred.buffer.OutputFile;
+import org.apache.hadoop.mapred.buffer.impl.KVRecord;
 
 public abstract class BufferExchangeSource<H extends OutputFile.Header> 
 	implements Comparable<BufferExchangeSource>, BufferExchange {
@@ -41,7 +45,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 			}
 		}
 		if (request.bufferType() == BufferType.PKVBUF) {
-			return new PKVBufSource(rfs, conf, request);
+			return new PKVBufSource(rfs, conf, request, conf.getOutputValueClass());
 		}
 			
 		return null;
@@ -164,37 +168,37 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 	}
 
 	protected BufferExchange.Connect open(BufferExchange.BufferType bufferType) {
-			if (socket == null) {
-				socket = new Socket();
-				try {
-					socket.connect(this.address);
+		if (socket == null) {
+			socket = new Socket();
+			try {
+				socket.connect(this.address);
 
-					ostream = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-					istream = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-					
-					BufferExchange.Connect connection = 
-						WritableUtils.readEnum(istream, BufferExchange.Connect.class);
-					if (connection == BufferExchange.Connect.OPEN) {
-						WritableUtils.writeEnum(ostream, bufferType);
-						ostream.flush();
-					}
-					else {
-						return connection;
-					}
-				} catch (IOException e) {
-					if (socket != null && !socket.isClosed()) {
-						try { socket.close();
-						} catch (Throwable t) { }
-					}
-					socket = null;
-					ostream = null;
-					istream = null;
-					return BufferExchange.Connect.ERROR;
+				ostream = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+				istream = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+				
+				BufferExchange.Connect connection = 
+					WritableUtils.readEnum(istream, BufferExchange.Connect.class);
+				if (connection == BufferExchange.Connect.OPEN) {
+					WritableUtils.writeEnum(ostream, bufferType);
+					ostream.flush();
 				}
-			}else if(socket.isClosed()){
-				return BufferExchange.Connect.CLOSED;
+				else {
+					return connection;
+				}
+			} catch (IOException e) {
+				if (socket != null && !socket.isClosed()) {
+					try { socket.close();
+					} catch (Throwable t) { }
+				}
+				socket = null;
+				ostream = null;
+				istream = null;
+				return BufferExchange.Connect.ERROR;
 			}
-			return BufferExchange.Connect.OPEN;
+		}else if(socket.isClosed()){
+			return BufferExchange.Connect.CLOSED;
+		}
+		return BufferExchange.Connect.OPEN;
 	}
 					
 	protected BufferExchange.Transfer transmit(OutputFile file) {
@@ -290,6 +294,8 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 		}
 		return BufferExchange.Transfer.RETRY;
 	}
+	
+	
 	
 	/**
 	 * Helper method to send records from the output file to the socket of the
@@ -565,15 +571,66 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 
 	}
 
-	private static class PKVBufSource extends BufferExchangeSource<OutputFile.SnapshotHeader> {
+	private static class PKVBufSource<V extends Object> extends BufferExchangeSource<OutputFile.SnapshotHeader> {
 		
 		private Map<TaskID, Long> cursor;
+		private Class<V> valClass;
 		
-		public PKVBufSource(FileSystem rfs, JobConf conf, BufferRequest request) {
+		public PKVBufSource(FileSystem rfs, JobConf conf, BufferRequest request, Class<V> valClass) {
 			super(rfs, conf, request);
 			this.cursor = new HashMap<TaskID, Long>();
+			this.valClass = valClass;
 		}
 
+		//transfer in-memory record to map
+		protected BufferExchange.Transfer transmit3(OutputFile file) {
+
+			try {
+				ostream.writeInt(Integer.MAX_VALUE); // Sending something
+				
+				//LOG.info("file is " + file + " partition is " + partition);
+				OutputFile.Header header = file.seek2();
+
+				OutputFile.Header.writeHeader(ostream, header);
+				
+				//LOG.info("send header : " + header);
+				
+				ostream.flush();
+
+				BufferExchange.Transfer response = WritableUtils.readEnum(istream, BufferExchange.Transfer.class);
+				if (BufferExchange.Transfer.READY == response) {
+					
+					IFile.SocketWriter<IntWritable, V> writer = new IFile.SocketWriter(conf, ostream, IntWritable.class, valClass, null, null);
+					LOG.info("sending kv from memory " + file.outputMemQueue.size());
+					synchronized(file.outputMemQueue){
+						for(Object o : file.outputMemQueue){
+							KVRecord<IntWritable, V> record = (KVRecord<IntWritable, V>)o;
+							LOG.info("write " + record);
+							writer.append(record.k, record.v);
+						}
+						
+						writer.close();
+						//ostream.flush();
+						file.outputMemQueue.clear();
+					}
+
+					return BufferExchange.Transfer.SUCCESS;
+				}
+				return response;
+			} catch (IOException e) {
+				close(); // Close so reconnect will figure out current status.
+				LOG.debug(e);
+			}
+			
+			try {
+				file.close();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			return BufferExchange.Transfer.RETRY;
+		}
+		
 		@Override
 		protected final Transfer transfer(OutputFile file) {
 			OutputFile.PKVBufferHeader header = (OutputFile.PKVBufferHeader) file.header();
@@ -584,7 +641,13 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 				BufferExchange.Connect result = open(BufferType.PKVBUF);
 				if (result == Connect.OPEN) {
 					//LOG.info("Transfer pkvbuffer file " + file + ". Destination " + destination());
-					Transfer response = transmit2(file);
+					Transfer response = null;
+					if(conf.getBoolean("priter.transfer.mem", false)){
+						response = transmit3(file);
+					}else{
+						response = transmit2(file);
+					}
+					
 					if (response == Transfer.TERMINATE) {
 						return Transfer.TERMINATE;
 					}

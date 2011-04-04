@@ -187,6 +187,7 @@ public class InputPKVBuffer<V extends Object> implements
 					Object valObject = null;
 					keyObject = keyDeserializer.deserialize(keyObject);
 					valObject = valDeserializer.deserialize(valObject);
+					//LOG.info("read " + keyObject + valObject);
 
 					this.recordsQueue.add(new KVRecord<IntWritable, V>(keyObject, (V)valObject));
 				}

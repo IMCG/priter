@@ -581,7 +581,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 				if (pos == header.iteration()) {
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
 					ostream.flush();
-					LOG.debug("PKVBuffer handler " + hashCode() + " ready to receive -- " + header);
+					//LOG.info("PKVBuffer handler " + hashCode() + " ready to receive -- " + header);
 					
 					if (collector.read(istream, header)) {
 						updateProgress(header);

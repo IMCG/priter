@@ -144,8 +144,10 @@ public class MapTask extends Task {
 							*/	
 								if (reduceTasktId.getTaskID().equals(oneReduceTaskId)) {
 									LOG.info("Map " + getTaskID() + " sending buffer request to reducer " + oneReduceTaskId);
-									BufferExchange.BufferType type = BufferExchange.BufferType.PKVBUF;
 									
+									BufferExchange.BufferType type = BufferExchange.BufferType.PKVBUF;
+	
+								
 									BufferRequest request = 
 										new ReduceBufferRequest(host, getTaskID(), sink.getAddress(), type, oneReduceTaskId);
 									
