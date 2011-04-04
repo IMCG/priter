@@ -163,6 +163,7 @@ public class ReduceTask extends Task {
 		private int partitions = 0;
 		private TaskUmbilicalProtocol trackerUmbilical;
 		private int lastiter = -1;
+		public boolean bRecompute = false;
 		
 		public snapshotThread(TaskUmbilicalProtocol umbilical, Task task) throws IOException {
 			//topk = conf.getInt("mapred.iterative.topk", 1000);
@@ -184,33 +185,36 @@ public class ReduceTask extends Task {
 				synchronized(this){
 					try{
 						this.wait(conf.getLong("priter.snapshot.interval", 20000));
-						LOG.info("pkvBuffer size " + pkvBuffer.size() + " index " + snapshotIndex + " total maps is " + pkvBuffer.total_map);
-						
-						while((pkvBuffer == null) || (pkvBuffer.size() == 0)){
-							this.wait(500);
+						if(!bRecompute){
+							LOG.info("pkvBuffer size " + pkvBuffer.size() + " index " + snapshotIndex + " total maps is " + pkvBuffer.total_map);
+							
+							while((pkvBuffer == null) || (pkvBuffer.size() == 0)){
+								this.wait(500);
+							}
+							while(!pkvBuffer.start){
+								this.wait(500);
+							}
+							
+							//snapshot generation
+							pkvBuffer.snapshot(snapshotIndex);
+							
+							boolean update = true;
+							if(pkvBuffer.iteration == lastiter){
+								update = false;
+							}
+							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, getJobID());
+							try {
+								this.trackerUmbilical.snapshotCommit(event);
+							} catch (Exception e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
+							
+							lastiter = pkvBuffer.iteration;
+							snapshotIndex++;	
+						}else{
+							bRecompute = false;
 						}
-						while(!pkvBuffer.start){
-							this.wait(500);
-						}
-						
-						//snapshot generation
-						pkvBuffer.snapshot(snapshotIndex);
-						
-						boolean update = true;
-						if(pkvBuffer.iteration == lastiter){
-							update = false;
-						}
-						SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, getJobID());
-						try {
-							this.trackerUmbilical.snapshotCommit(event);
-						} catch (Exception e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-						
-						lastiter = pkvBuffer.iteration;
-						snapshotIndex++;
-						
 					}catch(IOException ioe){
 						ioe.printStackTrace();
 					}catch (InterruptedException e) {
@@ -225,13 +229,15 @@ public class ReduceTask extends Task {
 		
 		private long interval = 0;
 		private TaskUmbilicalProtocol trackerUmbilical;
+		private BufferUmbilicalProtocol srcs;
 		private BufferExchangeSink buffersink;
 		private InputCollector buffer;
 		private Task task;
 		
-		public RollbackCheckThread(TaskUmbilicalProtocol umbilical, BufferExchangeSink sink, InputCollector buffer, Task task) {
+		public RollbackCheckThread(TaskUmbilicalProtocol umbilical, BufferUmbilicalProtocol srcs, BufferExchangeSink sink, InputCollector buffer, Task task) {
 			interval = conf.getInt("priter.task.checkrollback.frequency", 2000);		  
 			this.trackerUmbilical = umbilical;
+			this.srcs = srcs;
 			this.buffersink = sink;
 			this.buffer = buffer;
 			this.task = task;
@@ -245,22 +251,30 @@ public class ReduceTask extends Task {
 						LOG.info("check roll back");
 						
 						CheckPoint checkpointEvent = trackerUmbilical.rollbackCheck(getTaskID());
-						checkpointIter = checkpointEvent.getIter();
-							
-						if(checkpointIter > 0){
-							int records = pkvBuffer.loadStateTable();
-							pkvBuffer.iteration = checkpointIter+1;
-							snapshotIndex = checkpointEvent.getSnapshot();
-							LOG.info("return to checkpoint " + checkpointIter + " load statetable with " + records + " records");
-							
-							buffer.free();
-							buffersink.resetCursorPosition(checkpointIter);
-							synchronized(task){
-								task.notifyAll();
-							}
-							
-						}
 
+						synchronized(task){
+							checkpointIter = checkpointEvent.getIter();
+								
+							if(checkpointIter > 0){
+								int records = pkvBuffer.loadStateTable();
+								
+								synchronized(termCheckThread){
+									termCheckThread.bRecompute = true;
+									termCheckThread.notifyAll();
+								}
+								
+								pkvBuffer.iteration = checkpointIter;
+								snapshotIndex = checkpointEvent.getSnapshot();
+								LOG.info("return to checkpoint " + checkpointIter + " load statetable with " + records + " records");
+								
+								buffer.free();
+								srcs.rollbackForReduce(this.task.getTaskID().getTaskID());
+								buffersink.resetCursorPosition(checkpointIter+1);
+								buffersink.syncMapPos.clear();
+								
+								task.notifyAll();						
+							}
+						}
 					}catch(IOException ioe){
 						ioe.printStackTrace();
 					}catch (InterruptedException e) {
@@ -306,7 +320,7 @@ public class ReduceTask extends Task {
 	public boolean spillIter = false;
 	
 	private MapOutputFetcher fetcher = null;
-	private Thread termCheckThread = null;
+	private snapshotThread termCheckThread = null;
 	private Thread rollbackCheckThread = null;
 	private Object rollbackLock = new Object();
 	private int iterindex = 0;
@@ -521,9 +535,11 @@ public class ReduceTask extends Task {
 		}
 		
 		if(this.checkpointIter > 0){
+			pkvBuffer.iteration = checkpointIter;
 			int records = this.pkvBuffer.loadStateTable();
-			LOG.info("load statetable with " + records + " records");
-			sink.resetCursorPosition(checkpointIter);
+			LOG.info("start new task, return to checkpoint " + checkpointIter + "load statetable with " + records + " records");
+			
+			sink.resetCursorPosition(checkpointIter+1);
 		}
 
 		//termination check thread, also do generating snapshot work
@@ -533,7 +549,7 @@ public class ReduceTask extends Task {
 		
 		if(ftsupport){
 			//rollback check thread
-			this.rollbackCheckThread = new RollbackCheckThread(taskUmbilical, sink, inputCollector, this);
+			this.rollbackCheckThread = new RollbackCheckThread(taskUmbilical, umbilical, sink, inputCollector, this);
 			this.rollbackCheckThread.setDaemon(true);
 			this.rollbackCheckThread.start();
 		}
@@ -550,48 +566,50 @@ public class ReduceTask extends Task {
 						 (System.currentTimeMillis() - windowTimeStamp) + "ms.");
 				windowTimeStamp = System.currentTimeMillis();
 				
-				synchronized(rollbackLock){
-					int updated = reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
-					this.pkvBuffer.updatedEdges += updated;
+				//synchronized(rollbackLock){
+				int updated = reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
+				this.pkvBuffer.updatedEdges += updated;
+
+				if(this.spillIter || this.checkpointIter > 0){
+					if(this.checkpointIter > 0) {
+						this.pkvBuffer.iteration = checkpointIter;
+						this.checkpointIter = 0;
+					}
+					//retrieve the top records, and generate a file
+					OutputFile outputFile = pkvBuffer.spillTops();
+					if(outputFile != null){
+						umbilical.output(outputFile);
+						updator.iterate();
+						LOG.info("output file " + outputFile);
+					}else{
+						LOG.info("no record is reduced, so wait!");
+					}
+					this.spillIter = false;
+					this.pkvBuffer.updatedEdges = 0;
 					
-					if(this.spillIter || this.checkpointIter > 0){
-						//retrieve the top records, and generate a file
-						OutputFile outputFile = pkvBuffer.spillTops();
-						if(outputFile != null){
-							umbilical.output(outputFile);
-							updator.iterate();
-							LOG.info("output file " + outputFile);
-						}else{
-							LOG.info("no record is reduced, so wait!");
-						}
-						this.spillIter = false;
-						this.pkvBuffer.updatedEdges = 0;
-						
-						if(ftsupport){
-							//send iteration completetion event to jobtracker for load balance and faulttolerance
-							if(iterindex > 5){
-								//after the system is stable
-								int id = this.getTaskID().getTaskID().getId();
-								
-								IterationCompletionEvent event = new IterationCompletionEvent(iterindex, id, pkvBuffer.checkpointIter, pkvBuffer.checkpointSnapshot, getJobID());
-								try {
-									taskUmbilical.afterIterCommit(event);
-								} catch (Exception e) {
-									// TODO Auto-generated catch block
-									e.printStackTrace();
-								}
+					LOG.info("has finished the first reduce");
+					
+					if(ftsupport){
+						//send iteration completetion event to jobtracker for load balance and faulttolerance
+						if(iterindex > 5){
+							//after the system is stable
+							int id = this.getTaskID().getTaskID().getId();
+							
+							IterationCompletionEvent event = new IterationCompletionEvent(iterindex, id, pkvBuffer.checkpointIter, pkvBuffer.checkpointSnapshot, getJobID());
+							try {
+								taskUmbilical.afterIterCommit(event);
+							} catch (Exception e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
 							}
 						}
-						
-						//LOG.info("iteration " + iterindex + "emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
-						iterindex++;
 					}
+					
+					//LOG.info("iteration " + iterindex + "emit " + pkvBuffer.actualEmit + " reduce write/scan use time " + sorttime);
+					iterindex++;
 				}
 				
 				inputCollector.free(); // Free current data
-				
-				this.checkpointIter = 0;
-				LOG.info("has finished the first reduce");
 
 				try {
 					this.wait();
@@ -599,6 +617,7 @@ public class ReduceTask extends Task {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
+				//}
 			}
 		}	
 	

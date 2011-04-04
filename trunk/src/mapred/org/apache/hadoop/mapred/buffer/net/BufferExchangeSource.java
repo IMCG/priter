@@ -24,7 +24,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 	implements Comparable<BufferExchangeSource>, BufferExchange {
 	
 	private static final Log LOG = LogFactory.getLog(BufferExchangeSource.class.getName());
-
+	
 	
 	public static final BufferExchangeSource factory(FileSystem rfs, JobConf conf, BufferRequest request) {
 		if (request.bufferType() == BufferType.FILE) {
@@ -71,6 +71,8 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 	protected Socket socket = null;
 	
 	private boolean sentOpen = false;
+	
+	public boolean rollback = false;
 	
 	protected BufferExchangeSource(FileSystem rfs, JobConf conf, BufferRequest request) {
 		this.rfs = rfs;
@@ -124,6 +126,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 			}		
 		}
 	}
+	
 	/*
 	public final Transfer send(OutputPKVBuffer buffer) {
 		synchronized (this) {
@@ -161,7 +164,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 	}
 
 	protected BufferExchange.Connect open(BufferExchange.BufferType bufferType) {
-			if (socket == null || socket.isClosed()) {
+			if (socket == null) {
 				socket = new Socket();
 				try {
 					socket.connect(this.address);
@@ -188,6 +191,8 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 					istream = null;
 					return BufferExchange.Connect.ERROR;
 				}
+			}else if(socket.isClosed()){
+				return BufferExchange.Connect.CLOSED;
 			}
 			return BufferExchange.Connect.OPEN;
 	}
@@ -214,6 +219,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 			ostream.flush();
 
 			BufferExchange.Transfer response = WritableUtils.readEnum(istream, BufferExchange.Transfer.class);
+			//LOG.info("we have feedback " + response);
 			if (BufferExchange.Transfer.READY == response) {
 				//LOG.info(this + " sending " + header);
 				write(header, file.dataInputStream());
@@ -382,8 +388,8 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 
 	}
 	
-	private static class StreamSource extends BufferExchangeSource<OutputFile.StreamHeader> {
-		private Map<TaskID, Long> cursor;
+	public static class StreamSource extends BufferExchangeSource<OutputFile.StreamHeader> {
+		public Map<TaskID, Long> cursor;
 		
 		public StreamSource(FileSystem rfs, JobConf conf, BufferRequest request) {
 			super(rfs, conf, request);
@@ -394,20 +400,30 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 		protected final Transfer transfer(OutputFile file) {
 			OutputFile.StreamHeader header = (OutputFile.StreamHeader) file.header();
 			TaskID taskid = header.owner().getTaskID();
-			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.sequence()) { 
+			//LOG.info("cursor " + cursor.get(taskid) + " header " + header.sequence());
+			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.sequence() || (rollback && cursor.get(taskid) > header.sequence())) { 
 				//LOG.info("before send");
 				BufferExchange.Connect result = open(BufferType.STREAM);
 				//LOG.info("after send");
 				
 				if (result == Connect.OPEN) {
-					LOG.info("Transfer stream file " + file + ". Destination " + destination());
+					//LOG.info("Transfer stream file " + file + ". Destination " + destination());
 					Transfer response = transmit(file);
+
 					if (response == Transfer.TERMINATE) {
+						LOG.info("terminate");
 						return Transfer.TERMINATE;
 					}
 
 					/* Update my next cursor position. */
 					long position = header.sequence() + 1;
+					
+					if (response == Transfer.IGNORE){
+						LOG.info("ignore");
+						cursor.put(taskid, position); // Update my cursor position
+						return response;
+					}
+					
 					try { 
 						long next = istream.readLong();
 						if (position != next) {
@@ -417,16 +433,21 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 
 					if (response == Transfer.SUCCESS) {
 						cursor.put(taskid, position);
-						LOG.debug("Transfer complete. New position " + cursor.get(taskid) + ". Destination " + destination());
+						//LOG.info("Transfer complete. New position " + cursor.get(taskid) + ". Destination " + destination());
 					}
 					else if (response == Transfer.IGNORE){
+						LOG.info("ignore");
 						cursor.put(taskid, position); // Update my cursor position
+						return response;
 					}
 					else {
-						LOG.debug("Unsuccessful send. Transfer response: " + response);
+						LOG.info("Unsuccessful send. Transfer response: " + response);
 					}
 
+					if(rollback && cursor.get(taskid) > header.sequence()) rollback = false;
 					return response;
+				}else if(result == Connect.CLOSED){
+					return Transfer.CLOSED;
 				}
 				else {
 					return Transfer.RETRY;
@@ -559,7 +580,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 			TaskID taskid = header.owner().getTaskID();
 			//LOG.info("cursor : " + cursor.containsKey(taskid) + "\t" + cursor.get(taskid) + "\t" + header.iteration());
 			
-			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.iteration()) { 
+			if (!cursor.containsKey(taskid) || cursor.get(taskid) == header.iteration() || rollback) {
 				BufferExchange.Connect result = open(BufferType.PKVBUF);
 				if (result == Connect.OPEN) {
 					//LOG.info("Transfer pkvbuffer file " + file + ". Destination " + destination());
@@ -589,6 +610,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 						LOG.debug("Unsuccessful send. Transfer response: " + response);
 					}
 
+					if(rollback) rollback = false;
 					return response;
 				}
 				else {
@@ -599,7 +621,7 @@ public abstract class BufferExchangeSource<H extends OutputFile.Header>
 				LOG.debug("Stream transfer ignore " + header + 
 						" current sequence " + cursor.get(taskid));
 				return Transfer.IGNORE;
-			}
+			}	
 		}
 
 	}

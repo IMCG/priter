@@ -286,34 +286,34 @@ public class Manager implements BufferUmbilicalProtocol {
 				while (open) {
 					synchronized (this) {
 						while (!somethingToSend && open) {
-							LOG.debug(this + " nothing to send.");
+							//LOG.info(this + " nothing to send.");
 							try { this.wait();
 							} catch (InterruptedException e) { }
 						}
 						
 						if (!open) return;
-						LOG.debug(this + " something to send.");
+						//LOG.info(this + " something to send.");
 						out.addAll(this.outputs); // Copy output files.
 						src.addAll(this.sources); // Copy requests.
 						somethingToSend = false;  // Assume we send everything.
 						busy = true;
-					}
-
-					try {
-						flush(out, src);
-					} finally {
-						synchronized (this) {
-							this.busy = false;
-							this.notifyAll();
+					
+						try {
+							flush(out, src);
+						} finally {
+							//synchronized (this) {
+								this.busy = false;
+								this.notifyAll();
+							//}
+							/*
+							for (BufferExchangeSource s : src) {
+								s.close();
+							}
+							*/
+							out.clear();
+							src.clear();
+							if (open) Thread.sleep(1000); // Have a smoke.
 						}
-						/*
-						for (BufferExchangeSource s : src) {
-							s.close();
-						}
-						*/
-						out.clear();
-						src.clear();
-						if (open) Thread.sleep(1000); // Have a smoke.
 					}
 				}
 			} catch (Throwable t) {
@@ -346,6 +346,7 @@ public class Manager implements BufferUmbilicalProtocol {
 		 */
 		private void add(OutputFile file) throws IOException {
 			synchronized (this) {
+				//LOG.info("invoke to add file and parse it");
 				this.outputs.add(file);
 				somethingToSend = true;
 				this.notifyAll();
@@ -421,6 +422,11 @@ public class Manager implements BufferUmbilicalProtocol {
 							stalls++;
 							somethingToSend = true; // Try again later.
 						}
+						else if(BufferExchange.Transfer.CLOSED == result){
+							LOG.info("closed connection with " + src);
+							file.serviced(src.destination());
+							this.sources.remove(src);
+						}
 						else if (BufferExchange.Transfer.IGNORE == result ||
 								BufferExchange.Transfer.SUCCESS == result) {
 							//LOG.info("Sent file " + file + " to " + src.destination());
@@ -440,9 +446,9 @@ public class Manager implements BufferUmbilicalProtocol {
 						e.printStackTrace();
 					}
 					
-					synchronized(this) {
+					//synchronized(this) {
 						this.outputs.remove(file);
-					}
+					//}
 				}
 			}
 			
@@ -594,6 +600,7 @@ public class Manager implements BufferUmbilicalProtocol {
 				while (!isInterrupted()) {
 					try {
 						OutputFile o = queue.take();
+						LOG.info("output file added " + o);
 						service.add(o);
 						queue.drainTo(service);
 						for (OutputFile file : service) {
@@ -644,6 +651,13 @@ public class Manager implements BufferUmbilicalProtocol {
 					fm_map.get(tid).close();
 				}
 			}
+			/*
+			if (this.mapSources.containsKey(jobid)) {
+				this.mapSources.get(jobid);
+			}
+
+			this.reduceSources.remove(tid.getTaskID());
+			*/
 		}
 	}
 
@@ -883,6 +897,22 @@ public class Manager implements BufferUmbilicalProtocol {
 		executor.execute(fm);
 	}
 
-
-
+	@Override
+	public synchronized void rollbackForMap(JobID jobid) {
+		//PROBLEMs here, for load balancing
+		for(BufferExchangeSource source : this.mapSources.get(jobid)){
+			if(source instanceof BufferExchangeSource.StreamSource){
+				((BufferExchangeSource.StreamSource)source).close();
+				((BufferExchangeSource.StreamSource)source).cursor.clear();
+			}
+			source.rollback = true;
+		}
+	}
+	
+	@Override
+	public synchronized void rollbackForReduce(TaskID taskid) {
+		for(BufferExchangeSource source : this.reduceSources.get(taskid)){
+			source.rollback = true;
+		}
+	}
 }

@@ -136,7 +136,7 @@ public abstract class Task implements Writable, Configurable {
   protected TaskAttemptContext taskContext;
   
   protected boolean iterative = false;
-  protected int checkpointIter = 0;
+  public int checkpointIter = 0;
   protected int checkpointSnapshot = 0;
   protected boolean rollback;
 

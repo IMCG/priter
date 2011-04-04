@@ -129,7 +129,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	private Map<TaskID, Position> cursor;
 	
 	//for synchronization
-	private Map<Long, Integer> syncMapPos;
+	public Map<Long, Integer> syncMapPos;
 	private int syncMaps;
 	private boolean init = true;
 	private long lastRec = 0;
@@ -494,10 +494,17 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 				position = cursor.get(inputTaskID);
 			}
 
-			synchronized (task) {			
-				long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
-				LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
-				if (pos == header.sequence()) {
+					
+			long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
+			//LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
+			if (pos == header.sequence()) {
+				synchronized (task) {	
+					//ignore expired map output
+					if(task.checkpointIter > 0){
+						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
+						ostream.flush();
+						LOG.info("map input late, return ignore ");
+					}
 					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
 					ostream.flush();
 					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
@@ -543,7 +550,12 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					ostream.writeLong(pos);
 					ostream.flush();
 				}
+			}else{
+				WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
+				ostream.flush();
+				LOG.info("position mismatch, return ignore ");
 			}
+			
 		}		
 	}
 	

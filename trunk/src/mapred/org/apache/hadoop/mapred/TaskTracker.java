@@ -1665,6 +1665,7 @@ public class TaskTracker
       // removing the job if it's the last task
       removeTaskFromJob(tip.getTask().getJobID(), tip);
       tip.jobHasFinished(wasFailure);
+      bufferController.free(tip.getTask().getTaskID());
       if (tip.getTask().isMapTask()) {
         indexCache.removeMap(tip.getTask().getTaskID().toString());
       }

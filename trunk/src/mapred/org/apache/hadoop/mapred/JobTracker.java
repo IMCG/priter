@@ -1088,6 +1088,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   // (trackerID->TreeSet of taskids running at that tracker)
   TreeMap<String, Set<TaskAttemptID>> trackerToTaskMap =
     new TreeMap<String, Set<TaskAttemptID>>();
+  
+  TreeMap<TaskAttemptID, Boolean> taskidSentMap = new TreeMap<TaskAttemptID, Boolean>();
 
   // (trackerID -> TreeSet of completed taskids running at that tracker)
   TreeMap<String, Set<TaskAttemptID>> trackerToMarkedTasksMap =
@@ -1973,6 +1975,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		TaskMigrate foundMigrate = null;
 		int operations = 0;
 	
+		LOG.info("task migrate for " + trackerName + "?");
+		
 		//another method
 		for (TaskAttemptID taskid : trackerToTaskMap.get(trackerName)) {
         	if(currjob == null){
@@ -1990,7 +1994,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     		int id = taskid.getTaskID().getId();
     		
         	for(TaskMigrate migrate : migrateTasks.keySet()){	
-        		if(migrate.toTT.equals(trackerName)){
+        		
+        		if(migrateTasks.get(migrate) >= 4) continue;
+        		
+        		if(migrate.toTT.equals(trackerName) && !taskidSentMap.get(taskid)){
     				TaskTrackerStatus taskTrackerStatus = getTaskTracker(trackerName);
     			    ClusterStatus clusterStatus = getClusterStatus();
     			    int numTaskTrackers = clusterStatus.getTaskTrackers();
@@ -2022,6 +2029,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         		        t.setCheckPointSnapshot(checkpointSnapshot);
         	            expireLaunchingTasks.addNewTask(t.getTaskID());
         	            actions.add(new LaunchTaskAction(t));
+        	            taskidSentMap.put(t.getTaskID(), true);
+        	            
         	            if (t.isMapTask()) {
         	                JobInProgress job = getJob(t.getJobID());
         	                job.fastUpdateTaskRunningStatus(t, taskTrackerStatus);
@@ -2034,6 +2043,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         				LOG.info("add new action for tracker " + trackerName + " on task " + t.getTaskID());
     			    }
     			}else if((id == migrate.taskid) && (migrate.fromTT.equals(trackerName))){
+
     				killTask(taskid, false);
     				//do not need to add this action, since in the following, getkilltasks method will kill it
 					actions.add(new KillTaskAction(taskid));
@@ -2052,8 +2062,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     			}
         	}		
     		
-    		if(!kill){   		
+    		if(!kill && !taskidSentMap.get(taskid)){   		
     			actions.add(new RedoTaskAction(taskid, checkpointIter, checkpointSnapshot));
+    			taskidSentMap.put(taskid, true);
     			LOG.info("add redo action for tracker " + trackerName + " on task " + taskid);
     		}  
     	}
@@ -2065,7 +2076,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			//old map + old reduce + new map + new reduce = 4
 			if(operations >= 4){
 				//migrate action completed, kill + reassign
-				migrateTasks.remove(foundMigrate);
+				migrateTasks.put(foundMigrate, 4);
 			}else{
 				//only complete one action
 				migrateTasks.put(foundMigrate, operations);
@@ -2073,10 +2084,20 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 		}   
 		
 		assignedTrackers.add(trackerName);
+		
+		boolean allmigrate = true;
+		for(Map.Entry<TaskMigrate, Integer> entry : migrateTasks.entrySet()){
+			if(entry.getValue() < 4){
+				allmigrate = false;
+				break;
+			}
+		}
 		//task migration has done
-		if(migrateTasks.isEmpty() && assignedTrackers.size() == trackerToTaskMap.size()){
+		if(allmigrate && assignedTrackers.size() == trackerToTaskMap.size()){
 			taskReAssign = false;
 			assignedTrackers.clear();
+			taskidSentMap.clear();
+			LOG.info("task migration complete!");
 		}
 		
 		//update some related maps after task reassign
@@ -2670,9 +2691,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	this.recTimeSeq.remove(jobid);
 	this.taskReAssign = false;
 	this.taskReAssignMap.clear();
-	this.migrateCheckMap.get(jobid).interrupt();
-	this.migrateCheckMap.remove(jobid);
 	
+	if(this.migrateCheckMap.get(jobid) != null){
+		this.migrateCheckMap.get(jobid).interrupt();
+		this.migrateCheckMap.remove(jobid);
+	}
+
     // Inform the listeners if the job is killed
     // Note : 
     //   If the job is killed in the PREP state then the listeners will be 
@@ -3015,6 +3039,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
       }
       
       TaskInProgress tip = taskidToTIPMap.get(taskId);
+      
+      //avoid the migrated task
+      for(TaskMigrate t : migrateTasks.keySet()){
+    	  if(taskId.equals(t.mapAttemptid) || taskId.equals(t.reduceAttemptid)){
+    		  return;
+    	  }
+      }
+      
       // Check if the tip is known to the jobtracker. In case of a restarted
       // jt, some tasks might join in later
       if (tip != null || hasRestarted()) {
@@ -3265,7 +3297,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			
 			if(this.snapshotCompletionMap.get(jobid).containsKey(snapshotIndex)){
 				if(this.snapshotCompletionMap.get(jobid).get(snapshotIndex).contains(reduceIndex)){
-					throw new IOException("duplicated reduce task index " + reduceIndex);
+					LOG.info("duplicated reduce task index " + reduceIndex);
 				}
 				
 				boolean updateb = update && this.snapshotUpdateMap.get(jobid).get(snapshotIndex);
@@ -3677,6 +3709,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         						migraterAttemptid = attemptid;
         					}       					
         				}
+        				
+        				//for recording the already notified task
+        				taskidSentMap.put(attemptid, false);
         			}
         			
 					migrateTasks.clear();
@@ -3714,7 +3749,10 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					this.taskReAssign = true;
 					this.checkpointIter = checkpoint;
 					this.checkpointSnapshot = snapshotCheckpoint;
-					LOG.info("do task migration from " + fromTT + " to " + toTT + " for task " + com1.taskid);
+					
+					LOG.info("do task migration from " + fromTT + " to " + toTT + " for task " + com1.taskid + 
+							" rollback to checkpoint iteration " + checkpoint + 
+							" rollback to checkpoint snapshot " + snapshotCheckpoint);
 				}
 								
 				recTimeSeq.get(jobid).remove(iterIndex);
@@ -3779,6 +3817,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         						migraterAttemptid = attemptid;
         					}       					
         				}
+        				
+        				//for recording the already notified task
+        				taskidSentMap.put(attemptid, false);
         			}
         			
 					migrateTasks.clear();
