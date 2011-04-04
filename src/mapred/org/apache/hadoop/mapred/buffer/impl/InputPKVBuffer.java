@@ -32,7 +32,7 @@ public class InputPKVBuffer<V extends Object> implements
 
 	private static final Log LOG = LogFactory.getLog(InputPKVBuffer.class.getName());
 	
-	private int iteration = 0;
+	public int iteration = 0;
 	private FileSystem hdfs;
 	private IntWritable savedKey;
 	private V savedValue;			//for get K, V pair

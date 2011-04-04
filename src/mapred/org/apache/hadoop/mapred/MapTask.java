@@ -178,13 +178,16 @@ public class MapTask extends Task {
 		
 		private long interval = 0;
 		private TaskUmbilicalProtocol trackerUmbilical;
+		private BufferUmbilicalProtocol srcs;
 		private BufferExchangeSink buffersink;
 		private InputPKVBuffer pkvBuffer;
 		private Task task;
 		
-		public RollbackCheckThread(TaskUmbilicalProtocol umbilical, BufferExchangeSink sink, Task task, InputPKVBuffer pkvBuffer) {
+		
+		public RollbackCheckThread(TaskUmbilicalProtocol umbilical, BufferUmbilicalProtocol srcs, BufferExchangeSink sink, Task task, InputPKVBuffer pkvBuffer) {
 			interval = conf.getInt("priter.task.checkrollback.frequency", 2000);		  
 			this.trackerUmbilical = umbilical;
+			this.srcs = srcs;
 			this.buffersink = sink;
 			this.task = task;
 			this.pkvBuffer = pkvBuffer;
@@ -198,17 +201,21 @@ public class MapTask extends Task {
 						LOG.info("check roll back");
 						
 						CheckPoint checkpointEvent = trackerUmbilical.rollbackCheck(getTaskID());
-						checkpointIter = checkpointEvent.getIter();
-							
-						if(checkpointIter > 0){
-							LOG.info("rolled back to checkpoint " + checkpointIter);
-							pkvBuffer.free();
-							buffersink.resetCursorPosition(checkpointIter);
-							checkpointIter = 0;
-							synchronized(task){
-								task.notifyAll();
+						
+						synchronized(task){
+							checkpointIter = checkpointEvent.getIter();
+								
+							if(checkpointIter > 0){
+								LOG.info("rolled back to checkpoint " + checkpointIter);
+								pkvBuffer.free();
+								srcs.rollbackForMap(this.task.getJobID());
+								pkvBuffer.iteration = checkpointIter+1;		//no use
+								nsortBuffer.iteration = checkpointIter+1;
+								buffersink.resetCursorPosition(checkpointIter+1);
+								checkpointIter = 0;
+								
+								task.notifyAll();	
 							}
-							
 						}
 
 					}catch(IOException ioe){
@@ -471,7 +478,7 @@ public class MapTask extends Task {
 		
 			if(ftsupport){
 				//rollback check thread
-				this.rollbackCheckThread = new RollbackCheckThread(umbilical, sink, this, pkvBuffer);
+				this.rollbackCheckThread = new RollbackCheckThread(umbilical, bufferUmbilical, sink, this, pkvBuffer);
 				this.rollbackCheckThread.setDaemon(true);
 				this.rollbackCheckThread.start();
 			}

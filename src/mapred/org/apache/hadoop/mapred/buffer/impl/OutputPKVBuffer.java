@@ -413,7 +413,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				
 				
 				//periodically dump statetable and execution queue
-				if(ftSupport && iteration != 0 && (iteration % checkFreq == 0)){
+				if(ftSupport && iteration != 0 && (iteration % checkFreq == 0) && (checkpointIter < iteration)){
 					//dumpExeQueue();
 					dumpStateTable();
 					checkpointIter = iteration;

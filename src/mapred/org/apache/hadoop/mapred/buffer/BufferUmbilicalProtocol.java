@@ -22,7 +22,9 @@ import java.io.IOException;
 
 import org.apache.hadoop.ipc.VersionedProtocol;
 import org.apache.hadoop.mapred.InputSplit;
+import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapred.TaskAttemptID;
+import org.apache.hadoop.mapred.TaskID;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.net.BufferRequest;
 
@@ -58,5 +60,6 @@ public interface BufferUmbilicalProtocol extends VersionedProtocol {
 	 */
 	void output(OutputFile buffer) throws IOException;
 
-	//void output(OutputPKVBuffer buffer) throws IOException;
+	public void rollbackForMap(JobID jobid);
+	public void rollbackForReduce(TaskID jobid);
 }

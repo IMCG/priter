@@ -563,7 +563,7 @@ public class UnSortOutputBuffer<K extends Object, V extends Object>
 	private boolean eof = false;
 	
 	private int iterative_spill_bufsize = 0;
-	private int iteration = 0;
+	public int iteration = 0;
 	
 	@SuppressWarnings("unchecked")
 	public UnSortOutputBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
