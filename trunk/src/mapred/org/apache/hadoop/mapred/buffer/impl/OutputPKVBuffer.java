@@ -78,8 +78,6 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	private Class<V> valClass;
       
 	private int topk;
-	private int queuelen = 0;
-	private int queuetop = -1;
 	
 	public int iteration = 0;
 	public int total_map = 0;
@@ -88,6 +86,14 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	
 	private boolean bMemTrans = false;
 	private BufferExchangeSource source;
+	
+	private boolean bPortion = false;
+	private boolean bLength = false;
+	private boolean bUniLen = false;
+	private double queueportion = 0.2;
+	private int queuelen = 0;
+	private int queuetop = -1;
+	private int nTableKeys;
 	
 	public int totalEdges;
 	public int updatedEdges = 0;
@@ -138,12 +144,16 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		
 		
 		if(job.getFloat("priter.queue.portion", -1) != -1){
-			this.queuelen = (int) (totalkeys * job.getFloat("priter.queue.portion", 1));
+			this.bPortion = true;
+			this.queueportion = job.getFloat("priter.queue.portion", 1);
+			//this.queuelen = (int) (totalkeys * job.getFloat("priter.queue.portion", 1));
 			this.totalEdges = (int) (totalEdges * job.getFloat("priter.queue.portion", 1));
 			LOG.info("total edges is " + totalEdges);
 		}else if(job.getInt("priter.queue.length", -1) != -1){
+			this.bLength = true;
 			this.queuelen = job.getInt("priter.queue.length", totalkeys);
 		}else if(job.getInt("priter.queue.uniqlength", -1) != -1){
+			this.bUniLen = true;
 			this.queuetop = job.getInt("priter.queue.uniqlength", -1);
 		}
 		
@@ -196,56 +206,85 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			int activations = 0;
 			P threshold = (P) updator.decidePriority(new IntWritable(0), (V)updator.resetiState(), true);
 			
-			if(queuetop != -1){
-				//queue top extraction
-				Random rand = new Random();
-				TreeSet<P> randomPris = new TreeSet<P>(new Comparator(){
-					@Override
-					public int compare(Object left, Object right) {
-						// TODO Auto-generated method stub
-						return -((P)left).compareTo((P)right);
-					}
-				});
-				List<IntWritable> keys = new ArrayList<IntWritable>(stateTable.keySet());
-				for(int j=0; j<SAMPLESIZE; j++){
-					P randpri = stateTable.get(keys.get(rand.nextInt(stateTable.size()))).getPriority();
-					randomPris.add(randpri);
-				}
-				
-				if(randomPris.size() <= queuetop){
-					threshold = randomPris.pollLast();
-				}else{
-					for(int i=0; i<queuetop; i++){
-						threshold = randomPris.pollFirst();
-					}
-				}
-
-				LOG.info("queue top " + queuetop + " table size " + stateTable.size());
-				
-				for(IntWritable k : stateTable.keySet()){		
-					V v = stateTable.get(k).getiState();
-					P pri = stateTable.get(k).getPriority();
-					if(pri.compareTo(threshold) > 0){
-						records.add(new KVRecord<IntWritable, V>(k, v));
-						V iState = (V)updator.resetiState();
-						this.stateTable.get(k).setiState(iState);
-						P p = (P) updator.decidePriority(k, iState, true);
-						this.stateTable.get(k).setPriority(p);
-						activations++;
-					}	
-					//LOG.info(k + "\t" + pri + "\t" + v);
-				}
-				LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
-				
-			}else{
-				int actualqueuelen = this.queuelen;
-				
+			if(this.bPortion){
+				int actualqueuelen = (int) (this.nTableKeys * this.queueportion);
+				/*
 				//for asynchronous execution, determine the queue size based on how much portion of information received (from edges)
 				if(job.getBoolean("priter.job.async.self", false) || job.getBoolean("priter.job.async.time", false)){
 					actualqueuelen = (int) (queuelen * ((double)updatedEdges / totalEdges));
 					LOG.info("actual queue len " + actualqueuelen + " queuelen " + queuelen + " updated edges " + updatedEdges);
 					if(actualqueuelen > queuelen) actualqueuelen = queuelen;	
 				}
+				*/
+				
+				//queulen extraction
+				if((this.stateTable.size() <= actualqueuelen) || (/*this.stateTable.size()*/ this.nTableKeys <= SAMPLESIZE)){
+					for(IntWritable k : stateTable.keySet()){		
+						V v = stateTable.get(k).getiState();
+						P pri = stateTable.get(k).getPriority();
+						if(pri.compareTo(threshold) > 0){
+							records.add(new KVRecord<IntWritable, V>(k, v));
+							V iState = (V)updator.resetiState();
+							this.stateTable.get(k).setiState(iState);
+							P p = (P) updator.decidePriority(k, iState, true);
+							this.stateTable.get(k).setPriority(p);
+							activations++;	
+							this.nTableKeys--;
+						}
+					}
+					LOG.info("iteration " + iteration + "queuelen is " + actualqueuelen + " expend " + activations + " k-v pairs");
+				}else{
+					Random rand = new Random();
+					List<IntWritable> randomkeys = new ArrayList<IntWritable>(SAMPLESIZE);
+					List<IntWritable> keys = new ArrayList<IntWritable>(stateTable.keySet());
+					
+					for(int j=0; j<SAMPLESIZE; j++){
+						IntWritable randnode = keys.get(rand.nextInt(stateTable.size()));
+						randomkeys.add(randnode);
+					}
+					
+					final Map<IntWritable, PriorityRecord<P, V>> langForSort = stateTable;
+					Collections.sort(randomkeys, 
+							new Comparator(){
+								public int compare(Object left, Object right){
+									PriorityRecord<P, V> leftrecord = langForSort.get(left);
+									PriorityRecord<P, V> rightrecord = langForSort.get(right);
+									return -leftrecord.compareTo(rightrecord);
+								}
+							});
+					
+					//int cutindex = actualqueuelen * SAMPLESIZE / this.stateTable.size();
+					int cutindex = actualqueuelen * SAMPLESIZE / this.nTableKeys;
+					LOG.info("queuelen " + actualqueuelen + " table size " + this.nTableKeys + 
+							" cut index " + cutindex);
+					threshold = stateTable.get(randomkeys.get(cutindex)).getPriority();
+					
+					for(IntWritable k : stateTable.keySet()){		
+						V v = stateTable.get(k).getiState();
+						P pri = stateTable.get(k).getPriority();
+						if(pri.compareTo(threshold) > 0){
+							records.add(new KVRecord<IntWritable, V>(k, v));
+							V iState = (V)updator.resetiState();
+							this.stateTable.get(k).setiState(iState);
+							P p = (P) updator.decidePriority(k, iState, true);
+							this.stateTable.get(k).setPriority(p);
+							activations++;
+							this.nTableKeys--;
+						}	
+						//LOG.info(k + "\t" + pri + "\t" + v);
+					}
+					LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
+				}
+			}else if(this.bLength){
+				int actualqueuelen = this.queuelen;
+				/*
+				//for asynchronous execution, determine the queue size based on how much portion of information received (from edges)
+				if(job.getBoolean("priter.job.async.self", false) || job.getBoolean("priter.job.async.time", false)){
+					actualqueuelen = (int) (queuelen * ((double)updatedEdges / totalEdges));
+					LOG.info("actual queue len " + actualqueuelen + " queuelen " + queuelen + " updated edges " + updatedEdges);
+					if(actualqueuelen > queuelen) actualqueuelen = queuelen;	
+				}
+				*/
 				
 				//queulen extraction
 				if((this.stateTable.size() <= actualqueuelen) || (this.stateTable.size() <= SAMPLESIZE)){
@@ -259,6 +298,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							P p = (P) updator.decidePriority(k, iState, true);
 							this.stateTable.get(k).setPriority(p);
 							activations++;	
+							this.nTableKeys--;
 						}
 					}
 					LOG.info("iteration " + iteration + "queuelen is " + actualqueuelen + " expend " + activations + " k-v pairs");
@@ -298,11 +338,54 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							P p = (P) updator.decidePriority(k, iState, true);
 							this.stateTable.get(k).setPriority(p);
 							activations++;
+							this.nTableKeys--;
 						}	
 						//LOG.info(k + "\t" + pri + "\t" + v);
 					}
 					LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 				}
+			}else if(this.bUniLen){
+				//queue top extraction
+				Random rand = new Random();
+				TreeSet<P> randomPris = new TreeSet<P>(new Comparator(){
+					@Override
+					public int compare(Object left, Object right) {
+						// TODO Auto-generated method stub
+						return -((P)left).compareTo((P)right);
+					}
+				});
+				List<IntWritable> keys = new ArrayList<IntWritable>(stateTable.keySet());
+				for(int j=0; j<SAMPLESIZE; j++){
+					P randpri = stateTable.get(keys.get(rand.nextInt(stateTable.size()))).getPriority();
+					randomPris.add(randpri);
+				}
+				
+				if(randomPris.size() <= queuetop){
+					threshold = randomPris.pollLast();
+				}else{
+					for(int i=0; i<queuetop; i++){
+						threshold = randomPris.pollFirst();
+					}
+				}
+
+				LOG.info("queue top " + queuetop + " table size " + stateTable.size());
+				
+				for(IntWritable k : stateTable.keySet()){		
+					V v = stateTable.get(k).getiState();
+					P pri = stateTable.get(k).getPriority();
+					if(pri.compareTo(threshold) > 0){
+						records.add(new KVRecord<IntWritable, V>(k, v));
+						V iState = (V)updator.resetiState();
+						this.stateTable.get(k).setiState(iState);
+						P p = (P) updator.decidePriority(k, iState, true);
+						this.stateTable.get(k).setPriority(p);
+						activations++;
+						this.nTableKeys--;
+					}	
+					//LOG.info(k + "\t" + pri + "\t" + v);
+				}
+				LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
+			
 			}
 		}
 	}
@@ -583,6 +666,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			count++;
 		}
 		
+		nTableKeys = count;
 		reader.close();
 		return count;
 	}
@@ -594,12 +678,14 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		//BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 
 		synchronized(this.stateTable){		
-			if(stateTable.size() <= topk){
+			if(stateTable.size() <= topk || stateTable.size() <= SAMPLESIZE){
+				int count = 0;
 				for(IntWritable k : stateTable.keySet()){	
 					V v = stateTable.get(k).getcState();
 					P pri = (P) updator.decidePriority(k, v, false);
 					writer.append(pri, k, stateTable.get(k).getcState());	
 					//writer.write(k + "\t" + stateTable.get(k).getcState());
+					if(count++ > topk) break;
 				}
 			}else{
 				Random rand = new Random();
@@ -608,7 +694,9 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				
 				for(int j=0; j<SAMPLESIZE; j++){
 					IntWritable randnode = keys.get(rand.nextInt(stateTable.size()));
-					randomkeys.add(randnode);
+					if(!randomkeys.contains(randnode)){
+						randomkeys.add(randnode);
+					}
 				}
 				
 				final Map<IntWritable, PriorityRecord<P, V>> langForSort = stateTable;
@@ -623,9 +711,10 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							}
 						});
 				
-				int cutindex = this.topk * SAMPLESIZE / this.stateTable.size();
-				P threshold = stateTable.get(randomkeys.get(cutindex)).getPriority();
+				int cutindex = this.topk * randomkeys.size() / this.stateTable.size()+1;
+				P threshold = (P) updator.decidePriority(randomkeys.get(cutindex), stateTable.get(randomkeys.get(cutindex)).getcState(), false);
 		
+				LOG.info("table size " + this.stateTable.size() + " cutindex " + cutindex + " threshold " + threshold);
 				for(IntWritable k : stateTable.keySet()){		
 					V v = stateTable.get(k).getcState();
 					P pri = (P) updator.decidePriority(k, v, false);
@@ -654,5 +743,9 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	public void collect(IntWritable key, V value) throws IOException {
 		// TODO Auto-generated method stub
 		
+	}
+	
+	public void incrKey(){
+		this.nTableKeys++;
 	}
 }
