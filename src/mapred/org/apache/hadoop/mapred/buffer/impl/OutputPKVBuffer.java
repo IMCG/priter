@@ -257,12 +257,12 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					int cutindex = actualqueuelen * SAMPLESIZE / this.nTableKeys;
 					LOG.info("queuelen " + actualqueuelen + " table size " + this.nTableKeys + 
 							" cut index " + cutindex);
-					threshold = stateTable.get(randomkeys.get(cutindex)).getPriority();
+					threshold = stateTable.get(randomkeys.get(cutindex-1>=0?cutindex-1:0)).getPriority();
 					
 					for(IntWritable k : stateTable.keySet()){		
 						V v = stateTable.get(k).getiState();
 						P pri = stateTable.get(k).getPriority();
-						if(pri.compareTo(threshold) > 0){
+						if((cutindex==0 && pri.compareTo(threshold) >= 0) || pri.compareTo(threshold) > 0){
 							records.add(new KVRecord<IntWritable, V>(k, v));
 							V iState = (V)updator.resetiState();
 							this.stateTable.get(k).setiState(iState);
@@ -270,7 +270,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							this.stateTable.get(k).setPriority(p);
 							activations++;
 							this.nTableKeys--;
-						}	
+						}
 						//LOG.info(k + "\t" + pri + "\t" + v);
 					}
 					LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
