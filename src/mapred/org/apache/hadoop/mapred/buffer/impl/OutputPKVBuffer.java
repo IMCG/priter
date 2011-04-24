@@ -207,6 +207,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			P threshold = (P) updator.decidePriority(new IntWritable(0), (V)updator.resetiState(), true);
 			
 			if(this.bPortion){
+				//int actualqueuelen = (int) (Math.sqrt(this.nTableKeys) * this.queueportion);
 				int actualqueuelen = (int) (this.nTableKeys * this.queueportion);
 				/*
 				//for asynchronous execution, determine the queue size based on how much portion of information received (from edges)
@@ -218,7 +219,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				*/
 				
 				//queulen extraction
-				if((this.stateTable.size() <= actualqueuelen) || (/*this.stateTable.size()*/ this.nTableKeys <= SAMPLESIZE)){
+				if((this.stateTable.size() <= actualqueuelen) || (/*this.stateTable.size() this.nTableKeys*/ actualqueuelen <= SAMPLESIZE)){
 					for(IntWritable k : stateTable.keySet()){		
 						V v = stateTable.get(k).getiState();
 						P pri = stateTable.get(k).getPriority();
