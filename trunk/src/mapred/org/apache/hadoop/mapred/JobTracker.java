@@ -120,7 +120,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   //for checking the snapshot completion event
   //integer: the iteration index
   //arraylist: contains snapshot from different tasktrackers
-  private Map<JobID, Map<Integer, Boolean>> snapshotUpdateMap = new HashMap<JobID, Map<Integer, Boolean>>();
+  private Map<JobID, Map<Integer, Integer>> snapshotUpdateMap = new HashMap<JobID, Map<Integer, Integer>>();
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
@@ -3274,7 +3274,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			if(this.snapshotCompletionMap.get(jobid) == null){			
 				Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
 				this.snapshotCompletionMap.put(jobid, snapshotComplete);
-				Map<Integer, Boolean> snapshotupdate = new HashMap<Integer, Boolean>();
+				Map<Integer, Integer> snapshotupdate = new HashMap<Integer, Integer>();
 				this.snapshotUpdateMap.put(jobid, snapshotupdate);
 				
 				JobConf job = jobs.get(jobid).getJobConf();
@@ -3300,8 +3300,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					LOG.info("duplicated reduce task index " + reduceIndex);
 				}
 				
-				boolean updateb = update && this.snapshotUpdateMap.get(jobid).get(snapshotIndex);
-				this.snapshotUpdateMap.get(jobid).put(snapshotIndex, updateb);
+				if(update)  this.snapshotUpdateMap.get(jobid).put(snapshotIndex,  this.snapshotUpdateMap.get(jobid).get(snapshotIndex)+1);
+
 				this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
 				this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
 				ArrayList<Integer> tasks = this.snapshotCompletionMap.get(jobid).get(snapshotIndex);
@@ -3334,19 +3334,24 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							completeJob(jobid);
 						}
 					}else{
+						if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) < this.totalReduces / 2){
+							LOG.info("not all workers finish snapshot");
+							return;
+						}
+						
 						//3. max difference
-						if(this.mergerMap.get(jobid).priClass == IntWritable.class){
+						if(this.mergerMap.get(jobid).priClass == IntWritable.class){	
 							int curr = ((IntWritable)total).get();
 							int last = ((IntWritable)lastTotal.get(jobid)).get();
 							int diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
-							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
+							if(diff <= threshold){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
 							}
 							
-							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex)) lastTotal.put(jobid, new IntWritable(curr));
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2) lastTotal.put(jobid, new IntWritable(curr));
 							
 						}else if(this.mergerMap.get(jobid).priClass == DoubleWritable.class){
 							double curr = ((DoubleWritable)total).get();
@@ -3354,24 +3359,24 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							double diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
-							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
+							if(diff <= threshold){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
 							}
 							
-							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex))  lastTotal.put(jobid, new DoubleWritable(curr));
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2)  lastTotal.put(jobid, new DoubleWritable(curr));
 						}else if(this.mergerMap.get(jobid).priClass == FloatWritable.class){
 							float curr = ((FloatWritable)total).get();
 							float last = ((FloatWritable)lastTotal.get(jobid)).get();
 							float diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
-							if(diff <= threshold && this.snapshotUpdateMap.get(jobid).get(snapshotIndex)){
+							if(diff <= threshold){
 								LOG.info("OK, let kill job");
 								completeJob(jobid);
 							}
 							
-							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex)) lastTotal.put(jobid, new FloatWritable(curr));
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2) lastTotal.put(jobid, new FloatWritable(curr));
 						}
 					}
 				}
@@ -3384,7 +3389,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				}else{
 					this.snapshotCompletionMap.get(jobid).put(snapshotIndex, tasks);						
 					this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
-					this.snapshotUpdateMap.get(jobid).put(snapshotIndex, update);
+					this.snapshotUpdateMap.get(jobid).put(snapshotIndex, 0);
 					try{
 						this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
 					}catch(Exception e){
