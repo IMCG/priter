@@ -18,6 +18,7 @@ public class MainDriver {
 	public static final String CORRECT = "preprocess.correct.data";
 	public static final String TOTAL_NODE = "preprocess.total.nodes";
 	public static final String START_NODE = "preprocess.start.nodes";
+	public static final String KATZ_BETA = "katz.beta";
 	
 	//for gen graph
 	public static final String GEN_CAPACITY = "gengraph.capacity";
