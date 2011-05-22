@@ -256,14 +256,22 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					
 					//int cutindex = actualqueuelen * SAMPLESIZE / this.stateTable.size();
 					int cutindex = actualqueuelen * SAMPLESIZE / this.nTableKeys;
-					LOG.info("queuelen " + actualqueuelen + " table size " + this.nTableKeys + 
-							" cut index " + cutindex);
+
 					threshold = stateTable.get(randomkeys.get(cutindex-1>=0?cutindex-1:0)).getPriority();
+					
+					LOG.info("queuelen " + actualqueuelen + " table size " + this.nTableKeys + 
+							" cut index " + cutindex + " threshold is " + threshold);
+					
+					boolean emitEqual = false;
+					if(cutindex==0 || stateTable.get(randomkeys.get(0)).getPriority() == threshold){
+						emitEqual = true;
+					}
 					
 					for(IntWritable k : stateTable.keySet()){		
 						V v = stateTable.get(k).getiState();
 						P pri = stateTable.get(k).getPriority();
-						if((cutindex==0 && pri.compareTo(threshold) >= 0) || pri.compareTo(threshold) > 0){
+
+						if((emitEqual && pri.compareTo(threshold) >= 0) || pri.compareTo(threshold) > 0){
 							records.add(new KVRecord<IntWritable, V>(k, v));
 							V iState = (V)updator.resetiState();
 							this.stateTable.get(k).setiState(iState);
