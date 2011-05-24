@@ -532,6 +532,8 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 							syncMapPos.remove(position.longValue());	
 							((ReduceTask)task).spillIter = true;	
 							task.notifyAll();								
+						}else if(conf.getBoolean("priter.job.syncupdate", false)){
+							
 						}else if(conf.getBoolean("priter.job.inmem", true)){
 							// no need to be synchronized, the state is stored in hashmap
 							task.notifyAll();
