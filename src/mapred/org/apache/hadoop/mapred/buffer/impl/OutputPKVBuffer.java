@@ -47,7 +47,7 @@ import org.apache.hadoop.util.Progress;
 public class OutputPKVBuffer<P extends WritableComparable, V extends Object> 
 		implements OutputCollector<IntWritable, V>{
 	
-	public static final int SAMPLESIZE = 1000;
+	public int SAMPLESIZE;
 	//**************************************
 	private static final Log LOG = LogFactory.getLog(OutputPKVBuffer.class.getName());
 
@@ -126,6 +126,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.stateTableFile = job.get("mapred.output.dir") + "/_StateTableTempDir/"
 								+ taskAttemptID.getTaskID().getId() + "-statetable";
 		this.checkFreq = job.getInt("priter.checkpoint.frequency", 10);
+		this.SAMPLESIZE = job.getInt("priter.job.samplesize", 1000);
 
 		this.topkDir = job.get("mapred.output.dir") + "/" + this.taskAttemptID.getTaskID().getId();
 		this.valClass = valClass;
