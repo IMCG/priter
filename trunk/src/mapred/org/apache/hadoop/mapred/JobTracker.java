@@ -58,6 +58,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.io.ClusterWritable;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
@@ -3607,6 +3608,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				for(PKVRecord rec : recs){
 					writer.write(rec.k + "\t" + rec.v + "\n");
 					total += ((FloatWritable)rec.p).get();
+				}
+				writer.close();
+				ostream.close();
+				
+				return new FloatWritable(total);
+			}else if(valClass == ClusterWritable.class){
+				float total = 0;
+				for(PKVRecord rec : recs){
+					ClusterWritable clusterrec = (ClusterWritable)rec.v;
+					writer.write(rec.k + "\t" + clusterrec.nodeid + " " + clusterrec.clusterid + " "
+							+ clusterrec.addvalue + "\n");
+					total += ((DoubleWritable)rec.p).get();
 				}
 				writer.close();
 				ostream.close();
