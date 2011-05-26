@@ -592,7 +592,6 @@ public class PWClusterUpdator extends MapReduceBase implements
 					buffer.stateTable.put(iwi, pkvRecord);
 					//buffer.nTableKeys++;
 					//System.out.println(i + " call incrKey()");
-					buffer.incrKey();
 				}
 				//if(buffer.stateTable.containsKey(iwi)){
 				//	double dd = buffer.stateTable.get(iwi).getiState().get();

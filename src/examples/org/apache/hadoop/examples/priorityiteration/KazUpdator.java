@@ -119,7 +119,7 @@ public class KazUpdator extends MapReduceBase implements
 		PriorityRecord<FloatWritable, FloatWritable> pkvRecord;	
 		if(buffer.stateTable.containsKey(key)){
 			pkvRecord = buffer.stateTable.get(key);
-			if(pkvRecord.getiState().get() == 0.0) buffer.incrKey();
+
 			float iState = pkvRecord.getiState().get() + delta;
 			float cState = pkvRecord.getcState().get() + delta;
 			buffer.stateTable.get(key).getiState().set(iState);
@@ -129,7 +129,6 @@ public class KazUpdator extends MapReduceBase implements
 			pkvRecord = new PriorityRecord<FloatWritable, FloatWritable>(
 					new FloatWritable(delta), new FloatWritable(delta), new FloatWritable(delta));
 			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
-			buffer.incrKey();
 		}
 	}
 
