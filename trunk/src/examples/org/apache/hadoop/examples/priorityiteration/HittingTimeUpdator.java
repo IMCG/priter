@@ -132,8 +132,6 @@ public class HittingTimeUpdator extends MapReduceBase implements Updator<DoubleW
 				buffer.stateTable.get(key).getiState().set(0.0);
 				buffer.stateTable.get(key).getcState().set(0.0);
 				buffer.stateTable.get(key).getPriority().set(0.0);
-				
-				if(buffer.stateTable.get(key).getiState().get() == 0) buffer.incrKey();
 			}
 			else
 			{
@@ -144,8 +142,6 @@ public class HittingTimeUpdator extends MapReduceBase implements Updator<DoubleW
 				buffer.stateTable.get(key).getcState().set(cState);
 				buffer.stateTable.get(key).getPriority().set(iState*Weights[nodeid]);
 				//System.out.println(node + "\t" + Weights[nodeid]);
-				
-				if(pkvRecord.getiState().get() == 0) buffer.incrKey();
 			}
 			
 		}else{
@@ -153,8 +149,7 @@ public class HittingTimeUpdator extends MapReduceBase implements Updator<DoubleW
 					new DoubleWritable(delta+1.0), new DoubleWritable(delta+1.0), new DoubleWritable(delta+1.0));
 			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
 			//System.out.println("update " + key + " with " + pkvRecord);
-			
-			buffer.incrKey();
+
 		}
 	}
 }
