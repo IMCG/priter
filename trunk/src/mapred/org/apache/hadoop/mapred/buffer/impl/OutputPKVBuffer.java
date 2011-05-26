@@ -270,17 +270,22 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 								activations++;
 							}
 						}
+					}else{
+						for(IntWritable k : keys){		
+							V v = stateTable.get(k).getiState();
+							P pri = stateTable.get(k).getPriority();
+							
+							if(pri.compareTo(threshold) > 0){
+								records.add(new KVRecord<IntWritable, V>(k, v));
+								V iState = (V)updator.resetiState();
+								this.stateTable.get(k).setiState(iState);
+								P p = (P) updator.decidePriority(k, iState, true);
+								this.stateTable.get(k).setPriority(p);
+								activations++;
+							}
+						}
 					}
-					
-					for(IntWritable k : keys){		
-						V v = stateTable.get(k).getiState();
-						records.add(new KVRecord<IntWritable, V>(k, v));
-						V iState = (V)updator.resetiState();
-						this.stateTable.get(k).setiState(iState);
-						P p = (P) updator.decidePriority(k, iState, true);
-						this.stateTable.get(k).setPriority(p);
-						activations++;
-					}
+
 					LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 				}
 			}else if(this.bLength){
@@ -333,12 +338,16 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					
 					for(IntWritable k : keys){		
 						V v = stateTable.get(k).getiState();
-						records.add(new KVRecord<IntWritable, V>(k, v));
-						V iState = (V)updator.resetiState();
-						this.stateTable.get(k).setiState(iState);
-						P p = (P) updator.decidePriority(k, iState, true);
-						this.stateTable.get(k).setPriority(p);
-						activations++;
+						P pri = stateTable.get(k).getPriority();
+						
+						if(pri.compareTo(threshold) > 0){
+							records.add(new KVRecord<IntWritable, V>(k, v));
+							V iState = (V)updator.resetiState();
+							this.stateTable.get(k).setiState(iState);
+							P p = (P) updator.decidePriority(k, iState, true);
+							this.stateTable.get(k).setPriority(p);
+							activations++;
+						}
 					}
 					LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 				}
@@ -370,12 +379,16 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				
 				for(IntWritable k : keys){		
 					V v = stateTable.get(k).getiState();
-					records.add(new KVRecord<IntWritable, V>(k, v));
-					V iState = (V)updator.resetiState();
-					this.stateTable.get(k).setiState(iState);
-					P p = (P) updator.decidePriority(k, iState, true);
-					this.stateTable.get(k).setPriority(p);
-					activations++;
+					P pri = stateTable.get(k).getPriority();
+					
+					if(pri.compareTo(threshold) > 0){
+						records.add(new KVRecord<IntWritable, V>(k, v));
+						V iState = (V)updator.resetiState();
+						this.stateTable.get(k).setiState(iState);
+						P p = (P) updator.decidePriority(k, iState, true);
+						this.stateTable.get(k).setPriority(p);
+						activations++;
+					}
 				}
 				LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
 			}
