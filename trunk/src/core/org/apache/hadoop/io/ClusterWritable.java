@@ -11,8 +11,6 @@ public class ClusterWritable implements WritableComparable {
 	  public int nodeid;
 	  public int clusterid;
 	  public double addvalue;
-	  
-	  private long value;
 
 	  public ClusterWritable() {}
 
@@ -42,7 +40,7 @@ public class ClusterWritable implements WritableComparable {
 	  public void write(DataOutput out) throws IOException {
 		  out.writeInt(nodeid);
 		  out.writeInt(clusterid);
-		  out.writeDouble(value);
+		  out.writeDouble(addvalue);
 	  }
 
 	  /** Returns true iff <code>o</code> is a VLongWritable with the same value. */
@@ -57,7 +55,7 @@ public class ClusterWritable implements WritableComparable {
 	  }
 
 	  public int hashCode() {
-	    return (int)value;
+	    return (int)addvalue;
 	  }
 
 	  public String toString() {
