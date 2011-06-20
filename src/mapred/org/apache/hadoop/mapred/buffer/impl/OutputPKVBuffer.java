@@ -217,7 +217,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			if(this.bPortion){
 				int actualqueuelen = (int) (keys.size() * this.queueportion);
 				//queulen extraction
-				if((keys.size() <= actualqueuelen) || (keys.size() <= SAMPLESIZE)){
+				if(keys.size() <= SAMPLESIZE){
 					for(IntWritable k : keys){		
 						V v = stateTable.get(k).getiState();
 						records.add(new KVRecord<IntWritable, V>(k, v));
@@ -300,7 +300,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				*/
 				
 				//queulen extraction
-				if((keys.size() <= actualqueuelen) || (keys.size() <= SAMPLESIZE)){
+				if(keys.size() <= SAMPLESIZE){
 					for(IntWritable k : keys){		
 						V v = stateTable.get(k).getiState();			
 						records.add(new KVRecord<IntWritable, V>(k, v));
@@ -331,22 +331,40 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 							});
 					
 					int cutindex = actualqueuelen * SAMPLESIZE / keys.size();
-					LOG.info("queuelen " + actualqueuelen + " eligible records " + keys.size() + 
-							" cut index " + cutindex);
-					threshold = stateTable.get(randomkeys.get(cutindex)).getPriority();
 
+					threshold = stateTable.get(randomkeys.get(cutindex)).getPriority();
 					
-					for(IntWritable k : keys){		
-						V v = stateTable.get(k).getiState();
-						P pri = stateTable.get(k).getPriority();
-						
-						if(pri.compareTo(threshold) > 0){
-							records.add(new KVRecord<IntWritable, V>(k, v));
-							V iState = (V)updator.resetiState();
-							this.stateTable.get(k).setiState(iState);
-							P p = (P) updator.decidePriority(k, iState, true);
-							this.stateTable.get(k).setPriority(p);
-							activations++;
+					LOG.info("queuelen " + actualqueuelen + " eliglbe records " + keys.size() + 
+							" cut index " + cutindex + " threshold is " + threshold);
+
+					//to avoid 0 output, we emit all the records have the equal value of threshld
+					if(cutindex==0 || stateTable.get(randomkeys.get(0)).getPriority() == threshold){
+						for(IntWritable k : stateTable.keySet()){	
+							V v = stateTable.get(k).getiState();
+							P pri = stateTable.get(k).getPriority();
+							
+							if(pri.compareTo(threshold) >= 0){
+								records.add(new KVRecord<IntWritable, V>(k, v));
+								V iState = (V)updator.resetiState();
+								this.stateTable.get(k).setiState(iState);
+								P p = (P) updator.decidePriority(k, iState, true);
+								this.stateTable.get(k).setPriority(p);
+								activations++;
+							}
+						}
+					}else{
+						for(IntWritable k : keys){		
+							V v = stateTable.get(k).getiState();
+							P pri = stateTable.get(k).getPriority();
+							
+							if(pri.compareTo(threshold) > 0){
+								records.add(new KVRecord<IntWritable, V>(k, v));
+								V iState = (V)updator.resetiState();
+								this.stateTable.get(k).setiState(iState);
+								P p = (P) updator.decidePriority(k, iState, true);
+								this.stateTable.get(k).setPriority(p);
+								activations++;
+							}
 						}
 					}
 					LOG.info("iteration " + iteration + " expend " + activations + " k-v pairs" + " threshold is " + threshold);
