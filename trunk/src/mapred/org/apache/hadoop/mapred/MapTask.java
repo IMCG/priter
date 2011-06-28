@@ -410,6 +410,7 @@ public class MapTask extends Task {
 		//iterative version
 		if(this.iterative){
 			job.setPartitionerClass(PrIterPartitioner.class);
+			job.setBoolean("priter.job.inmem", true);
 			
 			setPhase(TaskStatus.Phase.PIPELINE); 
 			
@@ -426,7 +427,7 @@ public class MapTask extends Task {
 					codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
 				}
 
-				if(job.getBoolean("priter.job.inmem", true)){
+				if(job.getBoolean("priter.job.inmem", false)){
 					this.nsortBuffer = new UnSortOutputBuffer(bufferUmbilical, this, job, 
 							reporter, getProgress(), false, 
 							this.inputKeyClass, this.inputValClass, codecClass);
@@ -491,7 +492,7 @@ public class MapTask extends Task {
 					
 			try{
 				synchronized(this){		
-					if(job.getBoolean("priter.job.inmem", true)){
+					if(job.getBoolean("priter.job.inmem", false)){
 						//iteration loop, stop when reduce let it stop
 						
 						//for processing time measurement
