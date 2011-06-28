@@ -739,6 +739,7 @@ public class ReduceTask extends Task {
 		int count = 0;
 		
 		if(iterative) {
+			job.setBoolean("priter.job.inmem", true);
 			long processstart = new Date().getTime();
 			inputCollector.flush();		
 			long flushend = System.currentTimeMillis();

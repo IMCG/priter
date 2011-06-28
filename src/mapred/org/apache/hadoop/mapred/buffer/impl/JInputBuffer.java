@@ -540,7 +540,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	
 	@Override
 	public ValuesIterator<K, V> valuesIterator() throws IOException {
-		if(conf.getBoolean("priter.job.inmem", true)){
+		if(conf.getBoolean("priter.job.inmem", false)){
 			RawKeyValueIterator kvIter = this.createUnSortKVIterator(conf, rfs, reporter);
 			return new ValuesIterator<K, V>(kvIter, comparator, keyClass, valClass, conf, reporter);
 		}else{
