@@ -132,5 +132,11 @@ public class KazUpdator extends MapReduceBase implements
 		}
 	}
 
+	@Override
+	public FloatWritable obj() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
 
 }

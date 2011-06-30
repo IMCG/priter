@@ -8,6 +8,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Updator;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
+import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 
 public class ConnectComponentUpdator extends MapReduceBase implements
@@ -62,6 +63,12 @@ public class ConnectComponentUpdator extends MapReduceBase implements
 					new IntWritable(max_id), new IntWritable(max_id), new IntWritable(max_id));
 			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
 		}
+	}
+
+	@Override
+	public FloatWritable obj() {
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 }
