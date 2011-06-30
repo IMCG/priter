@@ -12,6 +12,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -151,5 +152,11 @@ public class HittingTimeUpdator extends MapReduceBase implements Updator<DoubleW
 			//System.out.println("update " + key + " with " + pkvRecord);
 
 		}
+	}
+
+	@Override
+	public FloatWritable obj() {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }

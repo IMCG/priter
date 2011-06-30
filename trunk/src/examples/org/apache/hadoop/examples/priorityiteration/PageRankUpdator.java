@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Iterator;
 
 import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -86,6 +87,12 @@ public class PageRankUpdator extends MapReduceBase implements
 					new DoubleWritable(delta), new DoubleWritable(delta), new DoubleWritable(delta));
 			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
 		}
+	}
+
+	@Override
+	public FloatWritable obj() {
+		// TODO Auto-generated method stub
+		return null;
 	}
 
 
