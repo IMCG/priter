@@ -197,7 +197,7 @@ public class ReduceTask extends Task {
 							
 							float obj = 0;
 							if(conf.getBoolean("priter.snapshot.obj", false)){
-								obj = ((FloatWritable)updator.obj()).get();
+								obj = updator.obj().get();
 							}
 							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, obj, getJobID());
 							try {
