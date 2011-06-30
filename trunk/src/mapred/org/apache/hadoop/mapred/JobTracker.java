@@ -125,8 +125,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
-  private Map<JobID, WritableComparable> currTotal = new HashMap<JobID, WritableComparable>();
-  private Map<JobID, WritableComparable> lastTotal = new HashMap<JobID, WritableComparable>();
+  private Map<JobID, Map<Integer, Float>> currObj = new HashMap<JobID, Map<Integer, Float>>();
+  private Map<JobID, Map<Integer, WritableComparable>> priorityTotal = new HashMap<JobID, Map<Integer, WritableComparable>>();
   private Map<JobID, Boolean> SnapshotIndexChanged = new HashMap<JobID, Boolean>();
   
   public boolean taskReAssign = false;
@@ -3260,6 +3260,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
     	  }
         }
         */
+	  currObj.remove(job);
+	  priorityTotal.remove(job);
+	  
 	  killJob(job);
   }
   
@@ -3288,20 +3291,26 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				LOG.info("put merger for job " + jobid);
 				
 				if(priClass == IntWritable.class){
-					currTotal.put(jobid, new IntWritable(0));
-					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
+					Map<Integer, WritableComparable> subtotal = new HashMap<Integer, WritableComparable>();
+					subtotal.put(snapshotIndex, new IntWritable(0));
+					priorityTotal.put(jobid, subtotal);
 				}else if(priClass == DoubleWritable.class){
-					currTotal.put(jobid, new IntWritable(0));
-					lastTotal.put(jobid, new DoubleWritable(Double.MAX_VALUE));
+					Map<Integer, WritableComparable> subtotal = new HashMap<Integer, WritableComparable>();
+					subtotal.put(snapshotIndex, new DoubleWritable(0));
+					priorityTotal.put(jobid, subtotal);
 				}else if(priClass == FloatWritable.class){
-					currTotal.put(jobid, new IntWritable(0));
-					lastTotal.put(jobid, new FloatWritable(Float.MAX_VALUE));
+					Map<Integer, WritableComparable> subtotal = new HashMap<Integer, WritableComparable>();
+					subtotal.put(snapshotIndex, new FloatWritable(0));
+					priorityTotal.put(jobid, subtotal);
 				}else{
-					currTotal.put(jobid, new IntWritable(0));
-					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
+					Map<Integer, WritableComparable> subtotal = new HashMap<Integer, WritableComparable>();
+					subtotal.put(snapshotIndex, new IntWritable(0));
+					priorityTotal.put(jobid, subtotal);
 				}
 				
-				
+				HashMap<Integer, Float> snapshotobj = new HashMap<Integer, Float>();
+				snapshotobj.put(snapshotIndex, (float)0);
+				currObj.put(jobid, snapshotobj);
 			}
 			
 			if(this.snapshotCompletionMap.get(jobid).containsKey(snapshotIndex)){
@@ -3310,6 +3319,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				}
 				
 				if(update)  this.snapshotUpdateMap.get(jobid).put(snapshotIndex,  this.snapshotUpdateMap.get(jobid).get(snapshotIndex)+1);
+				currObj.get(jobid).put(snapshotIndex, currObj.get(jobid).get(snapshotIndex)+obj);
 
 				this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
 				this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
@@ -3320,14 +3330,18 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				//LOG.info("total received is " + tasks.size());
 	
 				if(tasks.size() == this.totalReduces) {
-					//do merge sort
+					WritableComparable total = new FloatWritable(Float.MAX_VALUE);
+					if(jobs.get(jobid).getJobConf().getBoolean("priter.snapshot.merge", true)){
+						//do merge sort
+						total = this.mergerMap.get(jobid).writeTopK(snapshotIndex);
+					}
 					
-					WritableComparable total = this.mergerMap.get(jobid).writeTopK(snapshotIndex);
 					this.SnapshotIndexChanged.put(jobid, true);
 					
 					//stopcheck	
 					int maxiter = jobs.get(jobid).getJobConf().getInt("priter.stop.maxiteration", Integer.MAX_VALUE);
 					long maxtime = jobs.get(jobid).getJobConf().getLong("priter.stop.maxtime", Long.MAX_VALUE);
+					boolean bobj = jobs.get(jobid).getJobConf().getBoolean("priter.snapshot.obj", false);
 					float threshold = jobs.get(jobid).getJobConf().getFloat("priter.stop.difference", 0);
 					if(maxiter != Integer.MAX_VALUE){
 						//1. max iteration
@@ -3343,16 +3357,29 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 							LOG.info("OK, max time reached, let kill job");
 							completeJob(jobid);
 						}
+					}else if(bobj){
+						//3. obj difference
+						float curr = currObj.get(jobid).get(snapshotIndex);
+						Float last = currObj.get(jobid).get(snapshotIndex-1);
+						if(last == null) last = Float.MAX_VALUE;
+						float delta = last - curr;
+						LOG.info("delta obj is " + delta);
+						
+						if(Math.abs(delta) <= threshold){
+							LOG.info("OK, let kill job");
+							completeJob(jobid);
+						}
 					}else{
 						if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) < this.totalReduces / 2){
 							LOG.info("not all workers finish snapshot, onlly " + this.snapshotUpdateMap.get(jobid).get(snapshotIndex) + " finished");
 							return;
 						}
 						
-						//3. max difference
+						//4. max difference
 						if(this.mergerMap.get(jobid).priClass == IntWritable.class){	
 							int curr = ((IntWritable)total).get();
-							int last = ((IntWritable)lastTotal.get(jobid)).get();
+							Integer last = ((IntWritable)priorityTotal.get(jobid).get(snapshotIndex-1)).get();
+							if(last == null) last = 0;
 							int diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
@@ -3361,11 +3388,14 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 								completeJob(jobid);
 							}
 							
-							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2) lastTotal.put(jobid, new IntWritable(curr));
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2){
+								priorityTotal.get(jobid).put(snapshotIndex, total);
+							}
 							
 						}else if(this.mergerMap.get(jobid).priClass == DoubleWritable.class){
 							double curr = ((DoubleWritable)total).get();
-							double last = ((DoubleWritable)lastTotal.get(jobid)).get();
+							Double last = ((DoubleWritable)priorityTotal.get(jobid).get(snapshotIndex-1)).get();
+							if(last == null) last = 0.0;
 							double diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
@@ -3374,10 +3404,13 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 								completeJob(jobid);
 							}
 							
-							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2)  lastTotal.put(jobid, new DoubleWritable(curr));
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2){
+								priorityTotal.get(jobid).put(snapshotIndex, total);
+							}
 						}else if(this.mergerMap.get(jobid).priClass == FloatWritable.class){
 							float curr = ((FloatWritable)total).get();
-							float last = ((FloatWritable)lastTotal.get(jobid)).get();
+							Float last = ((FloatWritable)priorityTotal.get(jobid).get(snapshotIndex-1)).get();
+							if(last == null) last = (float)0;
 							float diff = Math.abs(last - curr);
 							LOG.info("iteration " + snapshotIndex + " diff is " + diff);
 							
@@ -3386,7 +3419,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 								completeJob(jobid);
 							}
 							
-							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2) lastTotal.put(jobid, new FloatWritable(curr));
+							if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) >= this.totalReduces / 2){
+								priorityTotal.get(jobid).put(snapshotIndex, total);
+							} 
 						}
 					}
 				}
@@ -3397,6 +3432,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					LOG.info("I am doing migration, the late coming snapshot is omit");
 					return;
 				}else{
+					currObj.get(jobid).put(snapshotIndex, (float)0);
+					
 					this.snapshotCompletionMap.get(jobid).put(snapshotIndex, tasks);						
 					this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
 					this.snapshotUpdateMap.get(jobid).put(snapshotIndex, 0);
