@@ -31,6 +31,7 @@ import java.util.Set;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableFactories;
@@ -193,7 +194,12 @@ public class ReduceTask extends Task {
 							if(pkvBuffer.iteration == lastiter){
 								update = false;
 							}
-							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, getJobID());
+							
+							float obj = 0;
+							if(conf.getBoolean("priter.snapshot.obj", false)){
+								obj = ((FloatWritable)updator.obj()).get();
+							}
+							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, obj, getJobID());
 							try {
 								this.trackerUmbilical.snapshotCommit(event);
 							} catch (Exception e) {

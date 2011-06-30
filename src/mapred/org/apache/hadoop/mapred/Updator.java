@@ -18,4 +18,5 @@ public interface Updator<P extends WritableComparable, V> extends JobConfigurabl
 	void updateState(IntWritable key, Iterator<V> values, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;	
 	
 	void iterate();
+	P obj();
 }

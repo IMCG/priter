@@ -5,6 +5,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.io.WritableComparable;
 
 
 public class SnapshotCompletionEvent implements Writable {
@@ -13,16 +14,18 @@ public class SnapshotCompletionEvent implements Writable {
 	int iterIndex = 0;
 	int tasktrackerIndex = 0;
 	boolean update = true;
+	float obj = 0;
 	//String outputPath = new String();
 	JobID jobID = new JobID();
 	
 	public SnapshotCompletionEvent() {};
 	
-	public SnapshotCompletionEvent(int snapshotindex, int iterindex, int index, boolean update, JobID jobid) {
+	public SnapshotCompletionEvent(int snapshotindex, int iterindex, int index, boolean update, float obj, JobID jobid) {
 		this.snaphostIndex = snapshotindex;
 		this.iterIndex = iterindex;
 		this.tasktrackerIndex = index;
 		this.update = update;
+		this.obj = obj;
 		//this.outputPath = output;
 		this.jobID = jobid;
 	}
@@ -41,6 +44,9 @@ public class SnapshotCompletionEvent implements Writable {
 	public boolean getUpdate(){
 		return this.update;
 	}
+	public float getObj(){
+		return this.obj;
+	}
 	public JobID getJobID() {
 		return this.jobID;
 	}
@@ -51,6 +57,7 @@ public class SnapshotCompletionEvent implements Writable {
 		this.iterIndex = in.readInt();
 		this.tasktrackerIndex = in.readInt();
 		this.update = in.readBoolean();
+		this.obj = in.readFloat();
 		this.jobID.readFields(in);
 	}
 
@@ -60,6 +67,7 @@ public class SnapshotCompletionEvent implements Writable {
 		out.writeInt(this.iterIndex);
 		out.writeInt(this.tasktrackerIndex);
 		out.writeBoolean(this.update);
+		out.writeFloat(this.obj);
 		this.jobID.write(out);
 	}
 
