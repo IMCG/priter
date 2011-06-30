@@ -125,6 +125,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
+  private Map<JobID, WritableComparable> currTotal = new HashMap<JobID, WritableComparable>();
   private Map<JobID, WritableComparable> lastTotal = new HashMap<JobID, WritableComparable>();
   private Map<JobID, Boolean> SnapshotIndexChanged = new HashMap<JobID, Boolean>();
   
@@ -3270,6 +3271,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			int iterIndex = event.getIterIndex();
 			int reduceIndex = event.getTaskIndex();
 			boolean update = event.getUpdate();
+			float obj = event.getObj();
 			JobID jobid = event.getJobID();
 			
 			if(this.snapshotCompletionMap.get(jobid) == null){			
@@ -3286,14 +3288,20 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				LOG.info("put merger for job " + jobid);
 				
 				if(priClass == IntWritable.class){
+					currTotal.put(jobid, new IntWritable(0));
 					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
 				}else if(priClass == DoubleWritable.class){
+					currTotal.put(jobid, new IntWritable(0));
 					lastTotal.put(jobid, new DoubleWritable(Double.MAX_VALUE));
 				}else if(priClass == FloatWritable.class){
+					currTotal.put(jobid, new IntWritable(0));
 					lastTotal.put(jobid, new FloatWritable(Float.MAX_VALUE));
 				}else{
+					currTotal.put(jobid, new IntWritable(0));
 					lastTotal.put(jobid, new IntWritable(Integer.MAX_VALUE));
-				}	
+				}
+				
+				
 			}
 			
 			if(this.snapshotCompletionMap.get(jobid).containsKey(snapshotIndex)){
@@ -3313,6 +3321,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	
 				if(tasks.size() == this.totalReduces) {
 					//do merge sort
+					
 					WritableComparable total = this.mergerMap.get(jobid).writeTopK(snapshotIndex);
 					this.SnapshotIndexChanged.put(jobid, true);
 					
@@ -3336,7 +3345,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						}
 					}else{
 						if(this.snapshotUpdateMap.get(jobid).get(snapshotIndex) < this.totalReduces / 2){
-							LOG.info("not all workers finish snapshot");
+							LOG.info("not all workers finish snapshot, onlly " + this.snapshotUpdateMap.get(jobid).get(snapshotIndex) + " finished");
 							return;
 						}
 						
