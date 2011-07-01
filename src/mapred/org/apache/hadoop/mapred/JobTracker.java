@@ -3277,6 +3277,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			float obj = event.getObj();
 			JobID jobid = event.getJobID();
 			
+			LOG.info("index " + snapshotIndex + " from " + reduceIndex + " obj is " + obj + " update " + update);
+			
 			if(this.snapshotCompletionMap.get(jobid) == null){			
 				Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
 				this.snapshotCompletionMap.put(jobid, snapshotComplete);
@@ -3363,7 +3365,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						Float last = currObj.get(jobid).get(snapshotIndex-1);
 						if(last == null) last = Float.MAX_VALUE;
 						float delta = last - curr;
-						LOG.info("delta obj is " + delta);
+						LOG.info("curr obj is " + curr + " delta obj is " + delta);
 						
 						if(Math.abs(delta) <= threshold){
 							LOG.info("OK, let kill job");

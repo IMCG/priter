@@ -5,7 +5,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.WritableComparable;
 
 
 public class SnapshotCompletionEvent implements Writable {
