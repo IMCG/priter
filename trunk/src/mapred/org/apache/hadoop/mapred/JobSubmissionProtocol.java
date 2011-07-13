@@ -51,7 +51,7 @@ interface JobSubmissionProtocol extends VersionedProtocol {
    *             setupProgress to JobStatus as part of HADOOP-4261           
    */
   public static final long versionID = 16L;
-
+ 
   /**
    * Allocate a name for the job.
    * @return a unique job name for submitting jobs.
