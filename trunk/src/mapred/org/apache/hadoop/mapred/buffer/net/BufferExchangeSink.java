@@ -130,7 +130,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	private Map<TaskID, Position> cursor;
 	
 	//for synchronization
-	private Map<Long, Integer> syncMapPos;
+	public Map<Long, Integer> syncMapPos;
 	private int syncMaps;
 	private Map<Long, Integer> syncReducePos;
 	private int syncReduces;
@@ -650,11 +650,11 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 
 						if(recReduces >= syncReduces){
 							syncReducePos.remove(position.longValue());
-							//((MapTask)task).mapsync = false;
-							task.notifyAll();	
+							((MapTask)task).mapsync = false;
+							task.notifyAll();
 						}else{
 							syncReducePos.put(position.longValue(), recReduces);
-							//((MapTask)task).mapsync = true;
+							((MapTask)task).mapsync = true;
 						}
 	
 						position.set(header.iteration() + 1);

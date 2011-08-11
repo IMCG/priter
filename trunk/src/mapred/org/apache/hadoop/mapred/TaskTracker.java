@@ -718,10 +718,8 @@ public class TaskTracker
 					  } else if(task.isMapTask() && task.isIterative()) {
 						  //LOG.info("iterative map task is " + task);
 
-						  /*
 						  if(rjob.jobConf.getBoolean("mapred.iterative.mapsync", false)){
 				                if (rjob.getReduceFetchStatus() == null) {
-						              
 					                  f = new FetchStatus(jobId, 
 					                                      ((MapTask)task).getNumberOfInputs());
 					                  rjob.setReduceFetchStatus(f);
@@ -730,13 +728,16 @@ public class TaskTracker
 				                if(f != null) fList.add(f);
 					                
 						  }else{
-						  */
+							  /*
 							  TaskID reduceID = null;
 							  for (TaskInProgress tip2 : rjob.tasks) {
 								  if(!tip2.getTask().isMapTask()){
 									  reduceID = tip2.getTask().getTaskID().getTaskID();
 								  }
 							  }
+							  */
+							  MapTask pmt = (MapTask) task;
+							  TaskID reduceID = pmt.predecessorReduceTask();
 
 							  if (rjob.getReduceFetchStatus() == null) {
 								  //this is a new job; we start fetching its reduce events
@@ -750,7 +751,7 @@ public class TaskTracker
 							  f = rjob.getReduceFetchStatus();
 							  if(f != null) fList.add(f);	
 							  
-						  //}
+						  }
 						  break;
 					  }
 				  }
@@ -944,12 +945,9 @@ public class TaskTracker
         				(e.getTaskAttemptId().getId() <= partitions)){
         			//LOG.info("add event : " + e + " is map? " + isMap);
         			allEvents.add(e);
-        		}
-        		/*
-        		else if(getJobConf(jobId).getBoolean("mapred.iterative.mapsync", false)){
+        		}else if(getJobConf(jobId).getBoolean("mapred.iterative.mapsync", false)){
         			allEvents.add(e);
         		}
-        		*/
         	}
         }
         

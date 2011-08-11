@@ -852,7 +852,6 @@ public class Manager implements BufferUmbilicalProtocol {
 
 		if (source != null) {
 			if (this.fileManagers.containsKey(taskid.getJobID())) {
-				/*
 				if(job.getBoolean("mapred.iterative.mapsync", false)){
 					//for jobs need map synchronization, we will send output of 1 reduce to
 					//every maps
@@ -862,7 +861,6 @@ public class Manager implements BufferUmbilicalProtocol {
 						}				
 					}
 				}else{
-				*/
 					//else we just send output to a corresponding map
 					for (TaskAttemptID attempt : this.fileManagers.get(taskid.getJobID()).keySet()) {	
 						if (attempt.getTaskID().equals(taskid)) {
@@ -871,7 +869,7 @@ public class Manager implements BufferUmbilicalProtocol {
 							fm.add(source);
 						}
 					}
-				//}
+				}
 			}
 		}
 	}

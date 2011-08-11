@@ -86,6 +86,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	
 	private boolean bMemTrans = false;
 	
+	private int partitions = 0;
 	private boolean bPortion = false;
 	private boolean bLength = false;
 	private boolean bUniLen = false;
@@ -130,7 +131,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.valClass = valClass;
 		this.priClass = priClass;
 
-		int partitions = job.getInt("priter.graph.partitions", 0);
+		partitions = job.getInt("priter.graph.partitions", 0);
 		if(partitions == 0){
 			JobClient jobclient = new JobClient(job);
 			ClusterStatus status = jobclient.getClusterStatus();
@@ -462,7 +463,12 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		start = true;
 		
 		if(bMemTrans){
-			OutputFile outfile = new OutputFile(this.taskAttemptID, this.iteration, new Path("/tmp/t1"), new Path("/tmp/t1"), 1);
+			OutputFile outfile;
+			if(job.getBoolean("priter.job.mapsync", false)){
+				outfile = new OutputFile(this.taskAttemptID, this.iteration, new Path("/tmp/t1"), new Path("/tmp/t1"), partitions);
+			}else{
+				outfile = new OutputFile(this.taskAttemptID, this.iteration, new Path("/tmp/t1"), new Path("/tmp/t1"), partitions);
+			}
 			
 			synchronized(this.stateTable){
 				synchronized(outfile.outputMemQueue){
@@ -470,6 +476,12 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 						getTopRecords(outfile.outputMemQueue);
 					}else{
 						getAllRecords(outfile.outputMemQueue);
+					}
+					
+					if(job.getBoolean("priter.job.mapsync", false)){
+						for(int i=0; i<partitions; i++){
+							outfile.outputMemQueue.add(new KVRecord(new IntWritable(i), this.defaultiState));
+						}
 					}
 					
 					if(outfile.outputMemQueue.size() == 0){
@@ -547,6 +559,12 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 						
 						total_map += count;
 					}		
+					
+					if(job.getBoolean("priter.job.mapsync", false)){
+						for(int i=0; i<partitions; i++){
+							writer.append(new IntWritable(i), this.defaultiState);
+						}
+					}
 					writer.close();
 					
 					LOG.info("iteration " + this.iteration + " expand " + count + " k-v pairs, " +
@@ -587,8 +605,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				//LOG.info("generated a spill index file " + indexFilename);
 			}
 					
-			int partitions = 1;
-			return new OutputFile(this.taskAttemptID, this.iteration, filename, indexFilename, partitions);
+			int partition_num = job.getBoolean("priter.job.mapsync", false) ? this.partitions : 1;
+			return new OutputFile(this.taskAttemptID, this.iteration, filename, indexFilename, partition_num);
 		}
 	}
 	
