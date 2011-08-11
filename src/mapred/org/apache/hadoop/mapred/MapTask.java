@@ -120,7 +120,7 @@ public class MapTask extends Task {
 							TaskAttemptID reduceTasktId = event.getTaskAttemptId();
 							
 							//LOG.info(reduceAttemptId.getTaskID() + " : " + reduceTaskId);
-							/*
+
 							if(job.getBoolean("mapred.iterative.mapsync", false)){
 								if (!reduceTasks.contains(reduceTasktId)) {
 									BufferExchange.BufferType type = BufferExchange.BufferType.PKVBUF;
@@ -141,13 +141,11 @@ public class MapTask extends Task {
 							}else{
 								//LOG.info("I am here for reduce buffer request " + reduceTasktId.getTaskID() + " : " + oneReduceTaskId);
 								//wrong
-							*/	
 								if (reduceTasktId.getTaskID().equals(oneReduceTaskId)) {
 									LOG.info("Map " + getTaskID() + " sending buffer request to reducer " + oneReduceTaskId);
 									
 									BufferExchange.BufferType type = BufferExchange.BufferType.PKVBUF;
 	
-								
 									BufferRequest request = 
 										new ReduceBufferRequest(host, getTaskID(), sink.getAddress(), type, oneReduceTaskId);
 									
@@ -159,7 +157,7 @@ public class MapTask extends Task {
 										LOG.warn("BufferUmbilical problem sending request " + request + ". " + e);
 									}
 								}
-							//}					
+							}					
 						}
 						break;
 						}
@@ -254,6 +252,7 @@ public class MapTask extends Task {
     private Object rollbackLock = new Object();
     
     public boolean mapsync = false;
+    private JobConf job;
 
 	private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -282,9 +281,17 @@ public class MapTask extends Task {
 		return new TaskID(this.getJobID(), false, this.pipeReduceTaskId.id);
 	}
 	
+	public TaskID predecessorReduceTask() {
+		return new TaskID(this.getJobID(), false, getTaskID().getTaskID().id);
+	}
+	
 	@Override
 	public int getNumberOfInputs() { 	
-		return 1;
+		if(job != null && job.getBoolean("mapred.iterative.mapsync", false)){
+			return job.getInt("mapred.iterative.partitions", 0);
+		}else{
+			return 1;
+		}
 	}
 	
 	@Override
@@ -386,6 +393,7 @@ public class MapTask extends Task {
 	public void run(final JobConf job, final TaskUmbilicalProtocol umbilical, final BufferUmbilicalProtocol bufferUmbilical)
 	throws IOException {
 		final Reporter reporter = getReporter(umbilical);
+		this.job = job;
 		
 	    // start thread that will handle communication with parent
 	    startCommunicationThread(umbilical);
@@ -494,7 +502,7 @@ public class MapTask extends Task {
 					
 			try{
 				synchronized(this){		
-					if(job.getBoolean("priter.job.inmem", false)){
+					if(job.getBoolean("priter.job.inmem", true)){
 						//iteration loop, stop when reduce let it stop
 						
 						//for processing time measurement
