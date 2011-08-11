@@ -42,6 +42,7 @@ import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.InputCollector;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.MapTask;
 import org.apache.hadoop.mapred.ReduceTask;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskAttemptID;
@@ -129,8 +130,10 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	private Map<TaskID, Position> cursor;
 	
 	//for synchronization
-	public Map<Long, Integer> syncMapPos;
+	private Map<Long, Integer> syncMapPos;
 	private int syncMaps;
+	private Map<Long, Integer> syncReducePos;
+	private int syncReduces;
 	private boolean init = true;
 	private long lastRec = 0;
 
@@ -159,6 +162,12 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 			JobClient jobclient = new JobClient(conf);
 			ClusterStatus status = jobclient.getClusterStatus();
 			syncMaps = 2 * status.getTaskTrackers();
+		}
+	    this.syncReduces = conf.getInt("priter.graph.partitions", 0);
+		if(syncReduces == 0){
+			JobClient jobclient = new JobClient(conf);
+			ClusterStatus status = jobclient.getClusterStatus();
+			syncReduces = 2 * status.getTaskTrackers();
 		}
 	    
 		this.executor = Executors.newFixedThreadPool(Math.min(maxConnections, Math.max(numInputs, 5)));
@@ -231,7 +240,11 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 								}
 							}
 							else if (BufferType.PKVBUF == type) {
-								handler =  new PKVBufferHandler(collector, istream, ostream);
+								if(conf.getBoolean("priter.job.mapsync", false)){
+									handler = new SyncPKVBufferHandler(collector, istream, ostream);
+								}else{
+									handler = new ASyncPKVBufferHandler(collector, istream, ostream);
+								}
 							}
 							else {
 								LOG.error("Unknown buffer type " + type);
@@ -561,8 +574,8 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		}		
 	}
 	
-	final class PKVBufferHandler extends Handler<OutputFile.PKVBufferHeader> {
-		public PKVBufferHandler(InputCollector<K, V> collector,
+	final class ASyncPKVBufferHandler extends Handler<OutputFile.PKVBufferHeader> {
+		public ASyncPKVBufferHandler(InputCollector<K, V> collector,
 				           DataInputStream istream, DataOutputStream ostream) {
 			super(collector, istream, ostream);
 		}
@@ -589,6 +602,61 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						updateProgress(header);
 						task.notifyAll();	
 
+						position.set(header.iteration() + 1);
+						LOG.debug("PKVBuffer handler " + " done receiving up to position " + position.longValue());
+					}else {
+						LOG.debug(this + " ignoring -- " + header);
+						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
+					}
+					// Indicate the next spill file that I expect.
+					pos = position.longValue();
+					LOG.debug("Updating source position to " + pos);
+					ostream.writeLong(pos);
+					ostream.flush();
+				}
+			}
+		}
+	}
+	
+	final class SyncPKVBufferHandler extends Handler<OutputFile.PKVBufferHeader> {
+		public SyncPKVBufferHandler(InputCollector<K, V> collector,
+				           DataInputStream istream, DataOutputStream ostream) {
+			super(collector, istream, ostream);
+		}
+		
+		public void receive(OutputFile.PKVBufferHeader header) throws IOException {
+			Position position = null;
+			TaskID inputTaskID = header.owner().getTaskID();
+			synchronized (cursor) {
+				if (!cursor.containsKey(inputTaskID)) {
+					cursor.put(inputTaskID, new Position(-1));
+				}
+				position = cursor.get(inputTaskID);
+			}
+			
+			synchronized (task) {			
+				long pos = position.longValue() < 0 ? header.iteration() : position.longValue(); 
+				LOG.info("position is: " + pos + "; header.iteration() is " + header.iteration());
+				if (pos == header.iteration()) {
+					WritableUtils.writeEnum(ostream, BufferExchange.Transfer.READY);
+					ostream.flush();
+					//LOG.info("PKVBuffer handler " + hashCode() + " ready to receive -- " + header);
+					
+					if (collector.read(istream, header)) {
+						updateProgress(header);
+						
+						int recReduces = (syncReducePos.containsKey(position.longValue())) ? syncReducePos.get(position.longValue()) + 1 : 1;
+						LOG.info("recReduce " + recReduces + " syncReduce " + syncReduces);
+
+						if(recReduces >= syncReduces){
+							syncReducePos.remove(position.longValue());
+							//((MapTask)task).mapsync = false;
+							task.notifyAll();	
+						}else{
+							syncReducePos.put(position.longValue(), recReduces);
+							//((MapTask)task).mapsync = true;
+						}
+	
 						position.set(header.iteration() + 1);
 						LOG.debug("PKVBuffer handler " + " done receiving up to position " + position.longValue());
 					}else {

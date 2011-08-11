@@ -252,6 +252,8 @@ public class MapTask extends Task {
     
     private Thread rollbackCheckThread = null;
     private Object rollbackLock = new Object();
+    
+    public boolean mapsync = false;
 
 	private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -503,6 +505,8 @@ public class MapTask extends Task {
 								activator.iterate();
 								if(counter == 0){
 									LOG.info("no records left, do nothing");
+								}else if(mapsync){
+									LOG.info("sync barrier");
 								}else{		
 									this.nsortBuffer.iterate();
 									counter = 0;
@@ -705,5 +709,4 @@ public class MapTask extends Task {
 		}
 
 	}
-
 }
