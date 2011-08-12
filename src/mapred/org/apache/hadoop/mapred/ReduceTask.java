@@ -576,8 +576,8 @@ public class ReduceTask extends Task {
 					//retrieve the top records, and generate a file
 					OutputFile outputFile = pkvBuffer.spillTops();
 					if(outputFile != null){
-						umbilical.output(outputFile);
 						updator.iterate();
+						umbilical.output(outputFile);
 						LOG.info("output file " + outputFile);
 					}else{
 						LOG.info("no record is reduced, so wait!");
