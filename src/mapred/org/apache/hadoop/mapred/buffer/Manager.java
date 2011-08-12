@@ -852,7 +852,7 @@ public class Manager implements BufferUmbilicalProtocol {
 
 		if (source != null) {
 			if (this.fileManagers.containsKey(taskid.getJobID())) {
-				if(job.getBoolean("mapred.iterative.mapsync", false)){
+				if(job.getBoolean("priter.job.mapsync", false)){
 					//for jobs need map synchronization, we will send output of 1 reduce to
 					//every maps
 					for (FileManager fm : this.fileManagers.get(taskid.getJobID()).values()) {

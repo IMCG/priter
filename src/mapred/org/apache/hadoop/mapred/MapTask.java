@@ -121,7 +121,7 @@ public class MapTask extends Task {
 							
 							//LOG.info(reduceAttemptId.getTaskID() + " : " + reduceTaskId);
 
-							if(job.getBoolean("mapred.iterative.mapsync", false)){
+							if(job.getBoolean("priter.job.mapsync", false)){
 								if (!reduceTasks.contains(reduceTasktId)) {
 									BufferExchange.BufferType type = BufferExchange.BufferType.PKVBUF;
 									
@@ -287,8 +287,8 @@ public class MapTask extends Task {
 	
 	@Override
 	public int getNumberOfInputs() { 	
-		if(job != null && job.getBoolean("mapred.iterative.mapsync", false)){
-			return job.getInt("mapred.iterative.partitions", 0);
+		if(job != null && job.getBoolean("priter.job.mapsync", false)){
+			return job.getInt("priter.graph.partitions", 0);
 		}else{
 			return 1;
 		}

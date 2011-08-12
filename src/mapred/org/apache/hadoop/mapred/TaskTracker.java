@@ -718,7 +718,7 @@ public class TaskTracker
 					  } else if(task.isMapTask() && task.isIterative()) {
 						  //LOG.info("iterative map task is " + task);
 
-						  if(rjob.jobConf.getBoolean("mapred.iterative.mapsync", false)){
+						  if(rjob.jobConf.getBoolean("priter.job.mapsync", false)){
 				                if (rjob.getReduceFetchStatus() == null) {
 					                  f = new FetchStatus(jobId, 
 					                                      ((MapTask)task).getNumberOfInputs());
@@ -945,7 +945,7 @@ public class TaskTracker
         				(e.getTaskAttemptId().getId() <= partitions)){
         			//LOG.info("add event : " + e + " is map? " + isMap);
         			allEvents.add(e);
-        		}else if(getJobConf(jobId).getBoolean("mapred.iterative.mapsync", false)){
+        		}else if(getJobConf(jobId).getBoolean("priter.job.mapsync", false)){
         			allEvents.add(e);
         		}
         	}
