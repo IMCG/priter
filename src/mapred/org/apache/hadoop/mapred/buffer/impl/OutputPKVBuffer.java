@@ -506,7 +506,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			}
 
 			return outfile;
-		
+	
 		}else{
 			Path filename = null;
 			Path indexFilename = null;
