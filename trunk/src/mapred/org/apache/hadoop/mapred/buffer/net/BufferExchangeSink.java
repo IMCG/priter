@@ -163,6 +163,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 			ClusterStatus status = jobclient.getClusterStatus();
 			syncMaps = 2 * status.getTaskTrackers();
 		}
+		this.syncReducePos = new HashMap<Long, Integer>();
 	    this.syncReduces = conf.getInt("priter.graph.partitions", 0);
 		if(syncReduces == 0){
 			JobClient jobclient = new JobClient(conf);
