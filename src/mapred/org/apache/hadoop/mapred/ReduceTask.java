@@ -189,7 +189,7 @@ public class ReduceTask extends Task {
 							
               
               double total_curr = 0;
-              if(conf.getBoolean("job.snapshot", true)){
+              if(conf.getBoolean("priter.snapshot", true)){
                 //snapshot generation
                 pkvBuffer.snapshot(snapshotIndex);
               }else{
