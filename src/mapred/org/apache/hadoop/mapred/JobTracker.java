@@ -3330,7 +3330,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				currObj.get(jobid).put(snapshotIndex, currObj.get(jobid).get(snapshotIndex)+obj);
 
 				this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
-				this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
+				if(jobs.get(jobid).getJobConf().getBoolean("priter.snapshot", true))
+          this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
 				ArrayList<Integer> tasks = this.snapshotCompletionMap.get(jobid).get(snapshotIndex);
 				
 				//LOG.info("interation index is " + iterIndex + " : task index is " + reduceIndex);
@@ -3341,9 +3342,12 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
         
 	
 				if(tasks.size() == this.totalReduces) {
-          LOG.info("snapshotindex " + snapshotIndex + " totalF2 " + this.totalCurr.get(jobid) + " updates " + this.totalUpdates.get(jobid));
-          this.totalCurr.put(jobid, 0.0);
-          this.totalUpdates.put(jobid, (long)0);
+          if(!jobs.get(jobid).getJobConf().getBoolean("priter.snapshot", true)){
+            LOG.info("snapshotindex " + snapshotIndex + " totalF2 " + this.totalCurr.get(jobid) + " updates " + this.totalUpdates.get(jobid));
+            this.totalCurr.put(jobid, 0.0);
+            this.totalUpdates.put(jobid, (long)0);
+            return;
+          }
           
 					WritableComparable total = new FloatWritable(Float.MAX_VALUE);
 					if(jobs.get(jobid).getJobConf().getBoolean("priter.snapshot.merge", true)){
@@ -3441,6 +3445,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					}
 				}
 			}else{
+        
 				ArrayList<Integer> tasks = new ArrayList<Integer>();
 				
 				if(taskReAssign && snapshotIndex > checkpointSnapshot + 1){
@@ -3452,6 +3457,9 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					this.snapshotCompletionMap.get(jobid).put(snapshotIndex, tasks);						
 					this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
 					this.snapshotUpdateMap.get(jobid).put(snapshotIndex, 0);
+          
+          if(!jobs.get(jobid).getJobConf().getBoolean("priter.snapshot", true)) return;
+          
 					try{
 						this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
 					}catch(Exception e){
