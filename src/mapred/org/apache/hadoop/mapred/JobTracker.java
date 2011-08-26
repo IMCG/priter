@@ -124,6 +124,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   private Map<JobID, Map<Integer, Integer>> snapshotUpdateMap = new HashMap<JobID, Map<Integer, Integer>>();
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
+  private Map<JobID, Long> totalUpdates = new HashMap<JobID, Long>();
+  private Map<JobID, Double> totalCurr = new HashMap<JobID, Double>();
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
   private Map<JobID, Map<Integer, Float>> currObj = new HashMap<JobID, Map<Integer, Float>>();
   private Map<JobID, Map<Integer, WritableComparable>> priorityTotal = new HashMap<JobID, Map<Integer, WritableComparable>>();
@@ -3274,6 +3276,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			int iterIndex = event.getIterIndex();
 			int reduceIndex = event.getTaskIndex();
 			boolean update = event.getUpdate();
+      long part_updates = event.getPartialUpdates();
+      double part_curr = event.getPartialF2();
 			float obj = event.getObj();
 			JobID jobid = event.getJobID();
 			
@@ -3282,6 +3286,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			if(this.snapshotCompletionMap.get(jobid) == null){			
 				Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
 				this.snapshotCompletionMap.put(jobid, snapshotComplete);
+        this.totalCurr.put(jobid, 0.0);
+        this.totalUpdates.put(jobid, (long)0);
 				Map<Integer, Integer> snapshotupdate = new HashMap<Integer, Integer>();
 				this.snapshotUpdateMap.put(jobid, snapshotupdate);
 				
@@ -3330,8 +3336,15 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				//LOG.info("interation index is " + iterIndex + " : task index is " + reduceIndex);
 				//LOG.info("total reduces is " + this.totalReduces);
 				//LOG.info("total received is " + tasks.size());
+        this.totalCurr.put(jobid, this.totalCurr.get(jobid)+part_curr);
+        this.totalUpdates.put(jobid, this.totalUpdates.get(jobid)+part_updates);
+        
 	
 				if(tasks.size() == this.totalReduces) {
+          LOG.info("snapshotindex " + snapshotIndex + " totalF2 " + this.totalCurr.get(jobid) + " updates " + this.totalUpdates.get(jobid));
+          this.totalCurr.put(jobid, 0.0);
+          this.totalUpdates.put(jobid, (long)0);
+          
 					WritableComparable total = new FloatWritable(Float.MAX_VALUE);
 					if(jobs.get(jobid).getJobConf().getBoolean("priter.snapshot.merge", true)){
 						//do merge sort
