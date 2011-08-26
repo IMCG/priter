@@ -80,7 +80,8 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	private int topk;
 	
 	public int iteration = 0;
-	public int total_map = 0;
+	public long total_map = 0;
+  public double total_F2 = 0;
 	public int total_reduce = 0;
 	public boolean start = false;
 	
@@ -763,6 +764,23 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		writer.close();
 	}
 	
+  public double collcetInfo(){
+    double totalF2 = 0;
+    for(IntWritable k : stateTable.keySet()){	
+      if(valClass == DoubleWritable.class){
+        IntWritable pri = (IntWritable)stateTable.get(k).getcState();
+        totalF2 += pri.get();
+      }else if(valClass == IntWritable.class){
+        DoubleWritable pri = (DoubleWritable)stateTable.get(k).getcState();
+        totalF2 += pri.get();
+      }else if(valClass == FloatWritable.class){
+        FloatWritable pri = (FloatWritable)stateTable.get(k).getcState();
+        totalF2 += pri.get();
+      }
+    }
+    return totalF2;
+  }
+  
 	@Override
 	public String toString() {
 		return new String(this.taskAttemptID + " priority buffer(" + this.iteration + ")");

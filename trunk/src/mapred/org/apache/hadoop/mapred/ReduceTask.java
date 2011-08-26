@@ -187,8 +187,15 @@ public class ReduceTask extends Task {
 								this.wait(500);
 							}
 							
-							//snapshot generation
-							pkvBuffer.snapshot(snapshotIndex);
+              
+              double total_curr = 0;
+              if(conf.getBoolean("job.snapshot", true)){
+                //snapshot generation
+                pkvBuffer.snapshot(snapshotIndex);
+              }else{
+                total_curr = pkvBuffer.collcetInfo();
+              }
+              long total_updates = pkvBuffer.total_map;
 							
 							boolean update = true;
 							if(pkvBuffer.iteration == lastiter){
@@ -200,7 +207,7 @@ public class ReduceTask extends Task {
 								obj = updator.obj().get();
 								LOG.info("curr obj is " + obj);
 							}
-							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, obj, getJobID());
+							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, total_updates, total_curr, obj, getJobID());
 							try {
 								this.trackerUmbilical.snapshotCommit(event);
 							} catch (Exception e) {
