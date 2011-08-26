@@ -766,16 +766,24 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	
   public double collcetInfo(){
     double totalF2 = 0;
-    for(IntWritable k : stateTable.keySet()){	
-      if(valClass == DoubleWritable.class){
-        IntWritable pri = (IntWritable)stateTable.get(k).getcState();
-        totalF2 += pri.get();
-      }else if(valClass == IntWritable.class){
-        DoubleWritable pri = (DoubleWritable)stateTable.get(k).getcState();
-        totalF2 += pri.get();
-      }else if(valClass == FloatWritable.class){
-        FloatWritable pri = (FloatWritable)stateTable.get(k).getcState();
-        totalF2 += pri.get();
+    
+    if(valClass == FloatWritable.class){
+      float defaultV = ((FloatWritable)defaultiState).get();
+      for(IntWritable k : stateTable.keySet()){	
+          FloatWritable pri = (FloatWritable)stateTable.get(k).getcState();
+          if(pri.get() != defaultV) totalF2 += pri.get();
+      }
+    }else if(valClass == IntWritable.class){
+      int defaultV = ((IntWritable)defaultiState).get();
+      for(IntWritable k : stateTable.keySet()){	
+          IntWritable pri = (IntWritable)stateTable.get(k).getcState();
+          if(pri.get() != defaultV) totalF2 += pri.get();
+      }
+    }else if(valClass == DoubleWritable.class){
+      double defaultV = ((DoubleWritable)defaultiState).get();
+      for(IntWritable k : stateTable.keySet()){	
+          DoubleWritable pri = (DoubleWritable)stateTable.get(k).getcState();
+          if(pri.get() != defaultV) totalF2 += pri.get();
       }
     }
     return totalF2;
