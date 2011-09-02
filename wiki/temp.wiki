@@ -1,0 +1,41 @@
+#summary One-sentence summary of this page.
+
+= Introduction =
+
+{{{
+struct PagerankTermChecker : public TermChecker<int, float> {
+
+    PagerankTermChecker(){
+        curr = 0;
+    }
+    
+    double partia_calculate(TermCheckIterator<int, float>* statetable){
+        float partial_curr = 0;
+        while(!statetable->done()){
+            statetable->Next();
+            partial_curr += statetable->value2();
+        }
+        return partial_curr;
+    }
+    
+    bool terminate(vector<double> partials){
+        curr = 0;
+        vector<double>::iterator it;
+        for(it=partials.begin(); it!=partials.end(); it++){
+                double partial = *it;
+                curr += partial;
+        }
+        
+        if(curr > FLAGS_termcheck_threshold){
+            return true;
+        }else{
+            return false;
+        }
+    }
+};
+
+
+
+
+
+}}}
