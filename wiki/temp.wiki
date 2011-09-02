@@ -5,31 +5,31 @@
 {{{
 template <class K>
 struct Partitioner {
-  virtual int operator()(const K& k, int partitons) = 0;
+    virtual int operator()(const K& k, int partitons) = 0;
 };
 
 template <class K, class V>
 struct Initializer{
-  virtual void initialize(const K& k, V& msg, V& state) = 0;
+    virtual void initialize(const K& k, V& msg, V& state) = 0;
 };
 
 template <class K, class V>
 struct Updator{
-  virtual void update(const K& k, const V& msg, V& state) = 0;
-  virtual void send(const K& k, const V& msg) = 0;
-  virtual void reset(const K& k, V& msg) = 0;
+    virtual void update(const K& k, const V& msg, V& state) = 0;
+    virtual void send(const K& k, const V& msg) = 0;
+    virtual void reset(const K& k, V& msg) = 0;
 };
 
 template <class K, class V>
 struct Scheduler {
-  int queue_len;
-  virtual V priority(const K& k, const V& msg) = 0;
+    double schedule_portion;
+    virtual V priority(const K& k, const V& msg) = 0;
 };
 
 template <class K, class V>
 struct TermChecker {
-  int termcheck_interval;  
-  virtual V local_status(Iterator<K, V>* statetable) = 0;
-  virtual bool terminate(vector<V> local_statuses) = 0;
+    int termcheck_interval;  
+    virtual V local_status(Iterator<K, V>* statetable) = 0;
+    virtual bool terminate(vector<V> local_statuses) = 0;
 };
 }}}
