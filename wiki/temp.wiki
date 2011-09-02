@@ -22,17 +22,14 @@ struct Updator{
 
 template <class K, class V>
 struct Scheduler {
+  int queue_len;
   virtual V priority(const K& k, const V& msg) = 0;
 };
 
 template <class K, class V>
 struct TermChecker {
-    virtual V local_status(Iterator<K, V>* statetable) = 0;
-    virtual bool terminate(vector<V> local_statuses) = 0;
+  int termcheck_interval;  
+  virtual V local_status(Iterator<K, V>* statetable) = 0;
+  virtual bool terminate(vector<V> local_statuses) = 0;
 };
-
-
-
-
-
 }}}
