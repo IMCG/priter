@@ -3,35 +3,32 @@
 = Introduction =
 
 {{{
-struct PagerankTermChecker : public TermChecker<int, float> {
+template <class K>
+struct Partitioner {
+  virtual int operator()(const K& k, int partitons) = 0;
+};
 
-    PagerankTermChecker(){
-        curr = 0;
-    }
-    
-    double partia_calculate(TermCheckIterator<int, float>* statetable){
-        float partial_curr = 0;
-        while(!statetable->done()){
-            statetable->Next();
-            partial_curr += statetable->value2();
-        }
-        return partial_curr;
-    }
-    
-    bool terminate(vector<double> partials){
-        curr = 0;
-        vector<double>::iterator it;
-        for(it=partials.begin(); it!=partials.end(); it++){
-                double partial = *it;
-                curr += partial;
-        }
-        
-        if(curr > FLAGS_termcheck_threshold){
-            return true;
-        }else{
-            return false;
-        }
-    }
+template <class K, class V>
+struct Initializer{
+  virtual void initialize(const K& k, V& msg, V& state) = 0;
+};
+
+template <class K, class V>
+struct Updator{
+  virtual void update(const K& k, const V& msg, V& state) = 0;
+  virtual void send(const K& k, const V& msg) = 0;
+  virtual void reset(const K& k, V& msg) = 0;
+};
+
+template <class K, class V>
+struct Scheduler {
+  virtual V priority(const K& k, const V& msg) = 0;
+};
+
+template <class K, class V>
+struct TermChecker {
+    virtual V local_status(Iterator<K, V>* statetable) = 0;
+    virtual bool terminate(vector<V> local_statuses) = 0;
 };
 
 
