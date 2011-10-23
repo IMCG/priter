@@ -19,15 +19,12 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
-public class KazActivator extends MapReduceBase implements
+public class KatzActivator extends MapReduceBase implements
 	Activator<FloatWritable, FloatWritable> {
 
 	private String subGraphsDir;
 	private int kvs = 0;
-	private int expand = 0;
 	private int iter = 0;
-	private int nPages;
-	private int startPages;
 	private int partitions;
 	private float beta;
 	
@@ -35,19 +32,12 @@ public class KazActivator extends MapReduceBase implements
 	private HashMap<Integer, ArrayList<Integer>> linkList = new HashMap<Integer, ArrayList<Integer>>();
 	 
 	private synchronized void loadGraphToMem(JobConf conf, int n){
+		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
+		Path remote_link = new Path(subGraphsDir + "/part" + n);
+		
 		FileSystem hdfs = null;
 	    try {
 			hdfs = FileSystem.get(conf);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		assert(hdfs != null);
-		
-		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
-
-		Path remote_link = new Path(subGraphsDir + "/part" + n);
-		try {
 			FSDataInputStream in = hdfs.open(remote_link);
 			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
 			
@@ -67,8 +57,8 @@ public class KazActivator extends MapReduceBase implements
 					this.linkList.put(Integer.parseInt(node), links);
 				}
 			}
+			reader.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -76,8 +66,6 @@ public class KazActivator extends MapReduceBase implements
 	@Override
 	public void configure(JobConf job) {
 		int taskid = Util.getTaskId(job);
-		nPages = job.getInt("priter.graph.nodes", 0);
-		startPages = job.getInt(MainDriver.START_NODE, nPages);
 		partitions = job.getInt("priter.graph.partitions", 1);
 		beta = job.getFloat(MainDriver.KATZ_BETA, (float)0.05);
 		loadGraphToMem(job, taskid);
@@ -86,7 +74,7 @@ public class KazActivator extends MapReduceBase implements
 	@Override
 	public void initStarter(InputPKVBuffer<FloatWritable> starter)
 			throws IOException {	
-		starter.init(new IntWritable(startPages), new FloatWritable(nPages));
+		starter.init(new IntWritable(0), new FloatWritable(1000000));
 	}
 
 	@Override
@@ -101,10 +89,9 @@ public class KazActivator extends MapReduceBase implements
 		links = this.linkList.get(key.get());
 
 		if(links == null){
-			System.out.println("no links found for page " + page);
+			System.out.println("no links found for node " + page);
 			for(int i=0; i<partitions; i++){
 				output.collect(new IntWritable(i), new FloatWritable(0));
-				//System.out.println("output " + i + "\t" + 0);
 			}
 			return;
 		}	
@@ -112,13 +99,11 @@ public class KazActivator extends MapReduceBase implements
 		
 		for(int link : links){
 			output.collect(new IntWritable(link), new FloatWritable(delta));
-			//System.out.println("output " + link + "\t" + delta);
-			expand++;
 		}	
 	}
 
 	@Override
 	public void iterate() {
-		System.out.println("iter " + (iter++) + " workload is " + kvs);
+		System.out.println((iter++) + " passes " + kvs + " activations");
 	}
 }
