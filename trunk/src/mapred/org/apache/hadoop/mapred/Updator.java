@@ -3,7 +3,6 @@ package org.apache.hadoop.mapred;
 import java.io.IOException;
 import java.util.Iterator;
 
-import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
@@ -15,9 +14,9 @@ public interface Updator<P extends WritableComparable, V> extends JobConfigurabl
 	
 	void initStateTable(OutputPKVBuffer<P, V> stateTable);
 	V resetiState();
-	P decidePriority(IntWritable key, V iState, boolean iornot);
+	P decidePriority(IntWritable key, V iState);
+	P decideTopK(IntWritable key, V cState);
 	void updateState(IntWritable key, Iterator<V> values, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;	
 	
 	void iterate();
-	FloatWritable obj();
 }
