@@ -6,14 +6,14 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
-public interface Activator<P extends WritableComparable, V> extends JobConfigurable {
+public interface Activator<K, P extends WritableComparable, V> extends JobConfigurable {
 	/*
 	 * for activate node, that is map
 	 */
 	
-	void initStarter(InputPKVBuffer<V> starter) throws IOException;
+	void initStarter(InputPKVBuffer<K, V> starter) throws IOException;
 	
-	void activate(IntWritable nodeid, V value, OutputCollector<IntWritable, V> output, Reporter reporter) throws IOException;
+	void activate(K nodeid, V value, OutputCollector<K, IntWritable, V> output, Reporter reporter) throws IOException;
 	
 	void iterate();
 }
