@@ -22,14 +22,9 @@ import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 public class PageRankActivator extends MapReduceBase implements
 	Activator<DoubleWritable, DoubleWritable> {
 
-	private JobConf job;
-
 	private String subGraphsDir;
-	private int kvs = 0;
-	private int expand = 0;
 	private int iter = 0;
-	private int nPages;
-	private int startPages;
+	private int kvs = 0;				//for tracking
 	private double initvalue;
 	private int partitions;
 	
@@ -77,21 +72,16 @@ public class PageRankActivator extends MapReduceBase implements
 
 	@Override
 	public void configure(JobConf job) {
-		this.job = job;
 		int taskid = Util.getTaskId(job);
-		nPages = job.getInt("priter.graph.nodes", 0);
-		startPages = job.getInt(MainDriver.START_NODE, nPages);
-		initvalue = PageRank.RETAINFAC * nPages / startPages;
+		initvalue = PageRank.RETAINFAC;
 		partitions = job.getInt("priter.graph.partitions", 1);
 		loadGraphToMem(job, taskid);
 	}
 	
 	@Override
-	public void initStarter(InputPKVBuffer<DoubleWritable> starter)
-			throws IOException {	
-		int n = Util.getTaskId(job);
-		for(int i=n; i<startPages; i=i+partitions){
-			starter.init(new IntWritable(i), new DoubleWritable(initvalue));
+	public void initStarter(InputPKVBuffer<DoubleWritable> starter) throws IOException {	
+		for(int k : linkList.keySet()){
+			starter.init(new IntWritable(k), new DoubleWritable(initvalue));
 		}
 	}
 
@@ -117,12 +107,11 @@ public class PageRankActivator extends MapReduceBase implements
 		
 		for(int link : links){
 			output.collect(new IntWritable(link), new DoubleWritable(delta));
-			expand++;
 		}	
 	}
 
 	@Override
 	public void iterate() {
-		System.out.println("iter " + (iter++) + " workload is " + kvs);
+		System.out.println((iter++) + " passes " + kvs + " activations");
 	}
 }

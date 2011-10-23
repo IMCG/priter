@@ -22,6 +22,7 @@ import org.apache.hadoop.examples.dancing.Sudoku;
 import org.apache.hadoop.examples.priorityiteration.Averaging;
 import org.apache.hadoop.examples.priorityiteration.BSearch;
 import org.apache.hadoop.examples.priorityiteration.ConnectComponent;
+import org.apache.hadoop.examples.priorityiteration.Distributor;
 import org.apache.hadoop.examples.priorityiteration.GenGraph;
 import org.apache.hadoop.examples.priorityiteration.HittingTime;
 import org.apache.hadoop.examples.priorityiteration.Kaz;
@@ -87,7 +88,7 @@ public class ExampleDriver {
       pgd.addClass("hittime", HittingTime.class, "hitting time");
       pgd.addClass("katz", Kaz.class, "katz metric");
       pgd.addClass("pwcluster", PWCluster.class, "pairwise clustering");
-      pgd.addClass("preprocess", PreProcess.class, "preprocess");
+      pgd.addClass("partition", Distributor.class, "partition input");
       pgd.addClass("gengraph", GenGraph.class, "gengraph");
       pgd.driver(argv);
 
