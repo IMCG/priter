@@ -64,6 +64,7 @@ public class KatzUpdater extends MapReduceBase implements
 	@Override
 	public void iterate() {
 		iterate++;
+		System.out.println("iteration " + iterate + " total parsed " + workload);
 	}
 
 	@Override
@@ -102,19 +103,21 @@ public class KatzUpdater extends MapReduceBase implements
 			delta += values.next().get();	
 		}
 
-		PriorityRecord<FloatWritable, FloatWritable> pkvRecord;	
-		if(buffer.stateTable.containsKey(key)){
-			pkvRecord = buffer.stateTable.get(key);
-
-			float iState = pkvRecord.getiState().get() + delta;
-			float cState = pkvRecord.getcState().get() + delta;
-			buffer.stateTable.get(key).getiState().set(iState);
-			buffer.stateTable.get(key).getcState().set(cState);
-			buffer.stateTable.get(key).getPriority().set(iState*this.degreeMap.get(key.get()));
-		}else{
-			pkvRecord = new PriorityRecord<FloatWritable, FloatWritable>(
-					new FloatWritable(delta), new FloatWritable(delta), new FloatWritable(delta));
-			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
+		synchronized(buffer.stateTable){
+			PriorityRecord<FloatWritable, FloatWritable> pkvRecord;	
+			if(buffer.stateTable.containsKey(key)){
+				pkvRecord = buffer.stateTable.get(key);
+	
+				float iState = pkvRecord.getiState().get() + delta;
+				float cState = pkvRecord.getcState().get() + delta;
+				buffer.stateTable.get(key).getiState().set(iState);
+				buffer.stateTable.get(key).getcState().set(cState);
+				buffer.stateTable.get(key).getPriority().set(iState*this.degreeMap.get(key.get()));
+			}else{
+				pkvRecord = new PriorityRecord<FloatWritable, FloatWritable>(
+						new FloatWritable(delta), new FloatWritable(delta), new FloatWritable(delta));
+				buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
+			}
 		}
 	}
 }

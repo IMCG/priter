@@ -11,6 +11,7 @@ import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.lib.HashPartitioner;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -40,17 +41,15 @@ public class ConnectComponent extends Configured implements Tool {
 	    //set for iterative process   
 	    job.setBoolean("priter.job", true);
 	    job.setInt("priter.graph.partitions", partitions);			//graph partitions
-	    job.setInt("priter.graph.nodes", nNodes);					//total nodes
 	    job.setLong("priter.snapshot.interval", 5000);				//snapshot interval	
 	    job.setInt("priter.snapshot.topk", topk);					//topk
-	    job.setInt("mapred.iterative.topk.scale", partitions);		//expand all topks on each node
 	    job.setInt("priter.queue.uniqlength", exetop);				//execution queue
 	    job.setLong("priter.stop.maxtime", stoptime);				//termination check
 
 	    
 	    job.setJarByClass(ConnectComponent.class);
 	    job.setActivatorClass(ConnectComponentActivator.class);	
-	    job.setUpdatorClass(ConnectComponentUpdator.class);
+	    job.setUpdaterClass(ConnectComponentUpdater.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(IntWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
@@ -65,20 +64,20 @@ public class ConnectComponent extends Configured implements Tool {
 	}
 	@Override
 	public int run(String[] args) throws Exception {
-		if (args.length != 8) {
-		      System.err.println("Usage: conncomp <indir> <outdir> <subgraph> <parititons> <topk> <num of nodes> <exetop> <stopthresh>");
+		if (args.length != 6) {
+		      System.err.println("Usage: conncomp <indir> <outdir> <partitions> <topk> <exetop> <stopttime>");
 		      System.exit(2);
 		}
 	    
 		input = args[0];
-		output = args[1];
-	    subGraphDir = args[2];
-	    partitions = Integer.parseInt(args[3]);
-	    topk = Integer.parseInt(args[4]);
-	    nNodes = Integer.parseInt(args[5]);
-	    exetop = Integer.parseInt(args[6]);
-	    stoptime = Long.parseLong(args[7]);
-    
+	    output = args[1];
+	    partitions = Integer.parseInt(args[2]);
+	    topk = Integer.parseInt(args[3]);
+	    exetop = Integer.parseInt(args[4]);
+	    stoptime = Long.parseLong(args[5]);
+	    
+	    subGraphDir = input + "/subgraph";
+	    new Distributor().partition(input, output, partitions, IntWritable.class, HashPartitioner.class);
 	    conncomp();
 	    
 		return 0;
