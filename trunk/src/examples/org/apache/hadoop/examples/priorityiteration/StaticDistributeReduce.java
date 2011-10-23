@@ -18,7 +18,7 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
 public class StaticDistributeReduce extends MapReduceBase implements
-		Reducer<IntWritable, Text, NullWritable, NullWritable> {
+		Reducer<Text, Text, NullWritable, NullWritable> {
 
 	private FSDataOutputStream out;
 	private BufferedWriter writer;
@@ -40,14 +40,13 @@ public class StaticDistributeReduce extends MapReduceBase implements
 	}
 	
 	@Override
-	public void reduce(IntWritable arg0, Iterator<Text> values,
+	public void reduce(Text arg0, Iterator<Text> values,
 			OutputCollector<NullWritable, NullWritable> arg2, Reporter arg3)
 			throws IOException {
 		while(values.hasNext()){
 			Text value = values.next();
 			writer.write(arg0 + "\t" + value + "\n");
 		}
-		
 	}
 
 	@Override

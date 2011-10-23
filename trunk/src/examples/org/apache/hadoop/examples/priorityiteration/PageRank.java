@@ -12,6 +12,7 @@ import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.lib.HashPartitioner;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -27,12 +28,10 @@ public class PageRank extends Configured implements Tool {
 	private int startPages;
 	private float alpha;
 	private float stopthresh;
-	//private float avgdeg;
 	
 	//damping factor
 	public static final double DAMPINGFAC = 0.8;
 	public static final double RETAINFAC = 0.2;
-	public static final long OVHDTIME = 1000;
 
 	private int pagerank() throws IOException{
 	    JobConf job = new JobConf(getConf());
@@ -52,9 +51,8 @@ public class PageRank extends Configured implements Tool {
 	    job.setInt("priter.graph.nodes", nPages);						//total nodes
 	    job.setLong("priter.snapshot.interval", 20000);					//snapshot interval	
 	    job.setInt("priter.snapshot.topk", topk);						//topk
-	    job.setFloat("priter.queue.portion", alpha);					//execution queue
+	    job.setFloat("priter.queue.portion", alpha);					//priority queue portion
 	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
-	    		
 	          
 	    job.setJarByClass(PageRank.class);
 	    job.setActivatorClass(PageRankActivator.class);	
@@ -73,21 +71,22 @@ public class PageRank extends Configured implements Tool {
 	}
 	@Override
 	public int run(String[] args) throws Exception {
-		if (args.length != 9) {
-		      System.err.println("Usage: pagerank <indir> <outdir> <subgraph> <partitions> <topk> <number of nodes> <start nodes> <alpha> <stopthreshold>");
+		if (args.length != 7) {
+		      System.err.println("Usage: pagerank <indir> <outdir> <partitions> <topk> <number of nodes> <alpha> <stopthreshold>");
 		      System.exit(2);
 		}
 	    
 		input = args[0];
 	    output = args[1];
-	    subGraphDir = args[2];
-	    partitions = Integer.parseInt(args[3]);
-	    topk = Integer.parseInt(args[4]);
-	    nPages = Integer.parseInt(args[5]);
-	    startPages = Integer.parseInt(args[6]);
-	    alpha = Float.parseFloat(args[7]);
-	    stopthresh = Float.parseFloat(args[8]);
-    
+	    partitions = Integer.parseInt(args[2]);
+	    topk = Integer.parseInt(args[3]);
+	    nPages = Integer.parseInt(args[4]);
+	    alpha = Float.parseFloat(args[5]);
+	    stopthresh = Float.parseFloat(args[6]);
+	    
+	    subGraphDir = input + "/subgraph";
+
+	    new Distributor().partition(input, output, partitions, nPages, HashPartitioner.class);
 	    pagerank();
 	    
 		return 0;
@@ -98,7 +97,6 @@ public class PageRank extends Configured implements Tool {
 	 * @throws Exception 
 	 */
 	public static void main(String[] args) throws Exception {
-		// TODO Auto-generated method stub
 		int res = ToolRunner.run(new Configuration(), new PageRank(), args);
 	    System.exit(res);
 	}
