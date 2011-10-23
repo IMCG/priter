@@ -77,6 +77,7 @@ public class SSSPActivator extends PrIterBase implements
 					this.linkList.put(Integer.parseInt(node), links);
 				}
 			}
+			reader.close();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}

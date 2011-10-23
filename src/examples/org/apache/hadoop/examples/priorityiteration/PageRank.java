@@ -23,7 +23,7 @@ public class PageRank extends Configured implements Tool {
 	private String subGraphDir;
 	private int partitions;
 	private int topk;
-	private float alpha;
+	private float qportion;
 	private float stopthresh;
 	
 	//damping factor
@@ -46,7 +46,7 @@ public class PageRank extends Configured implements Tool {
 	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
 	    job.setLong("priter.snapshot.interval", 20000);					//snapshot interval	
 	    job.setInt("priter.snapshot.topk", topk);						//topk
-	    job.setFloat("priter.queue.portion", alpha);					//priority queue portion
+	    job.setFloat("priter.queue.portion", qportion);					//priority queue portion
 	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
 	          
 	    job.setJarByClass(PageRank.class);
@@ -67,7 +67,7 @@ public class PageRank extends Configured implements Tool {
 	@Override
 	public int run(String[] args) throws Exception {
 		if (args.length != 6) {
-		      System.err.println("Usage: pagerank <indir> <outdir> <partitions> <topk> <alpha> <stopthreshold>");
+		      System.err.println("Usage: pagerank <indir> <outdir> <partitions> <topk> <qportion> <stopthreshold>");
 		      System.exit(2);
 		}
 	    
@@ -75,7 +75,7 @@ public class PageRank extends Configured implements Tool {
 	    output = args[1];
 	    partitions = Integer.parseInt(args[2]);
 	    topk = Integer.parseInt(args[3]);
-	    alpha = Float.parseFloat(args[4]);
+	    qportion = Float.parseFloat(args[4]);
 	    stopthresh = Float.parseFloat(args[5]);
 	    
 	    subGraphDir = input + "/subgraph";

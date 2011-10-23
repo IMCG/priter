@@ -57,6 +57,7 @@ public class PageRankUpdater extends PrIterBase implements
 					stateTable.init(new IntWritable(node), new FloatWritable(0), new FloatWritable(initvalue));
 				}
 			}
+			reader.close();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}

@@ -14,34 +14,27 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.Updator;
+import org.apache.hadoop.mapred.Updater;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
 
 
-public class KazUpdator extends MapReduceBase implements
-		Updator<FloatWritable, FloatWritable> {
+public class KatzUpdater extends MapReduceBase implements
+		Updater<FloatWritable, FloatWritable> {
 	
 	private int workload = 0;
 	private int iterate = 0;
 	private String subGraphsDir;
 	private HashMap<Integer, Integer> degreeMap = new HashMap<Integer, Integer>();
 
-	private synchronized void loadGraphToMem(JobConf conf, int n){
+	private synchronized void readDegree(JobConf conf, int n){
+		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
+		Path remote_link = new Path(subGraphsDir + "/part" + n);
+		
 		FileSystem hdfs = null;
 	    try {
 			hdfs = FileSystem.get(conf);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		assert(hdfs != null);
-		
-		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
-
-		Path remote_link = new Path(subGraphsDir + "/part" + n);
-		try {
 			FSDataInputStream in = hdfs.open(remote_link);
 			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
 			
@@ -54,23 +47,18 @@ public class KazUpdator extends MapReduceBase implements
 					String linkstring = line.substring(index+1);
 					String[] links = linkstring.split(" ");
 					int degree = links.length;
-
 					this.degreeMap.put(Integer.parseInt(node), degree);
-				}
-				
+				}	
 			}
 			reader.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
 	
 	@Override
 	public void configure(JobConf job) {	
-
-		loadGraphToMem(job, Util.getTaskId(job));
-		System.out.println("load graph");
+		readDegree(job, Util.getTaskId(job));
 	}
 
 	@Override
@@ -89,18 +77,17 @@ public class KazUpdator extends MapReduceBase implements
 	}
 	
 	@Override
-	public FloatWritable decidePriority(IntWritable key, FloatWritable arg0, boolean iorc) {
-		if(iorc){
-			if(this.degreeMap.get(key.get()) != null){
-				return new FloatWritable(arg0.get()*this.degreeMap.get(key.get()));
-			}else{
-				return new FloatWritable(arg0.get());
-			}
-			
+	public FloatWritable decidePriority(IntWritable key, FloatWritable iState) {
+		if(this.degreeMap.get(key.get()) != null){
+			return new FloatWritable(iState.get()*this.degreeMap.get(key.get()));
 		}else{
-			return new FloatWritable(arg0.get());
+			return new FloatWritable(iState.get());
 		}
-		
+	}
+	
+	@Override
+	public FloatWritable decideTopK(IntWritable key, FloatWritable cState) {
+		return new FloatWritable(cState.get());
 	}
 
 	@Override
@@ -113,7 +100,6 @@ public class KazUpdator extends MapReduceBase implements
 		float delta = 0;
 		while(values.hasNext()){				
 			delta += values.next().get();	
-			//System.out.println("input " + key + "\t" + delta);
 		}
 
 		PriorityRecord<FloatWritable, FloatWritable> pkvRecord;	
@@ -131,12 +117,4 @@ public class KazUpdator extends MapReduceBase implements
 			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
 		}
 	}
-
-	@Override
-	public FloatWritable obj() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-
 }

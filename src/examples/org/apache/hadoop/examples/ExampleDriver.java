@@ -85,7 +85,7 @@ public class ExampleDriver {
       pgd.addClass("averaging", Averaging.class, "averaging");
       pgd.addClass("conncomp", ConnectComponent.class, "conncomp");
       pgd.addClass("hittime", HittingTime.class, "hitting time");
-      pgd.addClass("katz", Kaz.class, "katz metric");
+      pgd.addClass("katz", Katz.class, "katz metric");
       pgd.addClass("pwcluster", PWCluster.class, "pairwise clustering");
       pgd.addClass("partition", Distributor.class, "partition input");
       pgd.addClass("gengraph", GenGraph.class, "gengraph");
