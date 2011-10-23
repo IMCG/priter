@@ -8,17 +8,17 @@ import java.util.Iterator;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
-public class StaticDistributeReduce extends MapReduceBase implements
-		Reducer<Text, Text, NullWritable, NullWritable> {
+public class DistributorReduce extends MapReduceBase implements
+		Reducer<Writable, Text, NullWritable, NullWritable> {
 
 	private FSDataOutputStream out;
 	private BufferedWriter writer;
@@ -34,18 +34,17 @@ public class StaticDistributeReduce extends MapReduceBase implements
 			out = fs.create(outPath);
 			writer = new BufferedWriter(new OutputStreamWriter(out));
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}	
 	}
 	
 	@Override
-	public void reduce(Text arg0, Iterator<Text> values,
+	public void reduce(Writable key, Iterator<Text> values,
 			OutputCollector<NullWritable, NullWritable> arg2, Reporter arg3)
 			throws IOException {
 		while(values.hasNext()){
 			Text value = values.next();
-			writer.write(arg0 + "\t" + value + "\n");
+			writer.write(key + "\t" + value + "\n");
 		}
 	}
 
@@ -55,7 +54,6 @@ public class StaticDistributeReduce extends MapReduceBase implements
 			writer.close();
 			out.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
