@@ -19,6 +19,7 @@ public class SSSPUpdater extends MapReduceBase implements
 	@Override
 	public void iterate() {
 		iterate++;
+		System.out.println("iteration " + iterate + " total parsed " + workload);
 	}
 	
 	@Override
