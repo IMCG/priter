@@ -20,13 +20,12 @@ import org.apache.hadoop.util.ToolRunner;
 
 public class Distributor extends Configured {
 
-	public int partition(String input, String output, int numparts, int nodes, Class partitionclass) throws Exception {
+	public int partition(String input, String output, int numparts, Class partitionclass) throws Exception {
 	    
 	    JobConf job = new JobConf(getConf());
 	    String jobname = "distribute input data";
 	    job.setJobName(jobname);
 	    
-	    job.setInt(MainDriver.TOTAL_NODE, nodes);
 	    job.set(MainDriver.SUBGRAPH_DIR, output);
 	    job.setInputFormat(KeyValueTextInputFormat.class);
 	    job.setOutputFormat(NullOutputFormat.class);
