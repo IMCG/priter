@@ -833,9 +833,9 @@ public class JobConf extends Configuration {
    * 
    * @return the {@link Reducer} class for the job.
    */
-  public Class<? extends Updator> getUpdatorClass() {
+  public Class<? extends Updater> getUpdatorClass() {
     return getClass("priter.updator.class",
-                    null, Updator.class);
+                    null, Updater.class);
   }
   
   /**
@@ -843,8 +843,8 @@ public class JobConf extends Configuration {
    * 
    * @param theClass the {@link Reducer} class for the job.
    */
-  public void setUpdatorClass(Class<? extends Updator> theClass) {
-    setClass("priter.updator.class", theClass, Updator.class);
+  public void setUpdaterClass(Class<? extends Updater> theClass) {
+    setClass("priter.updator.class", theClass, Updater.class);
   }
 
   /**

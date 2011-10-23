@@ -7,7 +7,7 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 
-public interface Updator<P extends WritableComparable, V> extends JobConfigurable {
+public interface Updater<P extends WritableComparable, V> extends JobConfigurable {
 	/*
 	 * for update node state, that is reduce
 	 */
