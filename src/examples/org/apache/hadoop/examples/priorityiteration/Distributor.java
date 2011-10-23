@@ -56,12 +56,12 @@ public class Distributor extends Configured {
 	 * @throws Exception 
 	 */
 	public static void main(String[] args) throws Exception {
-		if (args.length != 5) {
-		      System.err.println("Usage: partition <in_static> <out_static> <partitions> <pages> <partition class>");
+		if (args.length != 4) {
+		      System.err.println("Usage: partition <in_static> <out_static> <partitions> <partition class>");
 		      System.exit(2);
 		}
-		Class partitionerclass = Class.forName(args[4]);
-		new Distributor().partition(args[0], args[1], Integer.parseInt(args[2]), Integer.parseInt(args[3]), partitionerclass);
+		Class partitionerclass = Class.forName(args[3]);
+		new Distributor().partition(args[0], args[1], Integer.parseInt(args[2]), partitionerclass);
 	}
 
 }
