@@ -79,7 +79,7 @@ public class PageRank extends Configured implements Tool {
 	    stopthresh = Float.parseFloat(args[6]);
 	    
 	    subGraphDir = input + "/subgraph";
-	    new Distributor().partition(input, output, partitions, HashPartitioner.class);
+	    new Distributor().partition(input, output, partitions, IntWritable.class, HashPartitioner.class);
 	    pagerank();
 	    
 		return 0;
