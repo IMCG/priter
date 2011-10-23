@@ -1,37 +1,34 @@
 package org.apache.hadoop.examples.priorityiteration;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.Iterator;
 
-import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.PrIterBase;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Updator;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
 
-public class PageRankUpdator extends MapReduceBase implements
-		Updator<DoubleWritable, DoubleWritable> {
+public class PageRankUpdator extends PrIterBase implements
+		Updator<FloatWritable, FloatWritable> {
 	
 	private JobConf job;
-	private int nPages;
-	private int startPages;
 	private int workload = 0;
 	private int iterate = 0;
-	private double initvalue;
-	private int partitions;
+	private float initvalue;
 
 	@Override
-	public void configure(JobConf job) {		
-		nPages = job.getInt("priter.graph.nodes", 0);	
-		startPages = job.getInt(MainDriver.START_NODE, nPages);
+	public void configure(JobConf job) {	
 		this.job = job;
-		initvalue = PageRank.RETAINFAC * nPages / startPages;
-		partitions = job.getInt("priter.graph.partitions", 0);
 	}
 
 	@Override
@@ -41,59 +38,69 @@ public class PageRankUpdator extends MapReduceBase implements
 
 	@Override
 	public void initStateTable(
-			OutputPKVBuffer<DoubleWritable, DoubleWritable> stateTable) {
-		int n = Util.getTaskId(job);
-		for(int i=n; i<nPages; i=i+partitions){
-			if(i < startPages){
-				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(initvalue));
-			}else{
-				stateTable.init(new IntWritable(i), new DoubleWritable(0.0), new DoubleWritable(0.0));
-			}	
+			OutputPKVBuffer<FloatWritable, FloatWritable> stateTable) {
+		String subGraphsDir = job.get(MainDriver.SUBGRAPH_DIR);
+		int taskid = Util.getTaskId(job);
+		Path subgraph = new Path(subGraphsDir + "/part" + taskid);
+		
+		FileSystem hdfs = null;
+	    try {
+			hdfs = FileSystem.get(job);
+			FSDataInputStream in = hdfs.open(subgraph);
+			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+			
+			String line;
+			while((line = reader.readLine()) != null){
+				int index = line.indexOf("\t");
+				if(index != -1){
+					int node = Integer.parseInt(line.substring(0, index));
+					stateTable.init(new IntWritable(node), new FloatWritable(0), new FloatWritable(initvalue));
+				}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 
 	@Override
-	public DoubleWritable resetiState() {
-		return new DoubleWritable(0.0);
+	public FloatWritable resetiState() {
+		return new FloatWritable(0);
 	}
 	
 	@Override
-	public DoubleWritable decidePriority(IntWritable key, DoubleWritable arg0, boolean iorc) {
-		return new DoubleWritable(arg0.get());
+	public FloatWritable decidePriority(IntWritable key, FloatWritable iState) {
+		return new FloatWritable(iState.get());
+	}
+	
+	@Override
+	public FloatWritable decideTopK(IntWritable key, FloatWritable cState) {
+		return new FloatWritable(cState.get());
 	}
 
 	@Override
-	public void updateState(IntWritable key, Iterator<DoubleWritable> values,
-			OutputPKVBuffer<DoubleWritable, DoubleWritable> buffer, Reporter report)
+	public void updateState(IntWritable key, Iterator<FloatWritable> values,
+			OutputPKVBuffer<FloatWritable, FloatWritable> buffer, Reporter report)
 			throws IOException {
 		workload++;		
 		report.setStatus(String.valueOf(workload));
 		
-		double delta = 0.0;
+		float delta = 0;
 		while(values.hasNext()){				
 			delta += values.next().get();	
 		}
 
-		PriorityRecord<DoubleWritable, DoubleWritable> pkvRecord;	
+		PriorityRecord<FloatWritable, FloatWritable> pkvRecord;	
 		if(buffer.stateTable.containsKey(key)){
 			pkvRecord = buffer.stateTable.get(key);
-			double iState = pkvRecord.getiState().get() + delta;
-			double cState = pkvRecord.getcState().get() + delta;
+			float iState = pkvRecord.getiState().get() + delta;
+			float cState = pkvRecord.getcState().get() + delta;
 			buffer.stateTable.get(key).getiState().set(iState);
 			buffer.stateTable.get(key).getcState().set(cState);
 			buffer.stateTable.get(key).getPriority().set(iState);
 		}else{
-			pkvRecord = new PriorityRecord<DoubleWritable, DoubleWritable>(
-					new DoubleWritable(delta), new DoubleWritable(delta), new DoubleWritable(delta));
+			pkvRecord = new PriorityRecord<FloatWritable, FloatWritable>(
+					new FloatWritable(delta), new FloatWritable(delta), new FloatWritable(delta));
 			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
 		}
 	}
-
-	@Override
-	public FloatWritable obj() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-
 }

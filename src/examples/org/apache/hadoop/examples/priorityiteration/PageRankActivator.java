@@ -10,42 +10,35 @@ import java.util.StringTokenizer;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.Activator;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.PrIterBase;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
-public class PageRankActivator extends MapReduceBase implements
-	Activator<DoubleWritable, DoubleWritable> {
+public class PageRankActivator extends PrIterBase implements
+	Activator<FloatWritable, FloatWritable> {
 
 	private String subGraphsDir;
 	private int iter = 0;
 	private int kvs = 0;				//for tracking
-	private double initvalue;
+	private float initvalue;
 	private int partitions;
 	
 	//graph in local memory
 	private HashMap<Integer, ArrayList<Integer>> linkList = new HashMap<Integer, ArrayList<Integer>>();
 	
 	private synchronized void loadGraphToMem(JobConf conf, int n){
+		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
+		Path subgraph = new Path(subGraphsDir + "/part" + n);
+		
 		FileSystem hdfs = null;
 	    try {
 			hdfs = FileSystem.get(conf);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		assert(hdfs != null);
-		
-		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
-
-		Path remote_link = new Path(subGraphsDir + "/part" + n);
-		try {
-			FSDataInputStream in = hdfs.open(remote_link);
+			FSDataInputStream in = hdfs.open(subgraph);
 			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
 			
 			String line;
@@ -65,7 +58,6 @@ public class PageRankActivator extends MapReduceBase implements
 				}
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -79,15 +71,15 @@ public class PageRankActivator extends MapReduceBase implements
 	}
 	
 	@Override
-	public void initStarter(InputPKVBuffer<DoubleWritable> starter) throws IOException {	
+	public void initStarter(InputPKVBuffer<FloatWritable> starter) throws IOException {	
 		for(int k : linkList.keySet()){
-			starter.init(new IntWritable(k), new DoubleWritable(initvalue));
+			starter.init(new IntWritable(k), new FloatWritable(initvalue));
 		}
 	}
 
 	@Override
-	public void activate(IntWritable key, DoubleWritable value,
-			OutputCollector<IntWritable, DoubleWritable> output, Reporter report)
+	public void activate(IntWritable key, FloatWritable value,
+			OutputCollector<IntWritable, FloatWritable> output, Reporter report)
 			throws IOException {
 		kvs++;
 		report.setStatus(String.valueOf(kvs));
@@ -99,14 +91,14 @@ public class PageRankActivator extends MapReduceBase implements
 		if(links == null){
 			System.out.println("no links found for page " + page);
 			for(int i=0; i<partitions; i++){
-				output.collect(new IntWritable(i), new DoubleWritable(0.0));
+				output.collect(new IntWritable(i), new FloatWritable(0));
 			}
 			return;
 		}	
-		double delta = value.get() * PageRank.DAMPINGFAC / links.size();
+		float delta = value.get() * PageRank.DAMPINGFAC / links.size();
 		
 		for(int link : links){
-			output.collect(new IntWritable(link), new DoubleWritable(delta));
+			output.collect(new IntWritable(link), new FloatWritable(delta));
 		}	
 	}
 

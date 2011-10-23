@@ -5,7 +5,7 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
@@ -17,21 +17,18 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
 
-
 public class PageRank extends Configured implements Tool {
 	private String input;
 	private String output;
 	private String subGraphDir;
 	private int partitions;
 	private int topk;
-	private int nPages;
-	private int startPages;
 	private float alpha;
 	private float stopthresh;
 	
 	//damping factor
-	public static final double DAMPINGFAC = 0.8;
-	public static final double RETAINFAC = 0.2;
+	public static final float DAMPINGFAC = (float)0.8;
+	public static final float RETAINFAC = (float)0.2;
 
 	private int pagerank() throws IOException{
 	    JobConf job = new JobConf(getConf());
@@ -39,7 +36,6 @@ public class PageRank extends Configured implements Tool {
 	    job.setJobName(jobname);
        
 	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
-	    job.setInt(MainDriver.START_NODE, startPages);
 	    
 	    FileInputFormat.addInputPath(job, new Path(input));
 	    FileOutputFormat.setOutputPath(job, new Path(output));
@@ -48,7 +44,6 @@ public class PageRank extends Configured implements Tool {
 	    //set for iterative process   
 	    job.setBoolean("priter.job", true);
 	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
-	    job.setInt("priter.graph.nodes", nPages);						//total nodes
 	    job.setLong("priter.snapshot.interval", 20000);					//snapshot interval	
 	    job.setInt("priter.snapshot.topk", topk);						//topk
 	    job.setFloat("priter.queue.portion", alpha);					//priority queue portion
@@ -58,10 +53,10 @@ public class PageRank extends Configured implements Tool {
 	    job.setActivatorClass(PageRankActivator.class);	
 	    job.setUpdatorClass(PageRankUpdator.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
-	    job.setMapOutputValueClass(DoubleWritable.class);
+	    job.setMapOutputValueClass(FloatWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
-	    job.setOutputValueClass(DoubleWritable.class);
-	    job.setPriorityClass(DoubleWritable.class);
+	    job.setOutputValueClass(FloatWritable.class);
+	    job.setPriorityClass(FloatWritable.class);
 
 	    job.setNumMapTasks(partitions);
 	    job.setNumReduceTasks(partitions);
@@ -71,8 +66,8 @@ public class PageRank extends Configured implements Tool {
 	}
 	@Override
 	public int run(String[] args) throws Exception {
-		if (args.length != 7) {
-		      System.err.println("Usage: pagerank <indir> <outdir> <partitions> <topk> <number of nodes> <alpha> <stopthreshold>");
+		if (args.length != 6) {
+		      System.err.println("Usage: pagerank <indir> <outdir> <partitions> <topk> <alpha> <stopthreshold>");
 		      System.exit(2);
 		}
 	    
@@ -80,13 +75,11 @@ public class PageRank extends Configured implements Tool {
 	    output = args[1];
 	    partitions = Integer.parseInt(args[2]);
 	    topk = Integer.parseInt(args[3]);
-	    nPages = Integer.parseInt(args[4]);
 	    alpha = Float.parseFloat(args[5]);
 	    stopthresh = Float.parseFloat(args[6]);
 	    
 	    subGraphDir = input + "/subgraph";
-
-	    new Distributor().partition(input, output, partitions, nPages, HashPartitioner.class);
+	    new Distributor().partition(input, output, partitions, HashPartitioner.class);
 	    pagerank();
 	    
 		return 0;
