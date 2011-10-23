@@ -27,38 +27,39 @@ import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.util.Progress;
 
-public class InputPKVBuffer<V extends Object> implements
-		InputCollector<IntWritable, V> {
+public class InputPKVBuffer<K extends Object, V extends Object> implements
+		InputCollector<K, V> {
 
 	private static final Log LOG = LogFactory.getLog(InputPKVBuffer.class.getName());
 	
 	public int iteration = 0;
 	private FileSystem hdfs;
-	private IntWritable savedKey;
+	private K savedKey;
 	private V savedValue;			//for get K, V pair
 	private OutputFile.Header savedHeader = null;	
+	private Class<K> keyClass;
 	private Class<V> valClass;
-	private Deserializer<IntWritable> keyDeserializer;	
+	private Deserializer keyDeserializer;	
 	private Deserializer valDeserializer;	
 	private JobConf job;
-	private Queue<KVRecord<IntWritable, V>> recordsQueue = null;
+	private Queue<KVRecord<K, V>> recordsQueue = null;
 	public String exeQueueFile;
 
 	public InputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
-			Reporter reporter, Progress progress, Class<V> valClass) throws IOException{	
+			Reporter reporter, Progress progress, Class<K> keyClass, Class<V> valClass) throws IOException{	
 		
 		LOG.info("InputPKVBuffer is created for task " + task.getTaskID());
 		this.iteration = 0;
 		
 		this.job = job;
 		this.hdfs = FileSystem.get(job);
-
+		this.keyClass = keyClass;
 		this.valClass = valClass;
 		SerializationFactory serializationFactory = new SerializationFactory(job);
 	    this.keyDeserializer = serializationFactory.getDeserializer(IntWritable.class);
 	    this.valDeserializer = serializationFactory.getDeserializer(valClass);
 	    
-	    this.recordsQueue = new LinkedList<KVRecord<IntWritable, V>>();
+	    this.recordsQueue = new LinkedList<KVRecord<K, V>>();
 	    this.exeQueueFile = job.get("mapred.output.dir") + "/_ExeQueueTemp/" + 
 	    					task.getTaskID().getTaskID().getId() + "-exequeue";
 	}
@@ -83,9 +84,9 @@ public class InputPKVBuffer<V extends Object> implements
 	}
 
 	//should be called in user-defined IterativeMapper.initPKVBuffer()
-	public synchronized void init(IntWritable key, V value) throws IOException {
+	public synchronized void init(K key, V value) throws IOException {
 		synchronized(this.recordsQueue){
-			KVRecord<IntWritable, V> rec = new KVRecord<IntWritable, V>(key, value);
+			KVRecord<K, V> rec = new KVRecord<K, V>(key, value);
 			this.recordsQueue.add(rec);
 		}
 	}
