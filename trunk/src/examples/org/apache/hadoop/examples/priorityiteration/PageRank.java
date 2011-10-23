@@ -51,7 +51,7 @@ public class PageRank extends Configured implements Tool {
 	          
 	    job.setJarByClass(PageRank.class);
 	    job.setActivatorClass(PageRankActivator.class);	
-	    job.setUpdatorClass(PageRankUpdator.class);
+	    job.setUpdaterClass(PageRankUpdater.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(FloatWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
@@ -75,8 +75,8 @@ public class PageRank extends Configured implements Tool {
 	    output = args[1];
 	    partitions = Integer.parseInt(args[2]);
 	    topk = Integer.parseInt(args[3]);
-	    alpha = Float.parseFloat(args[5]);
-	    stopthresh = Float.parseFloat(args[6]);
+	    alpha = Float.parseFloat(args[4]);
+	    stopthresh = Float.parseFloat(args[5]);
 	    
 	    subGraphDir = input + "/subgraph";
 	    new Distributor().partition(input, output, partitions, IntWritable.class, HashPartitioner.class);

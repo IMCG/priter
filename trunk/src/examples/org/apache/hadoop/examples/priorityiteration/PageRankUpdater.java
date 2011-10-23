@@ -13,13 +13,13 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.PrIterBase;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.Updator;
+import org.apache.hadoop.mapred.Updater;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
 
-public class PageRankUpdator extends PrIterBase implements
-		Updator<FloatWritable, FloatWritable> {
+public class PageRankUpdater extends PrIterBase implements
+		Updater<FloatWritable, FloatWritable> {
 	
 	private JobConf job;
 	private int workload = 0;
@@ -89,18 +89,20 @@ public class PageRankUpdator extends PrIterBase implements
 			delta += values.next().get();	
 		}
 
-		PriorityRecord<FloatWritable, FloatWritable> pkvRecord;	
-		if(buffer.stateTable.containsKey(key)){
-			pkvRecord = buffer.stateTable.get(key);
-			float iState = pkvRecord.getiState().get() + delta;
-			float cState = pkvRecord.getcState().get() + delta;
-			buffer.stateTable.get(key).getiState().set(iState);
-			buffer.stateTable.get(key).getcState().set(cState);
-			buffer.stateTable.get(key).getPriority().set(iState);
-		}else{
-			pkvRecord = new PriorityRecord<FloatWritable, FloatWritable>(
-					new FloatWritable(delta), new FloatWritable(delta), new FloatWritable(delta));
-			buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
+		synchronized(buffer.stateTable){
+			PriorityRecord<FloatWritable, FloatWritable> pkvRecord;	
+			if(buffer.stateTable.containsKey(key)){
+				pkvRecord = buffer.stateTable.get(key);
+				float iState = pkvRecord.getiState().get() + delta;
+				float cState = pkvRecord.getcState().get() + delta;
+				buffer.stateTable.get(key).getiState().set(iState);
+				buffer.stateTable.get(key).getcState().set(cState);
+				buffer.stateTable.get(key).getPriority().set(iState);
+			}else{
+				pkvRecord = new PriorityRecord<FloatWritable, FloatWritable>(
+						new FloatWritable(delta), new FloatWritable(delta), new FloatWritable(delta));
+				buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
+			}
 		}
 	}
 }

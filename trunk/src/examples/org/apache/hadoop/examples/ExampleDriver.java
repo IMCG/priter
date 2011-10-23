@@ -20,7 +20,7 @@ package org.apache.hadoop.examples;
 import org.apache.hadoop.examples.dancing.DistributedPentomino;
 import org.apache.hadoop.examples.dancing.Sudoku;
 import org.apache.hadoop.examples.priorityiteration.Averaging;
-import org.apache.hadoop.examples.priorityiteration.BSearch;
+import org.apache.hadoop.examples.priorityiteration.SSSP;
 import org.apache.hadoop.examples.priorityiteration.ConnectComponent;
 import org.apache.hadoop.examples.priorityiteration.Distributor;
 import org.apache.hadoop.examples.priorityiteration.GenGraph;
@@ -28,7 +28,6 @@ import org.apache.hadoop.examples.priorityiteration.HittingTime;
 import org.apache.hadoop.examples.priorityiteration.Kaz;
 import org.apache.hadoop.examples.priorityiteration.PWCluster;
 import org.apache.hadoop.examples.priorityiteration.PageRank;
-import org.apache.hadoop.examples.priorityiteration.PreProcess;
 import org.apache.hadoop.examples.terasort.TeraGen;
 import org.apache.hadoop.examples.terasort.TeraSort;
 import org.apache.hadoop.examples.terasort.TeraValidate;
@@ -81,7 +80,7 @@ public class ExampleDriver {
       pgd.addClass("teravalidate", TeraValidate.class, "Checking results of terasort");
       
       //for priority examples
-      pgd.addClass("shortestpath", BSearch.class, "BFS shortest path");
+      pgd.addClass("shortestpath", SSSP.class, "single source shortest path");
       pgd.addClass("pagerank", PageRank.class, "pagerank");
       pgd.addClass("averaging", Averaging.class, "averaging");
       pgd.addClass("conncomp", ConnectComponent.class, "conncomp");

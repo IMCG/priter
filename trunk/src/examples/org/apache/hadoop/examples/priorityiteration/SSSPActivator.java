@@ -14,20 +14,19 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapred.Activator;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.PrIterBase;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 
-//input <node, shortest length and point to list>
-//output <node, shortest length>
-public class BSearchActivator extends MapReduceBase implements Activator<IntWritable, IntWritable> {
+public class SSSPActivator extends PrIterBase implements 
+	Activator<IntWritable, IntWritable> {
+	
 	private String subGraphsDir;
 	private int partitions;
 	private int startnode;
-	private int workload = 0;
-	private int addition = 0;
+	private int kvs = 0;
 	private int iter = 0;
 	
 	//graph in local memory
@@ -49,21 +48,12 @@ public class BSearchActivator extends MapReduceBase implements Activator<IntWrit
 	}
 
 	private synchronized void loadGraphToMem(JobConf conf, int n){
+		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
+		Path remote_link = new Path(subGraphsDir + "/part" + n);
+		
 		FileSystem hdfs = null;
 	    try {
 			hdfs = FileSystem.get(conf);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		assert(hdfs != null);
-		
-		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
-		//numSubGraph = MainDriver.MACHINE_NUM;		
-		
-		Path remote_link = new Path(subGraphsDir + "/part" + n);
-		System.out.println(remote_link);
-		try {
 			FSDataInputStream in = hdfs.open(remote_link);
 			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
 			
@@ -88,7 +78,6 @@ public class BSearchActivator extends MapReduceBase implements Activator<IntWrit
 				}
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -98,24 +87,24 @@ public class BSearchActivator extends MapReduceBase implements Activator<IntWrit
 	    startnode = job.getInt(MainDriver.START_NODE, 0);
 	    int taskid = Util.getTaskId(job);
 	    partitions = job.getInt("priter.graph.partitions", -1);
-		this.loadGraphToMem(job, taskid);
+		loadGraphToMem(job, taskid);
 	}
 	
 	@Override
 	public void activate(IntWritable key, IntWritable value,
 			OutputCollector<IntWritable, IntWritable> output, Reporter report)
 			throws IOException {
-		report.setStatus(String.valueOf(workload) + ":" + addition);
-			
-		int node = key.get();
+		kvs++;
+		report.setStatus(String.valueOf(kvs));
+
 		int distance = value.get();
-		
 		if(distance != Integer.MAX_VALUE){	
+			int node = key.get();
 			ArrayList<Link> links = null;
 			links = this.linkList.get(node);
 			
 			if(links == null) {
-				//System.out.println("no links for node " + node);
+				System.out.println("no links for node " + node);
 				for(int i=0; i<partitions; i++){
 					output.collect(new IntWritable(i), new IntWritable(Integer.MAX_VALUE));
 				}
@@ -123,11 +112,8 @@ public class BSearchActivator extends MapReduceBase implements Activator<IntWrit
 			}
 				
 			for(Link l : links){				
-				addition++;
 				output.collect(new IntWritable(l.node), new IntWritable(distance + l.weight));
-				report.setStatus(String.valueOf(workload) + ":" + addition);
 			}
-			workload++;
 		} else{
 			for(int i=0; i<partitions; i++){
 				output.collect(new IntWritable(i), new IntWritable(Integer.MAX_VALUE));
@@ -143,6 +129,6 @@ public class BSearchActivator extends MapReduceBase implements Activator<IntWrit
 
 	@Override
 	public void iterate() {
-		System.out.println("iter " + (iter++) + " workload is " + workload + " addition is " + addition);
+		System.out.println((iter++) + " passes " + kvs + " activations");
 	}
 }
