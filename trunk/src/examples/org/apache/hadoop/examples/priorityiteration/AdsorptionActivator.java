@@ -87,7 +87,7 @@ public class AdsorptionActivator extends MapReduceBase implements
 	@Override
 	public void initStarter(InputPKVBuffer<IntWritable, DoubleWritable> starter)
 			throws IOException {
-		double initvalue = Averaging.RETAINFAC * 10000;
+		double initvalue = Adsorption.RETAINFAC * 10000;
 		int count = 0;
 		for(int k : linkList.keySet()){
 			if(++count > 25) break;
@@ -114,7 +114,7 @@ public class AdsorptionActivator extends MapReduceBase implements
 			}
 			return;
 		}	
-		double delta = value.get() * Averaging.DAMPINGFAC;
+		double delta = value.get() * Adsorption.DAMPINGFAC;
 		
 		for(LinkWeight link : links){
 			output.collect(new IntWritable(link.link), new DoubleWritable(delta*link.weight));
