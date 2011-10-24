@@ -8,9 +8,11 @@ import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.KeyValueTextInputFormat;
+import org.apache.hadoop.mapred.Partitioner;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapred.lib.HashPartitioner;
 import org.apache.hadoop.mapred.lib.NullOutputFormat;
@@ -18,7 +20,7 @@ import org.apache.hadoop.mapred.lib.NullOutputFormat;
 
 public class Distributor extends Configured {
 
-	public int partition(String input, String output, int numparts, Class keyclass, Class partitionclass) throws Exception {
+	public int partition(String input, String output, int numparts, Class<? extends WritableComparable> keyclass, Class<? extends Partitioner> partitionclass) throws Exception {
 	    
 	    JobConf job = new JobConf(getConf());
 	    String jobname = "distribute input data";
@@ -67,18 +69,26 @@ public class Distributor extends Configured {
 		      System.exit(2);
 		}
 		
-		Class keyclass;
-		Class partitionerclass;
+		Class<? extends WritableComparable> keyclass = null;
+		Class<? extends Partitioner> partitionerclass = null;
 		
 		try{
-			keyclass = Class.forName(args[3]);
+			if(Class.forName(args[3]).getSuperclass() == WritableComparable.class){
+				keyclass = (Class<? extends WritableComparable>) Class.forName(args[3]);
+			}else{
+				System.out.println(args[3] + " is not key Class");
+			}
 		}catch (ClassNotFoundException e){
 			keyclass = Text.class;
 			System.out.println("no key Class named " + args[3] + " found, use Text by default");
 		}
-		
+
 		try{
-			partitionerclass = Class.forName(args[4]);
+			if(Class.forName(args[4]).getSuperclass() == Partitioner.class){
+				partitionerclass = (Class<? extends Partitioner>) Class.forName(args[4]);
+			}else{
+				System.out.println(args[3] + " is not partitioner Class");
+			}
 		}catch (ClassNotFoundException e){
 			partitionerclass = HashPartitioner.class;
 			System.out.println("no Partitioner Class named " + args[4] + " found, use Hash Partitioner by default");
