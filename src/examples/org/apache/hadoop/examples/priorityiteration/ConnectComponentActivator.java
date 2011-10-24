@@ -10,7 +10,6 @@ import java.util.StringTokenizer;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.Activator;
 import org.apache.hadoop.mapred.JobConf;
@@ -21,7 +20,7 @@ import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 
 public class ConnectComponentActivator extends MapReduceBase implements
-		Activator<IntWritable, IntWritable> {
+		Activator<IntWritable, IntWritable, IntWritable> {
 
 	private String subGraphsDir;
 	private int kvs = 0;
@@ -69,7 +68,7 @@ public class ConnectComponentActivator extends MapReduceBase implements
 	}
 	
 	@Override
-	public void initStarter(InputPKVBuffer<IntWritable> starter)
+	public void initStarter(InputPKVBuffer<IntWritable, IntWritable> starter)
 			throws IOException {
 		for(int k : linkList.keySet()){
 			starter.init(new IntWritable(k), new IntWritable(k));

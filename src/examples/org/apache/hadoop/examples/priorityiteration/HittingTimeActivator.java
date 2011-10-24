@@ -19,7 +19,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
-public class HittingTimeActivator extends MapReduceBase implements Activator<DoubleWritable, DoubleWritable> {
+public class HittingTimeActivator extends MapReduceBase implements Activator<IntWritable, DoubleWritable, DoubleWritable> {
 	private String subGraphsDir;
 	private int partitions;
 	private int startnode;
@@ -130,7 +130,7 @@ public class HittingTimeActivator extends MapReduceBase implements Activator<Dou
 	}
 
 	@Override
-	public void initStarter(InputPKVBuffer<DoubleWritable> starter)
+	public void initStarter(InputPKVBuffer<IntWritable, DoubleWritable> starter)
 			throws IOException {
 		starter.init(new IntWritable(startnode), new DoubleWritable(0.0));
 	}

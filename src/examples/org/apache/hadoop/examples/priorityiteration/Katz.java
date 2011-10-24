@@ -49,7 +49,7 @@ public class Katz extends Configured implements Tool {
 	    		
 	    job.setJarByClass(Katz.class);
 	    job.setActivatorClass(KatzActivator.class);	
-	    job.setUpdaterClass(KatzUpdator.class);
+	    job.setUpdaterClass(KatzUpdater.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(FloatWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);

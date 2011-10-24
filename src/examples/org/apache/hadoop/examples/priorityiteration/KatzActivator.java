@@ -20,7 +20,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 public class KatzActivator extends MapReduceBase implements
-	Activator<FloatWritable, FloatWritable> {
+	Activator<IntWritable, FloatWritable, FloatWritable> {
 
 	private String subGraphsDir;
 	private int kvs = 0;
@@ -72,7 +72,7 @@ public class KatzActivator extends MapReduceBase implements
 	}
 	
 	@Override
-	public void initStarter(InputPKVBuffer<FloatWritable> starter)
+	public void initStarter(InputPKVBuffer<IntWritable, FloatWritable> starter)
 			throws IOException {	
 		starter.init(new IntWritable(0), new FloatWritable(1000000));
 	}
