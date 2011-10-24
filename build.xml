@@ -955,10 +955,10 @@
   <!-- ================================================================== -->
   <!--                                                                    -->
   <!-- ================================================================== -->
-  <!-- XXX: jar-test dependency removed for HOP, because tests don't build -->
   <target name="package" depends="compile, jar, javadoc, examples, tools-jar, ant-tasks, package-libhdfs, package-librecordio"
 	  description="Build distribution">
     <mkdir dir="${dist.dir}"/>
+    <mkdir dir="${dist.dir}/apps"/>
     <mkdir dir="${dist.dir}/lib"/>
     <mkdir dir="${dist.dir}/contrib"/>
     <mkdir dir="${dist.dir}/bin"/>
@@ -995,6 +995,10 @@
       <fileset file="${build.dir}/${final.name}-*.jar"/>
     </copy>
     
+    <copy todir="${dist.dir}/apps">
+      <fileset dir="apps"/>
+    </copy>
+
     <copy todir="${dist.dir}/bin">
       <fileset dir="bin"/>
     </copy>
@@ -1044,6 +1048,7 @@
     <macro_tar param.destfile="${build.dir}/${final.name}.tar.gz">
       <param.listofitems>
         <tarfileset dir="${build.dir}" mode="664">
+	  <exclude name="${final.name}/apps/*" />
           <exclude name="${final.name}/bin/*" />
           <exclude name="${final.name}/contrib/*/bin/*" />
           <exclude name="${final.name}/src/contrib/ec2/bin/*" />
@@ -1051,6 +1056,7 @@
           <include name="${final.name}/**" />
         </tarfileset>
         <tarfileset dir="${build.dir}" mode="755">
+	  <include name="${final.name}/apps/*" />
           <include name="${final.name}/bin/*" />
           <include name="${final.name}/contrib/*/bin/*" />
           <include name="${final.name}/src/contrib/ec2/bin/*" />
