@@ -25,7 +25,7 @@ import org.apache.hadoop.examples.priorityiteration.ConnectComponent;
 import org.apache.hadoop.examples.priorityiteration.Distributor;
 import org.apache.hadoop.examples.priorityiteration.GenGraph;
 import org.apache.hadoop.examples.priorityiteration.HittingTime;
-import org.apache.hadoop.examples.priorityiteration.Kaz;
+import org.apache.hadoop.examples.priorityiteration.Katz;
 import org.apache.hadoop.examples.priorityiteration.PWCluster;
 import org.apache.hadoop.examples.priorityiteration.PageRank;
 import org.apache.hadoop.examples.terasort.TeraGen;
