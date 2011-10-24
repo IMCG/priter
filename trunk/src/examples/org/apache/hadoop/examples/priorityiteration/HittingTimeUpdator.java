@@ -17,11 +17,11 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.Updator;
+import org.apache.hadoop.mapred.Updater;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
-public class HittingTimeUpdator extends MapReduceBase implements Updator<DoubleWritable, DoubleWritable> {
+public class HittingTimeUpdator extends MapReduceBase implements Updater<IntWritable, DoubleWritable, DoubleWritable> {
 	
 	private int reduce = 0;
 	private int iterate = 0;
@@ -96,7 +96,7 @@ public class HittingTimeUpdator extends MapReduceBase implements Updator<DoubleW
 
 	@Override
 	public void initStateTable(
-			OutputPKVBuffer<DoubleWritable, DoubleWritable> stateTable) {
+			OutputPKVBuffer<IntWritable, DoubleWritable, DoubleWritable> stateTable) {
 		stateTable.init(new IntWritable(startnode), new DoubleWritable(0.0), new DoubleWritable(0.0));
 	}
 

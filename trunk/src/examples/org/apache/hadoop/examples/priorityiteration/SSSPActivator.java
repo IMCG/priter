@@ -21,7 +21,7 @@ import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 
 public class SSSPActivator extends PrIterBase implements 
-	Activator<IntWritable, IntWritable> {
+	Activator<IntWritable, IntWritable, IntWritable> {
 	
 	private String subGraphsDir;
 	private int partitions;
@@ -123,7 +123,7 @@ public class SSSPActivator extends PrIterBase implements
 	}
 
 	@Override
-	public void initStarter(InputPKVBuffer<IntWritable> starter)
+	public void initStarter(InputPKVBuffer<IntWritable, IntWritable> starter)
 			throws IOException {
 		starter.init(new IntWritable(startnode), new IntWritable(0));
 	}

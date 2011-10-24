@@ -12,7 +12,7 @@ import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
 
 public class SSSPUpdater extends MapReduceBase implements
-		Updater<IntWritable, IntWritable> {
+		Updater<IntWritable, IntWritable, IntWritable> {
 	private int workload = 0;
 	private int iterate = 0;
 	
@@ -30,7 +30,7 @@ public class SSSPUpdater extends MapReduceBase implements
 
 	@Override
 	public void initStateTable(
-			OutputPKVBuffer<IntWritable, IntWritable> stateTable) {
+			OutputPKVBuffer<IntWritable, IntWritable, IntWritable> stateTable) {
 	}
 
 	@Override
@@ -45,7 +45,7 @@ public class SSSPUpdater extends MapReduceBase implements
 
 	@Override
 	public void updateState(IntWritable key, Iterator<IntWritable> values,
-			OutputPKVBuffer<IntWritable, IntWritable> buffer, Reporter report)
+			OutputPKVBuffer<IntWritable, IntWritable, IntWritable> buffer, Reporter report)
 			throws IOException {
 		workload++;	
 		report.setStatus(String.valueOf(workload));

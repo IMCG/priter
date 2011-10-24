@@ -20,7 +20,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 public class PageRankActivator extends PrIterBase implements
-	Activator<FloatWritable, FloatWritable> {
+	Activator<IntWritable, FloatWritable, FloatWritable> {
 
 	private String subGraphsDir;
 	private int iter = 0;
@@ -72,7 +72,7 @@ public class PageRankActivator extends PrIterBase implements
 	}
 	
 	@Override
-	public void initStarter(InputPKVBuffer<FloatWritable> starter) throws IOException {	
+	public void initStarter(InputPKVBuffer<IntWritable, FloatWritable> starter) throws IOException {	
 		for(int k : linkList.keySet()){
 			starter.init(new IntWritable(k), new FloatWritable(initvalue));
 		}

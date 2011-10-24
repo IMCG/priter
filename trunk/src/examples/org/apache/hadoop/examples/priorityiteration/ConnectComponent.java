@@ -22,7 +22,6 @@ public class ConnectComponent extends Configured implements Tool {
 	private String subGraphDir;
 	private int partitions;
 	private int topk;
-	private int nNodes;
 	private int exetop;
 	private long stoptime;
 	

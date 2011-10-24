@@ -19,7 +19,7 @@ import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
 
 public class PageRankUpdater extends PrIterBase implements
-		Updater<FloatWritable, FloatWritable> {
+		Updater<IntWritable, FloatWritable, FloatWritable> {
 	
 	private JobConf job;
 	private int workload = 0;
@@ -39,7 +39,7 @@ public class PageRankUpdater extends PrIterBase implements
 
 	@Override
 	public void initStateTable(
-			OutputPKVBuffer<FloatWritable, FloatWritable> stateTable) {
+			OutputPKVBuffer<IntWritable, FloatWritable, FloatWritable> stateTable) {
 		String subGraphsDir = job.get(MainDriver.SUBGRAPH_DIR);
 		int taskid = Util.getTaskId(job);
 		Path subgraph = new Path(subGraphsDir + "/part" + taskid);
@@ -81,7 +81,7 @@ public class PageRankUpdater extends PrIterBase implements
 
 	@Override
 	public void updateState(IntWritable key, Iterator<FloatWritable> values,
-			OutputPKVBuffer<FloatWritable, FloatWritable> buffer, Reporter report)
+			OutputPKVBuffer<IntWritable, FloatWritable, FloatWritable> buffer, Reporter report)
 			throws IOException {
 		workload++;		
 		report.setStatus(String.valueOf(workload));
