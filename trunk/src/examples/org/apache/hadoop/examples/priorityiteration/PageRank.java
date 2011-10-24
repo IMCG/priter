@@ -64,6 +64,7 @@ public class PageRank extends Configured implements Tool {
 	    JobClient.runJob(job);
 	    return 0;
 	}
+	
 	@Override
 	public int run(String[] args) throws Exception {
 		if (args.length != 6) {
@@ -78,8 +79,7 @@ public class PageRank extends Configured implements Tool {
 	    qportion = Float.parseFloat(args[4]);
 	    stopthresh = Float.parseFloat(args[5]);
 	    
-	    subGraphDir = input + "/subgraph";
-	    new Distributor().partition(input, output, partitions, IntWritable.class, HashPartitioner.class);
+	    new Distributor().partition(input, input + "/subgraph", partitions, IntWritable.class, HashPartitioner.class);
 	    pagerank();
 	    
 		return 0;
