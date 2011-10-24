@@ -16,6 +16,7 @@ import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.IFile;
@@ -101,7 +102,17 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 			String line = reader.readLine();
 			String[] field = line.split("\t", 4);
 			
-			IntWritable key = new IntWritable(Integer.parseInt(field[0]));
+			Writable key;
+			if(keyClass == IntWritable.class){
+				key = new IntWritable(Integer.parseInt(field[1]));
+			}else if(valClass == DoubleWritable.class){
+				key = new DoubleWritable(Double.parseDouble((field[1])));
+			}else if(valClass == FloatWritable.class){
+				key = new FloatWritable(Float.parseFloat((field[1])));
+			}else{
+				throw new IOException(keyClass + " not type matched for key class");
+			}
+
 			if(valClass == IntWritable.class){
 				IntWritable val = new IntWritable(Integer.parseInt(field[1]));
 				this.recordsQueue.add(new KVRecord(key, val));
@@ -112,7 +123,7 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 				FloatWritable val = new FloatWritable(Float.parseFloat((field[1])));
 				this.recordsQueue.add(new KVRecord(key, val));
 			}else{
-				throw new IOException(valClass + " not type matched");
+				throw new IOException(valClass + " not type matched for value class");
 			}
 			count++;
 		}
@@ -121,60 +132,13 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 		return count;
 	}
 	
-	/*
-	@SuppressWarnings("unchecked")
-	private void squeezeBuffer(){		
-		Map<K, PriorityRecord<P, K, V>> tempMap = new HashMap<K, PriorityRecord<P, K, V>>();
-		
-		while(!this.recordsQueue.isEmpty()){
-			PriorityRecord<P, K, V> record = this.recordsQueue.poll();
-			
-			if(tempMap.containsKey(record.getKey())){
-				PriorityRecord<P, K, V> pkvRecord = tempMap.get(record.getKey());
-				V valAfterCombine = 
-					(V) this.iterReducer.combine(record.getValue(), pkvRecord.getValue());
-				P pri = (P)this.iterReducer.setPriority(record.getKey(), valAfterCombine);
-				
-				PriorityRecord<P, K, V> newRecord = new PriorityRecord<P, K, V>(pri, record.getKey(), valAfterCombine);
-				tempMap.put(record.getKey(), newRecord);
-			}else{
-				tempMap.put(record.getKey(), record);
-			}		
-		}
-		
-		//after combination, push the recording to priority queue again
-		Collection<PriorityRecord<P, K, V>> entries = tempMap.values(); 
-		this.recordsQueue.addAll(entries);
-		
-		tempMap = null;
-	}
-	*/
 	@SuppressWarnings("unchecked")
 	@Override
 	public synchronized boolean read(DataInputStream istream, OutputFile.Header header)
 			throws IOException {	
 		if(this.iteration <= ((OutputFile.PKVBufferHeader)header).iteration()){
-			//LOG.info("queue size: " + this.recordsQueue.size());
 			synchronized(this.recordsQueue){
-				/*
-				//wait for recordsqueue is empty, which means no last records left
-				while(!this.recordsQueue.isEmpty()){
-					try {
-						//LOG.info(this.recordsQueue.size() + "\t" + this.recordsQueue.isEmpty());
-						//LOG.info("records queue is not empty, so wait");
-						
-						synchronized(this.task){
-							this.task.notifyAll();
-						}
-						this.recordsQueue.wait();
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				}
-				*/
 				long start = System.currentTimeMillis();
-				
 				this.iteration = ((OutputFile.PKVBufferHeader)header).iteration();
 				
 				IFile.Reader reader = new IFile.Reader(job, istream, header.compressed(), null, null);
@@ -184,13 +148,12 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 				while (reader.next(key, value)) {
 					keyDeserializer.open(key);
 					valDeserializer.open(value);
-					IntWritable keyObject = null;
+					Object keyObject = null;
 					Object valObject = null;
 					keyObject = keyDeserializer.deserialize(keyObject);
 					valObject = valDeserializer.deserialize(valObject);
-					//LOG.info("read " + keyObject + valObject);
 
-					this.recordsQueue.add(new KVRecord<IntWritable, V>(keyObject, (V)valObject));
+					this.recordsQueue.add(new KVRecord<K, V>((K)keyObject, (V)valObject));
 				}
 				
 				long end = System.currentTimeMillis();
@@ -198,7 +161,6 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 				this.notifyAll();			//notify MapTask's pkvBuffer.wait()				
 				return true;
 			}
-
 		}
 		
 		return false;
@@ -211,7 +173,7 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 	public synchronized boolean next() {
 		//LOG.info("doing next, for map . size is " + this.recordsQueue.size());
 		synchronized(this.recordsQueue){
-			KVRecord<IntWritable, V> record = this.recordsQueue.poll();
+			KVRecord<K, V> record = this.recordsQueue.poll();
 			if(record == null){
 				this.recordsQueue.clear();
 				this.recordsQueue.notifyAll();
@@ -220,14 +182,13 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 			else{
 				this.savedKey = record.k;
 				this.savedValue = record.v;
-				//LOG.info(" doing next, for map : " + record.getPriority() + " : " + this.savedKey +" : " + this.savedValue);
 				return true;
 			}
 		}
 	}
 	
 	
-	public IntWritable getTopKey() {
+	public K getTopKey() {
 		return this.savedKey;
 	}
 	
@@ -236,8 +197,7 @@ public class InputPKVBuffer<K extends Object, V extends Object> implements
 	}
 
 	@Override
-	public ValuesIterator<IntWritable, V> valuesIterator() throws IOException {
-		// TODO Auto-generated method stub
+	public ValuesIterator<K, V> valuesIterator() throws IOException {
 		return null;
 	}
 }

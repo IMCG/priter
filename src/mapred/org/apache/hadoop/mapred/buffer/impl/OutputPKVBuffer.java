@@ -36,16 +36,15 @@ import org.apache.hadoop.mapred.ReduceTask;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskAttemptID;
-import org.apache.hadoop.mapred.Updator;
+import org.apache.hadoop.mapred.Updater;
 import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.mapred.buffer.OutputFile.Header;
-import org.apache.hadoop.mapred.buffer.net.BufferExchangeSource;
 import org.apache.hadoop.util.Progress;
 
 
-public class OutputPKVBuffer<P extends WritableComparable, V extends Object> 
-		implements OutputCollector<IntWritable, V>{
+public class OutputPKVBuffer<K extends Object, P extends WritableComparable, V extends Object> 
+		implements OutputCollector<K, V>{
 	
 	public int SAMPLESIZE;
 	//**************************************
@@ -67,24 +66,22 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	public int checkpointSnapshot;
 	
 	private String topkDir = null;
+	private int topk;
 
-    private Updator updator = null;
-	public Map<IntWritable, PriorityRecord<P, V>> stateTable = new HashMap<IntWritable, PriorityRecord<P, V>>();
-	private ArrayList<KVRecord<IntWritable, V>> priorityQueue = new ArrayList<KVRecord<IntWritable, V>>();
-	private IntWritable defaultKey;
+    private Updater updater = null;
+	public Map<K, PriorityRecord<P, V>> stateTable = new HashMap<K, PriorityRecord<P, V>>();
+	private ArrayList<KVRecord<K, V>> priorityQueue = new ArrayList<KVRecord<K, V>>();
+	private K defaultKey;
     private V defaultiState;
-	
+    private Class<K> keyClass;
 	private Class<P> priClass;
 	private Class<V> valClass;
       
-	private int topk;
-	
 	public int iteration = 0;
 	public long total_map = 0;
-  public double total_F2 = 0;
 	public int total_reduce = 0;
+	public double progress = 0;
 	public boolean start = false;
-	
 	private boolean bMemTrans = false;
 	
 	private int partitions = 0;
@@ -95,15 +92,12 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	private int queuelen = 0;
 	private int queuetop = -1;
 	
-	public int updatedEdges = 0;
-	
 	public static int WAIT_ITER = 0;
 	
-	//for termination check
-
 	public OutputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
-			Reporter reporter, Progress progress, Class<P> priClass, Class<V> valClass, 
-		       		Updator updator) throws IOException{	
+				Reporter reporter, Progress progress, 
+				Class<K> keyClass, Class<P> priClass, Class<V> valClass, 
+				Updater updater) throws IOException{	
 		
 		LOG.info("OutputPKVBuffer is reset for task " + task.getTaskID());
 
@@ -114,9 +108,9 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.hdfs = FileSystem.get(job);
 		this.outputHandle = new FileHandle(taskAttemptID.getJobID());
 		this.outputHandle.setConf(job);
-		this.updator = updator;		
-		this.defaultKey = new IntWritable(0);
-		this.defaultiState = (V)updator.resetiState();
+		this.updater = updater;		
+		this.defaultKey = (K) (new IntWritable(0));
+		this.defaultiState = (V)updater.resetiState();
 		
 		this.bPriExec = job.getBoolean("priter.job.priority", true);
 		this.ftSupport = job.getBoolean("priter.checkpoint", true);
@@ -128,6 +122,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		this.SAMPLESIZE = job.getInt("priter.job.samplesize", 1000);
 
 		this.topkDir = job.get("mapred.output.dir") + "/" + this.taskAttemptID.getTaskID().getId();
+		this.keyClass = keyClass;
 		this.valClass = valClass;
 		this.priClass = priClass;
 
@@ -154,7 +149,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		
 		this.bMemTrans = job.getBoolean("priter.transfer.mem", false);
 		
-		this.updator.initStateTable(this);
+		this.updater.initStateTable(this);
 	}
 
 	public Header header() {
@@ -169,38 +164,37 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		return this.iteration;
 	}
 
-	public void init(IntWritable key, V iState, V cState){
-		P pri = (P) updator.decidePriority(key, iState);
+	public void init(K key, V iState, V cState){
+		P pri = (P) updater.decidePriority(key, iState);
 		PriorityRecord<P, V> newpkvRecord = new PriorityRecord<P, V>(pri, iState, cState);
 		this.stateTable.put(key, newpkvRecord);
 	}
 	
-	private synchronized void getAllRecords(ArrayList<KVRecord<IntWritable, V>> records) {
+	private synchronized void getAllRecords(ArrayList<KVRecord<K, V>> records) {
 		synchronized(this.stateTable){	
 			int activations = 0;
-			for(IntWritable k : stateTable.keySet()){		
+			for(K k : stateTable.keySet()){		
 				V v = stateTable.get(k).getiState();
-				P pri = stateTable.get(k).getPriority();
-				
-				records.add(new KVRecord<IntWritable, V>(k, v));
-				V iState = (V)updator.resetiState();
+	
+				records.add(new KVRecord<K, V>(k, v));
+				V iState = (V)updater.resetiState();
 				this.stateTable.get(k).setiState(iState);
-				P p = (P) updator.decidePriority(k, iState);
+				P p = (P) updater.decidePriority(k, iState);
 				this.stateTable.get(k).setPriority(p);
 				activations++;
 			}
 			LOG.info("iteration " + iteration + " activate " + activations + " k-v pairs");
 		}
 	}
-	private synchronized void getTopRecords(ArrayList<KVRecord<IntWritable, V>> records) {
+	private synchronized void getTopRecords(ArrayList<KVRecord<K, V>> records) {
 		
 		synchronized(this.stateTable){	
 			int activations = 0;
-			P threshold = (P) updator.decidePriority(new IntWritable(0), (V)updator.resetiState());
+			P threshold = (P) updater.decidePriority(new IntWritable(0), (V)updater.resetiState());
 			
 			//select eligible records to keys
-			List<IntWritable> keys = new ArrayList<IntWritable>();
-			for(IntWritable k : stateTable.keySet()){	
+			List<K> keys = new ArrayList<K>();
+			for(K k : stateTable.keySet()){	
 				//compare with the default value
 				if(stateTable.get(k).getPriority().compareTo(threshold) > 0){
 					keys.add(k);
@@ -211,26 +205,26 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				int actualqueuelen = (int) (keys.size() * this.queueportion);
 				//queulen extraction
 				if(keys.size() <= SAMPLESIZE){
-					for(IntWritable k : keys){		
+					for(K k : keys){		
 						V v = stateTable.get(k).getiState();
-						records.add(new KVRecord<IntWritable, V>(k, v));
-						V iState = (V)updator.resetiState();
+						records.add(new KVRecord<K, V>(k, v));
+						V iState = (V)updater.resetiState();
 						this.stateTable.get(k).setiState(iState);
-						P p = (P) updator.decidePriority(k, iState);
+						P p = (P) updater.decidePriority(k, iState);
 						this.stateTable.get(k).setPriority(p);
 						activations++;	
 					}
 					LOG.info("iteration " + iteration + "queuelen is " + actualqueuelen + " expend " + activations + " k-v pairs");
 				}else{
 					Random rand = new Random();
-					List<IntWritable> randomkeys = new ArrayList<IntWritable>(SAMPLESIZE);
+					List<K> randomkeys = new ArrayList<K>(SAMPLESIZE);
 
 					for(int j=0; j<SAMPLESIZE; j++){
-						IntWritable randnode = keys.get(rand.nextInt(keys.size()));
+						K randnode = keys.get(rand.nextInt(keys.size()));
 						randomkeys.add(randnode);
 					}
 					
-					final Map<IntWritable, PriorityRecord<P, V>> langForSort = stateTable;
+					final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
 					Collections.sort(randomkeys, 
 							new Comparator(){
 								public int compare(Object left, Object right){
@@ -250,29 +244,29 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					
 					//to avoid 0 output, we emit all the records have the equal value of threshld
 					if(cutindex==0 || stateTable.get(randomkeys.get(0)).getPriority() == threshold){
-						for(IntWritable k : stateTable.keySet()){	
+						for(K k : stateTable.keySet()){	
 							V v = stateTable.get(k).getiState();
 							P pri = stateTable.get(k).getPriority();
 							
 							if(pri.compareTo(threshold) >= 0){
-								records.add(new KVRecord<IntWritable, V>(k, v));
-								V iState = (V)updator.resetiState();
+								records.add(new KVRecord<K, V>(k, v));
+								V iState = (V)updater.resetiState();
 								this.stateTable.get(k).setiState(iState);
-								P p = (P) updator.decidePriority(k, iState);
+								P p = (P) updater.decidePriority(k, iState);
 								this.stateTable.get(k).setPriority(p);
 								activations++;
 							}
 						}
 					}else{
-						for(IntWritable k : keys){		
+						for(K k : keys){		
 							V v = stateTable.get(k).getiState();
 							P pri = stateTable.get(k).getPriority();
 							
 							if(pri.compareTo(threshold) > 0){
-								records.add(new KVRecord<IntWritable, V>(k, v));
-								V iState = (V)updator.resetiState();
+								records.add(new KVRecord<K, V>(k, v));
+								V iState = (V)updater.resetiState();
 								this.stateTable.get(k).setiState(iState);
-								P p = (P) updator.decidePriority(k, iState);
+								P p = (P) updater.decidePriority(k, iState);
 								this.stateTable.get(k).setPriority(p);
 								activations++;
 							}
@@ -294,26 +288,26 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				
 				//queulen extraction
 				if(keys.size() <= SAMPLESIZE){
-					for(IntWritable k : keys){		
+					for(K k : keys){		
 						V v = stateTable.get(k).getiState();			
-						records.add(new KVRecord<IntWritable, V>(k, v));
-						V iState = (V)updator.resetiState();
+						records.add(new KVRecord<K, V>(k, v));
+						V iState = (V)updater.resetiState();
 						this.stateTable.get(k).setiState(iState);
-						P p = (P) updator.decidePriority(k, iState);
+						P p = (P) updater.decidePriority(k, iState);
 						this.stateTable.get(k).setPriority(p);
 						activations++;	
 					}
 					LOG.info("iteration " + iteration + "queuelen is " + actualqueuelen + " expend " + activations + " k-v pairs");
 				}else{
 					Random rand = new Random();
-					List<IntWritable> randomkeys = new ArrayList<IntWritable>(SAMPLESIZE);
+					List<K> randomkeys = new ArrayList<K>(SAMPLESIZE);
 					
 					for(int j=0; j<SAMPLESIZE; j++){
-						IntWritable randnode = keys.get(rand.nextInt(keys.size()));
+						K randnode = keys.get(rand.nextInt(keys.size()));
 						randomkeys.add(randnode);
 					}
 					
-					final Map<IntWritable, PriorityRecord<P, V>> langForSort = stateTable;
+					final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
 					Collections.sort(randomkeys, 
 							new Comparator(){
 								public int compare(Object left, Object right){
@@ -332,29 +326,29 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 
 					//to avoid 0 output, we emit all the records have the equal value of threshld
 					if(cutindex==0 || stateTable.get(randomkeys.get(0)).getPriority() == threshold){
-						for(IntWritable k : stateTable.keySet()){	
+						for(K k : stateTable.keySet()){	
 							V v = stateTable.get(k).getiState();
 							P pri = stateTable.get(k).getPriority();
 							
 							if(pri.compareTo(threshold) >= 0){
-								records.add(new KVRecord<IntWritable, V>(k, v));
-								V iState = (V)updator.resetiState();
+								records.add(new KVRecord<K, V>(k, v));
+								V iState = (V)updater.resetiState();
 								this.stateTable.get(k).setiState(iState);
-								P p = (P) updator.decidePriority(k, iState);
+								P p = (P) updater.decidePriority(k, iState);
 								this.stateTable.get(k).setPriority(p);
 								activations++;
 							}
 						}
 					}else{
-						for(IntWritable k : keys){		
+						for(K k : keys){		
 							V v = stateTable.get(k).getiState();
 							P pri = stateTable.get(k).getPriority();
 							
 							if(pri.compareTo(threshold) > 0){
-								records.add(new KVRecord<IntWritable, V>(k, v));
-								V iState = (V)updator.resetiState();
+								records.add(new KVRecord<K, V>(k, v));
+								V iState = (V)updater.resetiState();
 								this.stateTable.get(k).setiState(iState);
-								P p = (P) updator.decidePriority(k, iState);
+								P p = (P) updater.decidePriority(k, iState);
 								this.stateTable.get(k).setPriority(p);
 								activations++;
 							}
@@ -388,15 +382,15 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 
 				LOG.info("queue top " + queuetop + " table size " + stateTable.size());
 				
-				for(IntWritable k : keys){		
+				for(K k : keys){		
 					V v = stateTable.get(k).getiState();
 					P pri = stateTable.get(k).getPriority();
 					
 					if(pri.compareTo(threshold) > 0){
-						records.add(new KVRecord<IntWritable, V>(k, v));
-						V iState = (V)updator.resetiState();
+						records.add(new KVRecord<K, V>(k, v));
+						V iState = (V)updater.resetiState();
 						this.stateTable.get(k).setiState(iState);
-						P p = (P) updator.decidePriority(k, iState);
+						P p = (P) updater.decidePriority(k, iState);
 						this.stateTable.get(k).setPriority(p);
 						activations++;
 					}
@@ -405,43 +399,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			}
 		}
 	}
-	/*
-	public synchronized void collect(IntWritable key, V value) throws IOException {
-		if (key.getClass() != IntWritable.class) {
-			throw new IOException("Type mismatch in key from map: expected IntWritable"  
-					+ ", recieved "
-					+ key.getClass().getName());
-		}
-		if (value.getClass() != valClass) {
-			throw new IOException("Type mismatch in value from map: expected "
-					+ valClass.getName() + ", recieved "
-					+ value.getClass().getName());
-		}
-				
-		start = true;
-		PriorityRecord<P, V> pkvRecord;
-		synchronized(this.stateTable){		
-			if(this.stateTable.containsKey(key)){
-				pkvRecord = this.stateTable.get(key);
-				updator.updateState(pkvRecord.getiState(), pkvRecord.getcState(), value);	
-				//LOG.info("updated existed key: " + key + " istate: " + pkvRecord.getiState() + " cstate: " + pkvRecord.getcState() + " value: " + value);
-			}else{
-				//LOG.error("no such key " + key);
-				V iState = (V)updator.setDefaultiState();
-				V cState = (V)updator.setDefaultcState(key);
-				P pri = (P) updator.setPriority(key, iState);
-				pkvRecord = new PriorityRecord<P, V>(pri, iState, cState);
-				updator.updateState(pkvRecord.getiState(), pkvRecord.getcState(), value);
-				this.stateTable.put(key, pkvRecord);
-				//LOG.info("updated not existed key: " + key + " istate: " + pkvRecord.getiState() + " cstate: " + pkvRecord.getcState() + " value: " + value);
-			}
-			
-			P pri = (P) updator.setPriority(key, pkvRecord.getiState());
-			this.stateTable.get(key).setPriority(pri);
-		}
-		total_reduce++;
-	}
-	*/
+
 	/**
 	 * this need to be improved. we should emit the top records by doing spill only when
 	 * we got some new higher priority KVs, if no updated new higher priority KVs, then we
@@ -472,13 +430,13 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					
 					if(job.getBoolean("priter.job.mapsync", false)){
 						for(int i=0; i<partitions; i++){
-							outfile.outputMemQueue.add(new KVRecord(new IntWritable(i), this.defaultiState));
+							outfile.outputMemQueue.add(new KVRecord(defaultKey, defaultiState));
 						}
 					}
 					
 					if(outfile.outputMemQueue.size() == 0){
 						LOG.info("no records to send");
-						outfile.outputMemQueue.add(new KVRecord(this.defaultKey, this.defaultiState));
+						outfile.outputMemQueue.add(new KVRecord(defaultKey, defaultiState));
 					}else{
 						total_map += outfile.outputMemQueue.size();
 					}
@@ -516,7 +474,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 
 			FSDataOutputStream out = null;
 			FSDataOutputStream indexOut = null;
-			IFile.Writer<IntWritable, V> writer = null;
+			IFile.Writer<K, V> writer = null;
 			
 			try{		
 				out = localFs.create(filename, false);
@@ -526,14 +484,14 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 				
 				synchronized(this.stateTable){
 		
-					//ArrayList<KVRecord<IntWritable, V>> entries = null;
+					//ArrayList<KVRecord<K, V>> entries = null;
 					if(this.bPriExec){
 						getTopRecords(priorityQueue);
 					}else{
 						getAllRecords(priorityQueue);
 					}
 						
-					writer = new IFile.Writer<IntWritable, V>(job, out, IntWritable.class, valClass, null, null);
+					writer = new IFile.Writer<K, V>(job, out, keyClass, valClass, null, null);
 
 					//if(entries != null) this.priorityQueue.addAll(entries);
 					int count = 0;
@@ -542,7 +500,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 						LOG.info("no records to send");
 						writer.append(this.defaultKey, this.defaultiState);
 					}else{
-						for(KVRecord<IntWritable, V> entry : priorityQueue){		
+						for(KVRecord<K, V> entry : priorityQueue){		
 							writer.append(entry.k, entry.v);
 							//LOG.info("send records: " + entry.k + " : " + entry.v);
 							entry = null;
@@ -599,7 +557,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	
 	private void writeIndexRecord(FSDataOutputStream indexOut,
 			FSDataOutputStream out, long start,
-			IFile.Writer<IntWritable, V> writer)
+			IFile.Writer<K, V> writer)
 	throws IOException {
 		indexOut.writeLong(start);
 		indexOut.writeLong(writer.getRawLength());
@@ -615,7 +573,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
 		
 		int count = 0;
-		for(KVRecord<IntWritable, V> entry : priorityQueue) {
+		for(KVRecord<K, V> entry : priorityQueue) {
 		    writer.write(entry.k + "\t" + entry.v + "\n");
 		    count++;
 		}
@@ -631,9 +589,9 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 		
 		long start = System.currentTimeMillis();
 		int count = 0;
-		Set<Map.Entry<IntWritable, PriorityRecord<P, V>>> entries = this.stateTable.entrySet();
-		for(Map.Entry<IntWritable, PriorityRecord<P, V>> entry : entries) {
-		    IntWritable key = entry.getKey();
+		Set<Map.Entry<K, PriorityRecord<P, V>>> entries = this.stateTable.entrySet();
+		for(Map.Entry<K, PriorityRecord<P, V>> entry : entries) {
+		    K key = entry.getKey();
 		    PriorityRecord<P, V> record = entry.getValue();
 		    writer.write(key + "\t" + record + "\n");
 		    count++;
@@ -654,7 +612,17 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 			String line = reader.readLine();
 			String[] field = line.split("\t", 4);
 			
-			IntWritable key = new IntWritable(Integer.parseInt(field[0]));
+			K key = null;
+			if(keyClass == IntWritable.class){
+				key = (K) new IntWritable(Integer.parseInt(field[0]));
+			}else if(keyClass == Text.class){
+				key = (K) new Text(field[0]);
+			}else if(keyClass == FloatWritable.class){
+				key = (K) new FloatWritable(Float.parseFloat(field[0]));
+			}else if(keyClass == DoubleWritable.class){
+				key = (K) new DoubleWritable(Double.parseDouble(field[0]));
+			}
+
 			if(valClass == IntWritable.class){
 				IntWritable pri = new IntWritable(Integer.parseInt(field[1]));
 				IntWritable iState = new IntWritable(Integer.parseInt(field[2]));
@@ -687,7 +655,6 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 					Text cState = new Text(field[3]);
 					stateTable.put(key, new PriorityRecord(pri, iState, cState));
 				}
-				
 			}else{
 				throw new IOException(valClass + " not type matched");
 			}
@@ -700,84 +667,81 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	
 	public void snapshot(int index) throws IOException {
 		Path topkFile = new Path(topkDir + "/topKsnapshot-" + index);
-		IFile.PriorityWriter<P, IntWritable, V> writer = new IFile.PriorityWriter<P, IntWritable, V>(job, hdfs, topkFile, priClass, IntWritable.class, valClass, null, null);
-		//FSDataOutputStream ostream = hdfs.create(new Path(topkDir + "/topKsnapshot-" + index), true);
-		//BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(ostream));
+		IFile.PriorityWriter<P, K, V> writer = new IFile.PriorityWriter<P, K, V>(job, hdfs, topkFile, priClass, keyClass, valClass, null, null);
 
 		synchronized(this.stateTable){		
 			if(stateTable.size() <= topk || stateTable.size() <= SAMPLESIZE){
-				int count = 0;
-				for(IntWritable k : stateTable.keySet()){	
+				for(K k : stateTable.keySet()){	
 					V v = stateTable.get(k).getcState();
-					P pri = (P) updator.decideTopK(k, v);
+					P pri = (P) updater.decideTopK(k, v);
 					writer.append(pri, k, stateTable.get(k).getcState());	
-					//writer.write(k + "\t" + stateTable.get(k).getcState());
-					if(count++ > topk) break;
+					progress += ((FloatWritable)v).get();
 				}
 			}else{
 				Random rand = new Random();
-				List<IntWritable> randomkeys = new ArrayList<IntWritable>(SAMPLESIZE);
-				List<IntWritable> keys = new ArrayList<IntWritable>(stateTable.keySet());
+				List<K> randomkeys = new ArrayList<K>(SAMPLESIZE);
+				List<K> keys = new ArrayList<K>(stateTable.keySet());
 				
 				for(int j=0; j<SAMPLESIZE; j++){
-					IntWritable randnode = keys.get(rand.nextInt(stateTable.size()));
+					K randnode = keys.get(rand.nextInt(stateTable.size()));
 					if(!randomkeys.contains(randnode)){
 						randomkeys.add(randnode);
 					}
 				}
 				
-				final Map<IntWritable, PriorityRecord<P, V>> langForSort = stateTable;
+				final Map<K, PriorityRecord<P, V>> langForSort = stateTable;
 				Collections.sort(randomkeys, 
 						new Comparator(){
 							public int compare(Object left, Object right){
 								V leftrecord = langForSort.get(left).getcState();
 								V rightrecord = langForSort.get(right).getcState();
-								P leftpriority = (P) updator.decideTopK((IntWritable)left, leftrecord);
-								P rightpriority = (P) updator.decideTopK((IntWritable)right, rightrecord);
+								P leftpriority = (P) updater.decideTopK((K)left, leftrecord);
+								P rightpriority = (P) updater.decideTopK((K)right, rightrecord);
 								return -leftpriority.compareTo(rightpriority);
 							}
 						});
 				
 				int cutindex = this.topk * randomkeys.size() / this.stateTable.size()+1;
-				P threshold = (P) updator.decideTopK(randomkeys.get(cutindex), stateTable.get(randomkeys.get(cutindex)).getcState());
+				P threshold = (P) updater.decideTopK(randomkeys.get(cutindex), stateTable.get(randomkeys.get(cutindex)).getcState());
 		
 				LOG.info("table size " + this.stateTable.size() + " cutindex " + cutindex + " threshold " + threshold);
-				for(IntWritable k : stateTable.keySet()){		
+				for(K k : stateTable.keySet()){		
 					V v = stateTable.get(k).getcState();
-					P pri = (P) updator.decideTopK(k, v);
+					P pri = (P) updater.decideTopK(k, v);
 					if(pri.compareTo(threshold) > 0){
 						writer.append(pri, k, stateTable.get(k).getcState());
 						//writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");
-					}			
+					}
+					progress += ((FloatWritable)v).get();
 				}	
 			}
 		}	
 		writer.close();
 	}
 	
-  public double collcetInfo(){
-    double totalF2 = 0;
+  public double measureProgress(){
+    double progress = 0;
     
     if(valClass == FloatWritable.class){
       float defaultV = ((FloatWritable)defaultiState).get();
-      for(IntWritable k : stateTable.keySet()){	
-          FloatWritable pri = (FloatWritable)stateTable.get(k).getcState();
-          if(pri.get() != defaultV) totalF2 += pri.get();
+      for(K k : stateTable.keySet()){	
+          FloatWritable cstate = (FloatWritable)stateTable.get(k).getcState();
+          if(cstate.get() != defaultV) progress += cstate.get();
       }
     }else if(valClass == IntWritable.class){
       int defaultV = ((IntWritable)defaultiState).get();
-      for(IntWritable k : stateTable.keySet()){	
-          IntWritable pri = (IntWritable)stateTable.get(k).getcState();
-          if(pri.get() != defaultV) totalF2 += pri.get();
+      for(K k : stateTable.keySet()){	
+          IntWritable cstate = (IntWritable)stateTable.get(k).getcState();
+          if(cstate.get() != defaultV) progress += cstate.get();
       }
     }else if(valClass == DoubleWritable.class){
       double defaultV = ((DoubleWritable)defaultiState).get();
-      for(IntWritable k : stateTable.keySet()){	
-          DoubleWritable pri = (DoubleWritable)stateTable.get(k).getcState();
-          if(pri.get() != defaultV) totalF2 += pri.get();
+      for(K k : stateTable.keySet()){	
+          DoubleWritable cstate = (DoubleWritable)stateTable.get(k).getcState();
+          if(cstate.get() != defaultV) progress += cstate.get();
       }
     }
-    return totalF2;
+    return progress;
   }
   
 	@Override
@@ -792,7 +756,7 @@ public class OutputPKVBuffer<P extends WritableComparable, V extends Object>
 	}
 
 	@Override
-	public void collect(IntWritable key, V value) throws IOException {
+	public void collect(K key, V value) throws IOException {
 		// TODO Auto-generated method stub
 		
 	}

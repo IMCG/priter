@@ -455,7 +455,7 @@ public class MapTask extends Task {
 			
 			Activator activator = (Activator) ReflectionUtils.newInstance(job.getActivatorClass(), job);
 			
-			InputPKVBuffer pkvBuffer = new InputPKVBuffer(bufferUmbilical, this, job, reporter, null, this.inputValClass);
+			InputPKVBuffer pkvBuffer = new InputPKVBuffer(bufferUmbilical, this, job, reporter, null, inputKeyClass, inputValClass);
 			
 		    /* This object will be the sink's input buffer. */
 			BufferExchangeSink sink = new BufferExchangeSink(job, pkvBuffer, this); 
@@ -466,15 +466,12 @@ public class MapTask extends Task {
 			 * */
 			while(this.pipeReduceTaskId == null){
 				this.pipeReduceTaskId = new TaskID(this.getJobID(), false, this.getTaskID().getTaskID().getId());
-				/*
-				this.pipeReduceTaskId = umbilical.getReduceTaskID();
+
 				try {
 					Thread.sleep(100);
 				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				*/
 			}
 			LOG.info("local reduce task id extracted " + pipeReduceTaskId);
 			
@@ -540,7 +537,7 @@ public class MapTask extends Task {
 								workload = 0;
 							}
 											
-							IntWritable keyObject = pkvBuffer.getTopKey();
+							Object keyObject = pkvBuffer.getTopKey();
 							Object valObject = pkvBuffer.getTopValue();
 							activator.activate(keyObject, valObject, this.nsortBuffer, reporter);
 							reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
@@ -572,7 +569,7 @@ public class MapTask extends Task {
 							
 							}
 							
-							IntWritable keyObject = pkvBuffer.getTopKey();
+							Object keyObject = pkvBuffer.getTopKey();
 							Object valObject = pkvBuffer.getTopValue();
 							if(keyObject != null && valObject != null){
 								activator.activate(keyObject, valObject, this.buffer, reporter);

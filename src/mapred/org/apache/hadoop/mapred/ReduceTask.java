@@ -187,34 +187,29 @@ public class ReduceTask extends Task {
 								this.wait(500);
 							}
 							
-              
-              double total_curr = 0;
-              if(conf.getBoolean("priter.snapshot", true)){
-                //snapshot generation
-                pkvBuffer.snapshot(snapshotIndex);
-              }else{
-                total_curr = pkvBuffer.collcetInfo();
-              }
-              long total_updates = pkvBuffer.total_map;
+			              double local_progress = 0;
+			              if(conf.getBoolean("priter.snapshot", true)){
+					          //snapshot generation
+					          pkvBuffer.snapshot(snapshotIndex);
+					          local_progress = pkvBuffer.progress;
+			              }else{
+			            	  local_progress = pkvBuffer.measureProgress();
+			              }
+			              long total_updates = pkvBuffer.total_map;
 							
 							boolean update = true;
 							if(pkvBuffer.iteration == lastiter){
 								update = false;
 							}
 							
-							float obj = 0;
-							if(conf.getBoolean("priter.snapshot.obj", false)){
-								obj = updator.obj().get();
-								LOG.info("curr obj is " + obj);
-							}
-							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, total_updates, total_curr, obj, getJobID());
+							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, total_updates, local_progress, getJobID());
 							try {
 								this.trackerUmbilical.snapshotCommit(event);
 							} catch (Exception e) {
-								// TODO Auto-generated catch block
 								e.printStackTrace();
 							}
 							
+							pkvBuffer.progress = 0;
 							lastiter = pkvBuffer.iteration;
 							snapshotIndex++;	
 						}else{
@@ -321,7 +316,7 @@ public class ReduceTask extends Task {
 	private boolean inputSnapshots = false;
 	private boolean stream = false;
 	private Reducer reducer = null;
-	private Updator updator = null;
+	private Updater updater = null;
 	public boolean spillIter = false;
 	
 	private MapOutputFetcher fetcher = null;
@@ -531,12 +526,12 @@ public class ReduceTask extends Task {
 			BufferUmbilicalProtocol umbilical) throws IOException {
 		this.ftsupport = job.getBoolean("priter.checkpoint", true);
 		
-		this.updator = (Updator)ReflectionUtils.newInstance(job.getUpdatorClass(), job);
+		this.updater = (Updater)ReflectionUtils.newInstance(job.getUpdatorClass(), job);
 		if (this.pkvBuffer == null) {
 			Progress progress = sink.getProgress(); 	
 			this.pkvBuffer = new OutputPKVBuffer(umbilical, this, job, reporter, progress, 
-										priorityClass, outputValClass, 
-										this.updator);
+										outputKeyClass, priorityClass, outputValClass, 
+										this.updater);
 		}
 		
 		if(this.checkpointIter > 0){
@@ -571,9 +566,7 @@ public class ReduceTask extends Task {
 						 (System.currentTimeMillis() - windowTimeStamp) + "ms.");
 				windowTimeStamp = System.currentTimeMillis();
 				
-				//synchronized(rollbackLock){
-				int updated = reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
-				this.pkvBuffer.updatedEdges += updated;
+				reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
 
 				if(this.spillIter || this.checkpointIter > 0){
 					if(this.checkpointIter > 0) {
@@ -583,16 +576,13 @@ public class ReduceTask extends Task {
 					//retrieve the top records, and generate a file
 					OutputFile outputFile = pkvBuffer.spillTops();
 					if(outputFile != null){
-						updator.iterate();
+						updater.iterate();
 						umbilical.output(outputFile);
 						LOG.info("output file " + outputFile);
 					}else{
 						LOG.info("no record is reduced, so wait!");
 					}
 					this.spillIter = false;
-					this.pkvBuffer.updatedEdges = 0;
-					
-					LOG.info("has finished the first reduce");
 					
 					if(ftsupport){
 						//send iteration completetion event to jobtracker for load balance and faulttolerance
@@ -702,7 +692,7 @@ public class ReduceTask extends Task {
 					ValuesIterator values = input.valuesIterator();
 					while (values.more()) {	
 						count++;
-						updator.updateState((IntWritable)values.getKey(), values, (OutputPKVBuffer)output, reporter);
+						updater.updateState(values.getKey(), values, (OutputPKVBuffer)output, reporter);
 
 						values.nextKey();
 						
