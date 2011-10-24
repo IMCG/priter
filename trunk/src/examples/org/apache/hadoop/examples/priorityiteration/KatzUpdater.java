@@ -68,9 +68,7 @@ public class KatzUpdater extends MapReduceBase implements
 	}
 
 	@Override
-	public void initStateTable(
-			OutputPKVBuffer<IntWritable, FloatWritable, FloatWritable> stateTable) {
-	}
+	public void initStateTable(OutputPKVBuffer<IntWritable, FloatWritable, FloatWritable> stateTable) {}
 
 	@Override
 	public FloatWritable resetiState() {

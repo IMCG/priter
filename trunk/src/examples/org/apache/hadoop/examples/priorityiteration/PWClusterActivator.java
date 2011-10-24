@@ -18,7 +18,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 public class PWClusterActivator extends MapReduceBase implements
-	Activator<DoubleWritable, ClusterWritable> {
+	Activator<IntWritable, DoubleWritable, ClusterWritable> {
 
 	private JobConf job;
 
@@ -76,7 +76,7 @@ public class PWClusterActivator extends MapReduceBase implements
 	}
 	
 	@Override
-	public void initStarter(InputPKVBuffer<ClusterWritable> starter)
+	public void initStarter(InputPKVBuffer<IntWritable, ClusterWritable> starter)
 			throws IOException {	
 		int n = Util.getTaskId(job);
 		

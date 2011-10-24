@@ -40,7 +40,7 @@ public class PWCluster extends Configured implements Tool {
 	    FileInputFormat.addInputPath(job, new Path(input));
 	    FileOutputFormat.setOutputPath(job, new Path(output));
 	    job.setOutputFormat(TextOutputFormat.class);
-	    	    
+	    	
 	    //set for iterative process   
 	    job.setBoolean("priter.job", true);
 	    job.setBoolean("priter.job.async", false);
@@ -55,7 +55,7 @@ public class PWCluster extends Configured implements Tool {
 	          
 	    job.setJarByClass(PWCluster.class);
 	    job.setActivatorClass(PWClusterActivator.class);	
-	    job.setUpdatorClass(PWClusterUpdator.class);
+	    job.setUpdaterClass(PWClusterUpdater.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(ClusterWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
