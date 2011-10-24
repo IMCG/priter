@@ -45,7 +45,7 @@ public class AdsorptionUpdater extends MapReduceBase implements
 		String subGraphsDir = job.get(MainDriver.SUBGRAPH_DIR);
 		int taskid = Util.getTaskId(job);
 		Path remote_link = new Path(subGraphsDir + "/part-" + taskid);
-		double initvalue = Averaging.RETAINFAC * 10000;
+		double initvalue = Adsorption.RETAINFAC * 10000;
 		
 		FileSystem hdfs = null;
 		try{
@@ -112,6 +112,7 @@ public class AdsorptionUpdater extends MapReduceBase implements
 			throws IOException {
 		workload++;		
 		report.setStatus(String.valueOf(workload));
+		
 		double delta = 0.0;
 		while(values.hasNext()){				
 			delta += values.next().get();	

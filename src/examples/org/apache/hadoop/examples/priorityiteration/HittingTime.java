@@ -12,6 +12,7 @@ import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.lib.HashPartitioner;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -22,9 +23,7 @@ public class HittingTime extends Configured implements Tool {
 	private String subGraphDir;
 	private int partitions;
 	private int topk;
-	private int nNodes;
-	private int startnode;
-	private float alpha;
+	private float qportion;
 	private float stopthresh;
 	
 	private int hittingtime() throws IOException{
@@ -33,27 +32,23 @@ public class HittingTime extends Configured implements Tool {
 	    job.setJobName(jobname);
        
 	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
-	    job.setInt(MainDriver.START_NODE, startnode);
 	    
 	    FileInputFormat.addInputPath(job, new Path(input));
 	    FileOutputFormat.setOutputPath(job, new Path(output));
 	    job.setOutputFormat(TextOutputFormat.class);
 	    
-
-	    job.setBoolean("priter.job.async", true);
 	    //set for iterative process   
 	    job.setBoolean("priter.job", true);
 	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
-	    job.setInt("priter.graph.nodes", nNodes);						//total nodes
 	    job.setLong("priter.snapshot.interval", 10000);					//snapshot interval	 
 	    job.setInt("priter.snapshot.topk", topk);						//topk 
-	    job.setFloat("priter.queue.portion", alpha);						//execution queue
+	    job.setFloat("priter.queue.portion", qportion);					//execution queue
 	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
 	    
 	    
 	    job.setJarByClass(HittingTime.class);
 	    job.setActivatorClass(HittingTimeActivator.class);	
-	    job.setUpdatorClass(HittingTimeUpdator.class);
+	    job.setUpdaterClass(HittingTimeUpdater.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(DoubleWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
@@ -68,21 +63,20 @@ public class HittingTime extends Configured implements Tool {
 	}
 	@Override
 	public int run(String[] args) throws Exception {
-		if (args.length != 9) {
-		      System.err.println("Usage: hittingtime <indir> <outdir> <subgraph> <parititons> <topk> <num of nodes> <startnode> <queuelen> <stop>");
+		if (args.length != 6) {
+		      System.err.println("Usage: adsorption <indir> <outdir> <partitions> <topk> <qportion> <stopthreshold>");
 		      System.exit(2);
 		}
 	    
 		input = args[0];
-		output = args[1];
-	    subGraphDir = args[2];
-	    partitions = Integer.parseInt(args[3]);
-	    topk = Integer.parseInt(args[4]);
-	    nNodes = Integer.parseInt(args[5]);
-	    startnode = Integer.parseInt(args[6]);
-	    alpha = Float.parseFloat(args[7]);
-	    stopthresh = Float.parseFloat(args[8]);
-    
+	    output = args[1];
+	    partitions = Integer.parseInt(args[2]);
+	    topk = Integer.parseInt(args[3]);
+	    qportion = Float.parseFloat(args[4]);
+	    stopthresh = Float.parseFloat(args[5]);
+	    
+	    subGraphDir = input + "/subgraph";
+	    new Distributor().partition(input, output, partitions, IntWritable.class, HashPartitioner.class);
 	    hittingtime();
 	    
 		return 0;
