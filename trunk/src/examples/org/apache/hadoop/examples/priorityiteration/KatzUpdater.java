@@ -12,7 +12,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.PrIterBase;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Updater;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
@@ -20,7 +20,7 @@ import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
 
 
-public class KatzUpdater extends MapReduceBase implements
+public class KatzUpdater extends PrIterBase implements
 		Updater<IntWritable, FloatWritable, FloatWritable> {
 	
 	private int workload = 0;
