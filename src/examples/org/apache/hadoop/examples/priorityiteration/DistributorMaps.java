@@ -16,6 +16,8 @@ public class DistributorMaps {
 	
 	class IntMap extends MapReduceBase implements 
 			Mapper<Text, Text, IntWritable, Text> {
+		public IntMap(){}
+		
 		@Override
 		public void map(Text key, Text value,
 				OutputCollector<IntWritable, Text> output, Reporter report)
