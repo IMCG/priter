@@ -4,14 +4,14 @@ import java.io.IOException;
 import java.util.Iterator;
 
 import org.apache.hadoop.io.*;
-import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.PrIterBase;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Updater;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
 
-public class SSSPUpdater extends MapReduceBase implements
+public class SSSPUpdater extends PrIterBase implements
 		Updater<IntWritable, IntWritable, IntWritable> {
 	private int workload = 0;
 	private int iterate = 0;

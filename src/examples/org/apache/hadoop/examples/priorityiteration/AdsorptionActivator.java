@@ -14,13 +14,13 @@ import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.Activator;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.PrIterBase;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 
-public class AdsorptionActivator extends MapReduceBase implements
+public class AdsorptionActivator extends PrIterBase implements
 		Activator<IntWritable, DoubleWritable, DoubleWritable> {
 
 	private String subGraphsDir;

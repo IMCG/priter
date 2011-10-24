@@ -13,13 +13,13 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.PrIterBase;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Updater;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 
-public class HittingTimeUpdater extends MapReduceBase implements Updater<IntWritable, DoubleWritable, DoubleWritable> {
+public class HittingTimeUpdater extends PrIterBase implements Updater<IntWritable, DoubleWritable, DoubleWritable> {
 	
 	private JobConf job;
 	private int workload = 0;
