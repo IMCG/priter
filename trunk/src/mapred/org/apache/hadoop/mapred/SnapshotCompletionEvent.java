@@ -13,23 +13,19 @@ public class SnapshotCompletionEvent implements Writable {
 	int iterIndex = 0;
 	int tasktrackerIndex = 0;
 	boolean update = true;
-  long total_updates = 0;
-  double total_curr = 0;
-	float obj = 0;
-	//String outputPath = new String();
+	long total_updates = 0;
+	double local_progress = 0;
 	JobID jobID = new JobID();
 	
 	public SnapshotCompletionEvent() {};
 	
-	public SnapshotCompletionEvent(int snapshotindex, int iterindex, int index, boolean update, long updates, double totalF2, float obj, JobID jobid) {
+	public SnapshotCompletionEvent(int snapshotindex, int iterindex, int index, boolean update, long updates, double totalF2, JobID jobid) {
 		this.snaphostIndex = snapshotindex;
 		this.iterIndex = iterindex;
 		this.tasktrackerIndex = index;
 		this.update = update;
-    this.total_updates = updates;
-    this.total_curr = totalF2;
-		this.obj = obj;
-		//this.outputPath = output;
+		this.total_updates = updates;
+		this.local_progress = totalF2;
 		this.jobID = jobid;
 	}
 	
@@ -44,18 +40,19 @@ public class SnapshotCompletionEvent implements Writable {
 	public int getTaskIndex() {
 		return this.tasktrackerIndex;
 	}
+	
 	public boolean getUpdate(){
 		return this.update;
 	}
-  public long getPartialUpdates(){
+	
+	public long getPartialUpdates(){
 		return this.total_updates;
 	}
-  public double getPartialF2(){
-		return this.total_curr;
+  
+  	public double getLocalProgress(){
+		return this.local_progress;
 	}
-	public float getObj(){
-		return this.obj;
-	}
+  
 	public JobID getJobID() {
 		return this.jobID;
 	}
@@ -66,9 +63,8 @@ public class SnapshotCompletionEvent implements Writable {
 		this.iterIndex = in.readInt();
 		this.tasktrackerIndex = in.readInt();
 		this.update = in.readBoolean();
-    this.total_updates = in.readLong();
-    this.total_curr = in.readDouble();
-		this.obj = in.readFloat();
+		this.total_updates = in.readLong();
+		this.local_progress = in.readDouble();
 		this.jobID.readFields(in);
 	}
 
@@ -78,9 +74,8 @@ public class SnapshotCompletionEvent implements Writable {
 		out.writeInt(this.iterIndex);
 		out.writeInt(this.tasktrackerIndex);
 		out.writeBoolean(this.update);
-    out.writeLong(this.total_updates);
-    out.writeDouble(this.total_curr);
-		out.writeFloat(this.obj);
+		out.writeLong(this.total_updates);
+		out.writeDouble(this.local_progress);
 		this.jobID.write(out);
 	}
 

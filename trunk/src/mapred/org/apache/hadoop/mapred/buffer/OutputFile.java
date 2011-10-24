@@ -30,7 +30,6 @@ import java.util.TreeSet;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapred.TaskAttemptID;
@@ -38,7 +37,7 @@ import org.apache.hadoop.mapred.TaskID;
 import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
 import org.apache.hadoop.mapred.buffer.impl.KVRecord;
 
-public class OutputFile<V extends Object> implements Comparable<OutputFile>, Writable {
+public class OutputFile<K extends Object, V extends Object> implements Comparable<OutputFile>, Writable {
 	public static enum Type {FILE, SNAPSHOT, STREAM, PKVBUF};
 	public int STOP = -100;
 	public int RUN = -200;
@@ -420,7 +419,7 @@ public class OutputFile<V extends Object> implements Comparable<OutputFile>, Wri
 	
 	private transient Set<TaskAttemptID> serviced = new HashSet<TaskAttemptID>();
 	
-	public ArrayList<KVRecord<IntWritable, V>> outputMemQueue =  new ArrayList<KVRecord<IntWritable, V>>();
+	public ArrayList<KVRecord<K, V>> outputMemQueue =  new ArrayList<KVRecord<K, V>>();
 
 	public OutputFile() { 	}
 	
