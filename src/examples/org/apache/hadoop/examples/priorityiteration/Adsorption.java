@@ -12,19 +12,17 @@ import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.lib.HashPartitioner;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
-
-public class Averaging extends Configured implements Tool {
+public class Adsorption extends Configured implements Tool {
 	private String input;
 	private String output;
 	private String subGraphDir;
 	private int partitions;
 	private int topk;
-	private int nNodes;
-	private int startNodes;
-	private float alpha;
+	private float qportion;
 	private float stopthresh;
 	
 	//damping factor
@@ -32,13 +30,12 @@ public class Averaging extends Configured implements Tool {
 	public static final double RETAINFAC = 0.2;
 
 	
-	private int averaging() throws IOException{
+	private int adsorption() throws IOException{
 	    JobConf job = new JobConf(getConf());
-	    String jobname = "averaging";
+	    String jobname = "adsorption";
 	    job.setJobName(jobname);
        
 	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
-	    job.setInt(MainDriver.START_NODE, startNodes);
 	    
 	    FileInputFormat.addInputPath(job, new Path(input));
 	    FileOutputFormat.setOutputPath(job, new Path(output));
@@ -48,16 +45,15 @@ public class Averaging extends Configured implements Tool {
 	    //set for iterative process   
 	    job.setBoolean("priter.job", true);
 	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
-	    job.setInt("priter.graph.nodes", nNodes);						//total nodes
 	    job.setLong("priter.snapshot.interval", 20000);					//snapshot interval	
 	    job.setInt("priter.snapshot.topk", topk);						//topk
-	    job.setFloat("priter.queue.portion", alpha);					//activation queue
+	    job.setFloat("priter.queue.portion", qportion);					//activation queue
 	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
 	    
 	        
-	    job.setJarByClass(Averaging.class);
-	    job.setActivatorClass(AveragingActivator.class);	
-	    job.setUpdatorClass(AveragingUpdator.class);
+	    job.setJarByClass(Adsorption.class);
+	    job.setActivatorClass(AdsorptionActivator.class);	
+	    job.setUpdaterClass(AdsorptionUpdater.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(DoubleWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
@@ -72,22 +68,21 @@ public class Averaging extends Configured implements Tool {
 	}
 	@Override
 	public int run(String[] args) throws Exception {
-		if (args.length != 9) {
-		      System.err.println("Usage: averaging <indir> <outdir> <subgraph> <partitions> <topk> <number of nodes> <start nodes> <alpha> <stopthreshold>");
+		if (args.length != 6) {
+		      System.err.println("Usage: adsorption <indir> <outdir> <partitions> <topk> <qportion> <stopthreshold>");
 		      System.exit(2);
 		}
 	    
 		input = args[0];
 	    output = args[1];
-	    subGraphDir = args[2];
-	    partitions = Integer.parseInt(args[3]);
-	    topk = Integer.parseInt(args[4]);
-	    nNodes = Integer.parseInt(args[5]);
-	    startNodes = Integer.parseInt(args[6]);
-	    alpha = Float.parseFloat(args[7]);
-	    stopthresh = Float.parseFloat(args[8]);
-    
-	    averaging();
+	    partitions = Integer.parseInt(args[2]);
+	    topk = Integer.parseInt(args[3]);
+	    qportion = Float.parseFloat(args[4]);
+	    stopthresh = Float.parseFloat(args[5]);
+	    
+	    subGraphDir = input + "/subgraph";
+	    new Distributor().partition(input, output, partitions, IntWritable.class, HashPartitioner.class);
+	    adsorption();
 	    
 		return 0;
 	}
@@ -97,8 +92,7 @@ public class Averaging extends Configured implements Tool {
 	 * @throws Exception 
 	 */
 	public static void main(String[] args) throws Exception {
-		// TODO Auto-generated method stub
-		int res = ToolRunner.run(new Configuration(), new Averaging(), args);
+		int res = ToolRunner.run(new Configuration(), new Adsorption(), args);
 	    System.exit(res);
 	}
 }

@@ -19,7 +19,7 @@
 package org.apache.hadoop.examples;
 import org.apache.hadoop.examples.dancing.DistributedPentomino;
 import org.apache.hadoop.examples.dancing.Sudoku;
-import org.apache.hadoop.examples.priorityiteration.Averaging;
+import org.apache.hadoop.examples.priorityiteration.Adsorption;
 import org.apache.hadoop.examples.priorityiteration.SSSP;
 import org.apache.hadoop.examples.priorityiteration.ConnectComponent;
 import org.apache.hadoop.examples.priorityiteration.Distributor;
@@ -80,9 +80,9 @@ public class ExampleDriver {
       pgd.addClass("teravalidate", TeraValidate.class, "Checking results of terasort");
       
       //for priority examples
-      pgd.addClass("shortestpath", SSSP.class, "single source shortest path");
+      pgd.addClass("sssp", SSSP.class, "single source shortest path");
       pgd.addClass("pagerank", PageRank.class, "pagerank");
-      pgd.addClass("averaging", Averaging.class, "averaging");
+      pgd.addClass("adsorption", Adsorption.class, "adsorption");
       pgd.addClass("conncomp", ConnectComponent.class, "conncomp");
       pgd.addClass("hittime", HittingTime.class, "hitting time");
       pgd.addClass("katz", Katz.class, "katz metric");

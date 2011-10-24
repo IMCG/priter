@@ -25,7 +25,6 @@ public class PageRankActivator extends PrIterBase implements
 	private String subGraphsDir;
 	private int iter = 0;
 	private int kvs = 0;				//for tracking
-	private float initvalue;
 	private int partitions;
 	
 	//graph in local memory
@@ -66,7 +65,6 @@ public class PageRankActivator extends PrIterBase implements
 	@Override
 	public void configure(JobConf job) {
 		int taskid = Util.getTaskId(job);
-		initvalue = PageRank.RETAINFAC;
 		partitions = job.getInt("priter.graph.partitions", 1);
 		loadGraphToMem(job, taskid);
 	}
@@ -74,7 +72,7 @@ public class PageRankActivator extends PrIterBase implements
 	@Override
 	public void initStarter(InputPKVBuffer<IntWritable, FloatWritable> starter) throws IOException {	
 		for(int k : linkList.keySet()){
-			starter.init(new IntWritable(k), new FloatWritable(initvalue));
+			starter.init(new IntWritable(k), new FloatWritable(PageRank.RETAINFAC));
 		}
 	}
 

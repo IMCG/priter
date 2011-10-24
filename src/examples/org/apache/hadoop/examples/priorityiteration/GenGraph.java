@@ -23,7 +23,7 @@ public class GenGraph extends Configured implements Tool {
 	public int run(String[] args) throws Exception {
 		
 		if (args.length != 6) {
-		      System.err.println("Usage: disgengraph <in> <outpath> <node num> <argument> <sp pg km> <partitions>");
+		      System.err.println("Usage: disgengraph <in> <outpath> <node num> <argument> <type> <partitions>");
 		      System.exit(2);
 		}
 		

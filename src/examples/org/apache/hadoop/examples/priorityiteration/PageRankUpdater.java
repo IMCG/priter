@@ -24,7 +24,6 @@ public class PageRankUpdater extends PrIterBase implements
 	private JobConf job;
 	private int workload = 0;
 	private int iterate = 0;
-	private float initvalue;
 
 	@Override
 	public void configure(JobConf job) {	
@@ -55,7 +54,7 @@ public class PageRankUpdater extends PrIterBase implements
 				int index = line.indexOf("\t");
 				if(index != -1){
 					int node = Integer.parseInt(line.substring(0, index));
-					stateTable.init(new IntWritable(node), new FloatWritable(0), new FloatWritable(initvalue));
+					stateTable.init(new IntWritable(node), new FloatWritable(0), new FloatWritable(PageRank.RETAINFAC));
 				}
 			}
 			reader.close();
