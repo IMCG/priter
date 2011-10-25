@@ -11,6 +11,7 @@ public class MainDriver {
 	public static final String VALUE_CLASS = "data.val.class";
 	
 	//for algorithms
+	public static final String START_NODE = "sssp.startnode";
 	public static final String KATZ_BETA = "katz.beta";
 	
 	//for gen graph

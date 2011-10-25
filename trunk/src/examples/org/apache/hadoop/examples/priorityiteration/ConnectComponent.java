@@ -1,6 +1,8 @@
 package org.apache.hadoop.examples.priorityiteration;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -23,6 +25,7 @@ public class ConnectComponent extends Configured implements Tool {
 	private int partitions;
 	private int topk;
 	private int exetop;
+	private long snapinterval = 5000;
 	private long stoptime;
 	
 	
@@ -32,6 +35,7 @@ public class ConnectComponent extends Configured implements Tool {
 	    job.setJobName(jobname);
        
 	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
+	    if(partitions == 0) partitions = Util.getTTNum(job);			//set default partitions = num of task trackers
 	    
 	    FileInputFormat.addInputPath(job, new Path(input));
 	    FileOutputFormat.setOutputPath(job, new Path(output));
@@ -40,7 +44,7 @@ public class ConnectComponent extends Configured implements Tool {
 	    //set for iterative process   
 	    job.setBoolean("priter.job", true);
 	    job.setInt("priter.graph.partitions", partitions);			//graph partitions
-	    job.setLong("priter.snapshot.interval", 5000);				//snapshot interval	
+	    job.setLong("priter.snapshot.interval", snapinterval);		//snapshot interval	
 	    job.setInt("priter.snapshot.topk", topk);					//topk
 	    job.setInt("priter.queue.uniqlength", exetop);				//execution queue
 	    job.setLong("priter.stop.maxtime", stoptime);				//termination check
@@ -61,22 +65,53 @@ public class ConnectComponent extends Configured implements Tool {
 	    JobClient.runJob(job);
 	    return 0;
 	}
+	
+	static int printUsage() {
+		System.out.println("conncomp [-p <partitions>] [-k <options>] [-qexlen <ex queue len>] " +
+				"[-i <snapshot interval>] [-t <termination time>] input output");
+		ToolRunner.printGenericCommandUsage(System.out);
+		return -1;
+	}
+	
 	@Override
 	public int run(String[] args) throws Exception {
-		if (args.length != 6) {
-		      System.err.println("Usage: conncomp <indir> <outdir> <partitions> <topk> <exetop> <stopttime>");
-		      System.exit(2);
-		}
+	    List<String> other_args = new ArrayList<String>();
+	    for(int i=0; i < args.length; ++i) {
+	      try {
+	        if ("-p".equals(args[i])) {
+	        	partitions = Integer.parseInt(args[++i]);
+	        } else if ("-k".equals(args[i])) {
+	        	topk = Integer.parseInt(args[++i]);
+	        } else if ("-q".equals(args[i])) {
+	        	exetop = Integer.parseInt(args[++i]);
+	        } else if ("-i".equals(args[i])) {
+	        	snapinterval = Long.parseLong(args[++i]);
+	        } else if ("-t".equals(args[i])) {
+	        	stoptime = Long.parseLong(args[++i]);
+	        } else {
+	          other_args.add(args[i]);
+	        }
+	      } catch (NumberFormatException except) {
+	        System.out.println("ERROR: Integer expected instead of " + args[i]);
+	        return printUsage();
+	      } catch (ArrayIndexOutOfBoundsException except) {
+	        System.out.println("ERROR: Required parameter missing from " +
+	                           args[i-1]);
+	        return printUsage();
+	      }
+	    }
+	    // Make sure there are exactly 2 parameters left.
+	    if (other_args.size() != 2) {
+	      System.out.println("ERROR: Wrong number of parameters: " +
+	                         other_args.size() + " instead of 2.");
+	      return printUsage();
+	    }
 	    
-		input = args[0];
-	    output = args[1];
-	    partitions = Integer.parseInt(args[2]);
-	    topk = Integer.parseInt(args[3]);
-	    exetop = Integer.parseInt(args[4]);
-	    stoptime = Long.parseLong(args[5]);
+	    input = other_args.get(0);
+	    output = other_args.get(1);
+	    subGraphDir = input + "_subgraph";
 	    
-	    subGraphDir = input + "/subgraph";
-	    new Distributor().partition(input, output, partitions, IntWritable.class, HashPartitioner.class);
+	    Distributor.partition(input, subGraphDir, partitions, IntWritable.class, HashPartitioner.class);
 	    conncomp();
 	    
 		return 0;

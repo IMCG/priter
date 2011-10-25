@@ -8,9 +8,11 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.examples.RandomWriter;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.lib.IdentityReducer;
@@ -46,6 +48,7 @@ public class GenGraph extends Configured implements Tool {
 	    job.setJarByClass(GenGraph.class);  
 	    job.setInputFormat(RandomWriter.RandomInputFormat.class);
 	    job.setOutputFormat(NullOutputFormat.class);
+	    FileOutputFormat.setOutputPath(job, new Path(output));
 	    
 	    job.setMapperClass(GenGraphMap.class);
 	    job.setReducerClass(IdentityReducer.class);
@@ -82,7 +85,7 @@ public class GenGraph extends Configured implements Tool {
 	        	nodes = Long.parseLong(args[++i]);
 	        } else if ("-t".equals(args[i])) {
 	        	graphtype = args[++i];
-	        	if(!graphtype.equals("weighted") || !graphtype.equals("unweighted")){
+	        	if(!graphtype.equals("weighted") && !graphtype.equals("unweighted")){
 	    	        System.out.println("ERROR: graph type should be weighted|unweighted");
 	    	        return printUsage();
 	        	}
@@ -113,7 +116,7 @@ public class GenGraph extends Configured implements Tool {
 	      return printUsage();
 	    }
 	    
-	    output = other_args.get(1);
+	    output = other_args.get(0);
 
 	    disgengraph();
 	    return 0;
