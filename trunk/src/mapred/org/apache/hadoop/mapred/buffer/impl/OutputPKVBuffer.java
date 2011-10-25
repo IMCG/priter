@@ -23,9 +23,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
+import org.apache.hadoop.io.Getable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.Valueable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileHandle;
 import org.apache.hadoop.mapred.IFile;
@@ -43,7 +44,7 @@ import org.apache.hadoop.mapred.buffer.OutputFile.Header;
 import org.apache.hadoop.util.Progress;
 
 
-public class OutputPKVBuffer<K extends Object, P extends WritableComparable, V extends Object> 
+public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Valueable> 
 		implements OutputCollector<K, V>{
 	
 	public int SAMPLESIZE;
@@ -638,23 +639,6 @@ public class OutputPKVBuffer<K extends Object, P extends WritableComparable, V e
 				FloatWritable iState = new FloatWritable(Float.parseFloat((field[2])));
 				FloatWritable cState = new FloatWritable(Float.parseFloat((field[3])));
 				stateTable.put(key, new PriorityRecord(pri, iState, cState));
-			}else if(valClass == Text.class){
-				if(priClass == IntWritable.class){
-					IntWritable pri = new IntWritable(Integer.parseInt(field[1]));
-					Text iState = new Text(field[2]);
-					Text cState = new Text(field[3]);
-					stateTable.put(key, new PriorityRecord(pri, iState, cState));
-				}else if(priClass == DoubleWritable.class){
-					DoubleWritable pri = new DoubleWritable(Double.parseDouble(field[1]));
-					Text iState = new Text(field[2]);
-					Text cState = new Text(field[3]);
-					stateTable.put(key, new PriorityRecord(pri, iState, cState));
-				}else if(priClass == FloatWritable.class){
-					FloatWritable pri = new FloatWritable(Float.parseFloat(field[1]));
-					Text iState = new Text(field[2]);
-					Text cState = new Text(field[3]);
-					stateTable.put(key, new PriorityRecord(pri, iState, cState));
-				}
 			}else{
 				throw new IOException(valClass + " not type matched");
 			}
@@ -675,7 +659,7 @@ public class OutputPKVBuffer<K extends Object, P extends WritableComparable, V e
 					V v = stateTable.get(k).getcState();
 					P pri = (P) updater.decideTopK(k, v);
 					writer.append(pri, k, stateTable.get(k).getcState());	
-					progress += ((FloatWritable)v).get();
+					progress += v.getV();
 				}
 			}else{
 				Random rand = new Random();
@@ -712,37 +696,22 @@ public class OutputPKVBuffer<K extends Object, P extends WritableComparable, V e
 						writer.append(pri, k, stateTable.get(k).getcState());
 						//writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");
 					}
-					progress += ((FloatWritable)v).get();
+					progress += v.getV();
 				}	
 			}
 		}	
 		writer.close();
 	}
 	
-  public double measureProgress(){
-    double progress = 0;
-    
-    if(valClass == FloatWritable.class){
-      float defaultV = ((FloatWritable)defaultiState).get();
-      for(K k : stateTable.keySet()){	
-          FloatWritable cstate = (FloatWritable)stateTable.get(k).getcState();
-          if(cstate.get() != defaultV) progress += cstate.get();
-      }
-    }else if(valClass == IntWritable.class){
-      int defaultV = ((IntWritable)defaultiState).get();
-      for(K k : stateTable.keySet()){	
-          IntWritable cstate = (IntWritable)stateTable.get(k).getcState();
-          if(cstate.get() != defaultV) progress += cstate.get();
-      }
-    }else if(valClass == DoubleWritable.class){
-      double defaultV = ((DoubleWritable)defaultiState).get();
-      for(K k : stateTable.keySet()){	
-          DoubleWritable cstate = (DoubleWritable)stateTable.get(k).getcState();
-          if(cstate.get() != defaultV) progress += cstate.get();
-      }
-    }
-    return progress;
-  }
+	public double measureProgress(){
+		double progress = 0;
+		double defaultV = defaultiState.getV();
+		for(K k : stateTable.keySet()){	
+			V cstate = stateTable.get(k).getcState();
+			if(cstate.getV() != defaultV) progress += cstate.getV();
+		}
+		return progress;
+	}
   
 	@Override
 	public String toString() {
