@@ -154,7 +154,6 @@ public class ReduceTask extends Task {
 		
 		private int partitions = 0;
 		private TaskUmbilicalProtocol trackerUmbilical;
-		private int lastiter = -1;
 		public boolean bRecompute = false;
 		
 		public snapshotThread(TaskUmbilicalProtocol umbilical, Task task) throws IOException {
@@ -180,7 +179,7 @@ public class ReduceTask extends Task {
 						if(!bRecompute){
 							LOG.info("pkvBuffer size " + pkvBuffer.size() + " index " + snapshotIndex + " total maps is " + pkvBuffer.total_map);
 							
-							while((pkvBuffer == null) || (pkvBuffer.size() == 0)){
+							while((pkvBuffer == null) || (pkvBuffer.size() == 0)){	
 								this.wait(500);
 							}
 							while(!pkvBuffer.start){
