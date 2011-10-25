@@ -17,11 +17,8 @@
  */
 package org.apache.hadoop.mapred;
 
-
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.BindException;
 import java.net.InetSocketAddress;
@@ -52,7 +49,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -64,7 +60,6 @@ import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.MapWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.serializer.Deserializer;
@@ -77,8 +72,6 @@ import org.apache.hadoop.mapred.JobHistory.Keys;
 import org.apache.hadoop.mapred.JobHistory.Listener;
 import org.apache.hadoop.mapred.JobHistory.Values;
 import org.apache.hadoop.mapred.JobStatusChangeEvent.EventType;
-import org.apache.hadoop.mapred.buffer.impl.KVRecord;
-import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 import org.apache.hadoop.mapred.monitor.MonitorServer;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.NetUtils;
@@ -121,7 +114,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   //for checking the snapshot completion event
   //integer: the iteration index
   //arraylist: contains snapshot from different tasktrackers
-  private Map<JobID, Map<Integer, Integer>> snapshotUpdateMap = new HashMap<JobID, Map<Integer, Integer>>();
+  private Map<JobID, Map<Integer, Long>> snapshotUpdateMap = new HashMap<JobID, Map<Integer, Long>>();
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
   private Map<JobID, Long> totalUpdates = new HashMap<JobID, Long>();
@@ -3256,7 +3249,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 	@Override
 	public synchronized void reportSnapshotCompletionEvent(SnapshotCompletionEvent event) throws IOException {
 		synchronized(snapshotCompletionMap){
-			//LOG.info("iam here, total reduces is " + this.totalReduces + " event is " + event);
+			LOG.info("iam here, total reduces is " + this.totalReduces + " event is " + event);
 			int snapshotIndex = event.getSnapshotIndex();
 			int iterIndex = event.getIterIndex();
 			int reduceIndex = event.getTaskIndex();
@@ -3271,7 +3264,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
 				this.snapshotCompletionMap.put(jobid, snapshotComplete);
 				this.totalUpdates.put(jobid, (long)0);
-				Map<Integer, Integer> snapshotupdate = new HashMap<Integer, Integer>();
+				Map<Integer, Long> snapshotupdate = new HashMap<Integer, Long>();
 				this.snapshotUpdateMap.put(jobid, snapshotupdate);
 				
 				JobConf job = jobs.get(jobid).getJobConf();
@@ -3282,7 +3275,6 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				LOG.info("put merger for job " + jobid);
 
 				HashMap<Integer, Double> iterProgress = new HashMap<Integer, Double>();
-				iterProgress.put(snapshotIndex, 0.0);
 				iterProgresses.put(jobid, iterProgress);
 			}
 			
@@ -3338,8 +3330,8 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						double curr = iterProgresses.get(jobid).get(snapshotIndex);
 						Double last = iterProgresses.get(jobid).get(snapshotIndex-1);
 						if(last == null) last = Double.MAX_VALUE;
-						double delta = last - curr;
-						LOG.info("curr obj is " + curr + " delta obj is " + delta);
+						double delta = Math.abs(last - curr);
+						LOG.info("curr iteration progress is " + curr + " progress difference is " + delta);
 						
 						if(Math.abs(delta) <= threshold){
 							LOG.info("OK, let kill job");
@@ -3348,18 +3340,16 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 					}
 				}
 			}else{
-        
 				ArrayList<Integer> tasks = new ArrayList<Integer>();
 				
 				if(taskReAssign && snapshotIndex > checkpointSnapshot + 1){
 					LOG.info("I am doing migration, the late coming snapshot is omit");
 					return;
 				}else{
-					iterProgresses.get(jobid).put(snapshotIndex, 0.0);
-					
-					this.snapshotCompletionMap.get(jobid).put(snapshotIndex, tasks);						
-					this.snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
-					this.snapshotUpdateMap.get(jobid).put(snapshotIndex, 0);
+					iterProgresses.get(jobid).put(snapshotIndex, local_progress);
+					snapshotCompletionMap.get(jobid).put(snapshotIndex, tasks);						
+					snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
+					snapshotUpdateMap.get(jobid).put(snapshotIndex, part_updates);
           
 					if(!jobs.get(jobid).getJobConf().getBoolean("priter.snapshot", true)) return;
           

@@ -200,7 +200,9 @@ public class ReduceTask extends Task {
 							boolean update = true;
 							if(pkvBuffer.iteration == lastiter){
 								update = false;
-							}
+							}else{
+								lastiter = pkvBuffer.iteration;
+							}						
 							
 							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, total_updates, local_progress, getJobID());
 							try {
@@ -210,7 +212,6 @@ public class ReduceTask extends Task {
 							}
 							
 							pkvBuffer.progress = 0;
-							lastiter = pkvBuffer.iteration;
 							snapshotIndex++;	
 						}else{
 							bRecompute = false;
