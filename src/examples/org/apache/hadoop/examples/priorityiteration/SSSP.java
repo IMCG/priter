@@ -47,7 +47,7 @@ public class SSSP extends Configured implements Tool {
 	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
 	    job.setLong("priter.snapshot.interval", snapinterval);			//snapshot interval	 
 	    job.setInt("priter.snapshot.topk", topk);						//topk 
-	    job.setInt("priter.queue.lenth", queuelen);						//execution queue
+	    job.setInt("priter.queue.length", queuelen);						//execution queue
 	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
 	    
 	    job.setJarByClass(SSSP.class);
