@@ -12,18 +12,16 @@ public class SnapshotCompletionEvent implements Writable {
 	int snaphostIndex = 0;
 	int iterIndex = 0;
 	int tasktrackerIndex = 0;
-	boolean update = true;
 	long total_updates = 0;
 	double local_progress = 0;
 	JobID jobID = new JobID();
 	
 	public SnapshotCompletionEvent() {};
 	
-	public SnapshotCompletionEvent(int snapshotindex, int iterindex, int index, boolean update, long updates, double totalF2, JobID jobid) {
+	public SnapshotCompletionEvent(int snapshotindex, int iterindex, int index, long updates, double totalF2, JobID jobid) {
 		this.snaphostIndex = snapshotindex;
 		this.iterIndex = iterindex;
 		this.tasktrackerIndex = index;
-		this.update = update;
 		this.total_updates = updates;
 		this.local_progress = totalF2;
 		this.jobID = jobid;
@@ -39,10 +37,6 @@ public class SnapshotCompletionEvent implements Writable {
 	
 	public int getTaskIndex() {
 		return this.tasktrackerIndex;
-	}
-	
-	public boolean getUpdate(){
-		return this.update;
 	}
 	
 	public long getPartialUpdates(){
@@ -62,7 +56,6 @@ public class SnapshotCompletionEvent implements Writable {
 		this.snaphostIndex = in.readInt();
 		this.iterIndex = in.readInt();
 		this.tasktrackerIndex = in.readInt();
-		this.update = in.readBoolean();
 		this.total_updates = in.readLong();
 		this.local_progress = in.readDouble();
 		this.jobID.readFields(in);
@@ -73,7 +66,6 @@ public class SnapshotCompletionEvent implements Writable {
 		out.writeInt(this.snaphostIndex);
 		out.writeInt(this.iterIndex);
 		out.writeInt(this.tasktrackerIndex);
-		out.writeBoolean(this.update);
 		out.writeLong(this.total_updates);
 		out.writeDouble(this.local_progress);
 		this.jobID.write(out);
