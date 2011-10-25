@@ -21,7 +21,7 @@ package org.apache.hadoop.io;
 import java.io.*;
 
 /** A WritableComparable for floats. */
-public class FloatWritable implements WritableComparable {
+public class FloatWritable implements Valueable {
   private float value;
 
   public FloatWritable() {}
@@ -33,6 +33,8 @@ public class FloatWritable implements WritableComparable {
 
   /** Return the value of this FloatWritable. */
   public float get() { return value; }
+  
+  public double getV() {return value;}
 
   public void readFields(DataInput in) throws IOException {
     value = in.readFloat();

@@ -21,7 +21,7 @@ package org.apache.hadoop.io;
 import java.io.*;
 
 /** A WritableComparable for ints. */
-public class IntWritable implements WritableComparable {
+public class IntWritable implements Valueable {
   private int value;
 
   public IntWritable() {}
@@ -33,6 +33,8 @@ public class IntWritable implements WritableComparable {
 
   /** Return the value of this IntWritable. */
   public int get() { return value; }
+  
+  public double getV() { return value; }
 
   public void readFields(DataInput in) throws IOException {
     value = in.readInt();
