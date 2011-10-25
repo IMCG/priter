@@ -70,7 +70,7 @@ public class PageRank extends Configured implements Tool {
 	}
 	
 	static int printUsage() {
-		System.out.println("pagerank [-p <partitions>] [-k <options>] [-q qportion] " +
+		System.out.println("pagerank [-p <partitions>] [-k <options>] [-q <qportion>] " +
 				"[-i <snapshot interval>] [-t <termination threshod>] input output");
 		ToolRunner.printGenericCommandUsage(System.out);
 		return -1;

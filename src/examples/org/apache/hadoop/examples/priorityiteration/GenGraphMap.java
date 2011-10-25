@@ -12,7 +12,6 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -22,7 +21,7 @@ import org.apache.hadoop.mapred.Reporter;
 
 
 public class GenGraphMap extends MapReduceBase implements
-		Mapper<LongWritable, Text, IntWritable, Text> {
+		Mapper<Text, Text, IntWritable, Text> {
 
 	private int capacity;
 	private int subcapacity;
@@ -62,7 +61,7 @@ public class GenGraphMap extends MapReduceBase implements
 	}
 	
 	@Override
-	public void map(LongWritable key, Text value,
+	public void map(Text key, Text value,
 			OutputCollector<IntWritable, Text> output, Reporter reporter)
 			throws IOException {
 		
