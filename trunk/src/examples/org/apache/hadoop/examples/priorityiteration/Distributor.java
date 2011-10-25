@@ -18,7 +18,7 @@ import org.apache.hadoop.mapred.lib.NullOutputFormat;
 
 
 public class Distributor {
-	public int partition(String input, String output, int numparts, Class<? extends WritableComparable> keyclass, Class<? extends Partitioner> partitionclass) throws Exception {
+	public static int partition(String input, String output, int numparts, Class<? extends WritableComparable> keyclass, Class<? extends Partitioner> partitionclass) throws Exception {
 	    
 	    JobConf job = new JobConf(new Configuration());
 	    String jobname = "distribute input data";
@@ -46,8 +46,6 @@ public class Distributor {
 	    job.setOutputKeyClass(NullWritable.class);
 	    job.setOutputValueClass(NullWritable.class);
 	    job.setPartitionerClass(partitionclass);
-	    
-	    job.setInt("mapred.iterative.partitions", numparts);   
 	    
 	    job.setNumMapTasks(numparts*2);
 	    job.setNumReduceTasks(numparts);
