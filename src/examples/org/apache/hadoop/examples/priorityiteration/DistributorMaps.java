@@ -14,10 +14,8 @@ import org.apache.hadoop.mapred.Reporter;
 
 public class DistributorMaps {
 	
-	class IntMap extends MapReduceBase implements 
+	static class IntMap extends MapReduceBase implements 
 			Mapper<Text, Text, IntWritable, Text> {
-		public IntMap(){}
-		
 		@Override
 		public void map(Text key, Text value,
 				OutputCollector<IntWritable, Text> output, Reporter report)
@@ -26,7 +24,7 @@ public class DistributorMaps {
 		}
 	}
 	
-	class FloatMap extends MapReduceBase implements 
+	static class FloatMap extends MapReduceBase implements 
 			Mapper<Text, Text, FloatWritable, Text> {
 		@Override
 		public void map(Text key, Text value,
@@ -36,7 +34,7 @@ public class DistributorMaps {
 		}
 	}
 	
-	class DoubleMap extends MapReduceBase implements 
+	static class DoubleMap extends MapReduceBase implements 
 			Mapper<Text, Text, DoubleWritable, Text> {
 		@Override
 		public void map(Text key, Text value,
@@ -46,7 +44,7 @@ public class DistributorMaps {
 		}
 	}
 	
-	class TextMap extends MapReduceBase implements 
+	static class TextMap extends MapReduceBase implements 
 			Mapper<Text, Text, Text, Text> {
 		@Override
 		public void map(Text key, Text value,
