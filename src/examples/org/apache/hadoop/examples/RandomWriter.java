@@ -93,7 +93,7 @@ public class RandomWriter extends Configured implements Tool {
    * A custom input format that creates virtual inputs of a single string
    * for each map.
    */
-  static class RandomInputFormat implements InputFormat<Text, Text> {
+  public static class RandomInputFormat implements InputFormat<Text, Text> {
 
     /** 
      * Generate the requested number of file splits, with the filename
