@@ -187,24 +187,17 @@ public class ReduceTask extends Task {
 								this.wait(500);
 							}
 							
-			              double local_progress = 0;
-			              if(conf.getBoolean("priter.snapshot", true)){
-					          //snapshot generation
-					          pkvBuffer.snapshot(snapshotIndex);
-					          local_progress = pkvBuffer.progress;
-			              }else{
-			            	  local_progress = pkvBuffer.measureProgress();
-			              }
-			              long total_updates = pkvBuffer.total_map;
-							
-							boolean update = true;
-							if(pkvBuffer.iteration == lastiter){
-								update = false;
+							double local_progress = 0;
+							if(conf.getBoolean("priter.snapshot", true)){
+								//snapshot generation
+								pkvBuffer.snapshot(snapshotIndex);
+								local_progress = pkvBuffer.progress;
 							}else{
-								lastiter = pkvBuffer.iteration;
-							}						
+								local_progress = pkvBuffer.measureProgress();
+							}
+							long total_updates = pkvBuffer.total_map;					
 							
-							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, update, total_updates, local_progress, getJobID());
+							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, total_updates, local_progress, getJobID());
 							try {
 								this.trackerUmbilical.snapshotCommit(event);
 							} catch (Exception e) {

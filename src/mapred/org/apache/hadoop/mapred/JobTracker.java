@@ -111,16 +111,29 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
   
   private MonitorServer monitor;
   
+  /******* data structures for termination check and snapshot generation *******/
   //for checking the snapshot completion event
   //integer: the iteration index
   //arraylist: contains snapshot from different tasktrackers
-  private Map<JobID, Map<Integer, Long>> snapshotUpdateMap = new HashMap<JobID, Map<Integer, Long>>();
   private Map<JobID, Map<Integer, ArrayList<Integer>>> snapshotCompletionMap = 
 	  new HashMap<JobID, Map<Integer, ArrayList<Integer>>>();
+  
+  //for checking whether the iteration index is updated, 
+  //help termination check, only consider difference between two changed iteration progresses
+  private Map<JobID, Map<Integer, Integer>> itersMap = new HashMap<JobID, Map<Integer, Integer>>();
+  private Map<JobID, Integer> changedProgresses = new HashMap<JobID, Integer>();
+  private int trials = 0;
+  
+  //track the total number of updates
   private Map<JobID, Long> totalUpdates = new HashMap<JobID, Long>();
+  
+  //record the local iteration progresses collected from workers
   private Map<JobID, HashMap<Integer, Double>> iterProgresses = new HashMap<JobID, HashMap<Integer, Double>>();
+  
+  //TopK snapshot mergers for different jobs
   private Map<JobID, Merger> mergerMap = new HashMap<JobID, Merger>();
-  //private Map<JobID, Map<Integer, WritableComparable>> priorityTotal = new HashMap<JobID, Map<Integer, WritableComparable>>();
+  
+  //for fault tolerance
   private Map<JobID, Boolean> SnapshotIndexChanged = new HashMap<JobID, Boolean>();
   
   public boolean taskReAssign = false;
@@ -3253,19 +3266,19 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 			int snapshotIndex = event.getSnapshotIndex();
 			int iterIndex = event.getIterIndex();
 			int reduceIndex = event.getTaskIndex();
-			boolean update = event.getUpdate();
 			long part_updates = event.getPartialUpdates();
 			double local_progress = event.getLocalProgress();
 			JobID jobid = event.getJobID();
 			
-			LOG.info("index " + snapshotIndex + " from " + reduceIndex + " localprogress is " + local_progress + " update " + update);
+			LOG.info("index " + snapshotIndex + " from " + reduceIndex + " localprogress is " + local_progress);
 			
 			if(this.snapshotCompletionMap.get(jobid) == null){			
 				Map<Integer, ArrayList<Integer>> snapshotComplete = new HashMap<Integer, ArrayList<Integer>>();
 				this.snapshotCompletionMap.put(jobid, snapshotComplete);
 				this.totalUpdates.put(jobid, (long)0);
-				Map<Integer, Long> snapshotupdate = new HashMap<Integer, Long>();
-				this.snapshotUpdateMap.put(jobid, snapshotupdate);
+				Map<Integer, Integer> iterIndexes = new HashMap<Integer, Integer>();
+				this.itersMap.put(jobid, iterIndexes);
+				this.changedProgresses.put(jobid, 0);
 				
 				JobConf job = jobs.get(jobid).getJobConf();
 				Class priClass = job.getPriorityClass();
@@ -3278,13 +3291,21 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				iterProgresses.put(jobid, iterProgress);
 			}
 			
+			//track the iter index from different workers
+			if(itersMap.get(jobid).get(reduceIndex) == null){
+				itersMap.get(jobid).put(reduceIndex, iterIndex);
+			}
+			if(itersMap.get(jobid).get(reduceIndex) != iterIndex){
+				//changed iteration
+				itersMap.get(jobid).put(reduceIndex, iterIndex);
+				changedProgresses.put(jobid, changedProgresses.get(jobid)+1);
+			}
+			
 			if(this.snapshotCompletionMap.get(jobid).containsKey(snapshotIndex)){
 				if(this.snapshotCompletionMap.get(jobid).get(snapshotIndex).contains(reduceIndex)){
 					LOG.info("duplicated reduce task index " + reduceIndex);
 				}
 				
-				if(update)  this.snapshotUpdateMap.get(jobid).put(snapshotIndex, this.snapshotUpdateMap.get(jobid).get(snapshotIndex)+1);
-
 				snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
 				if(jobs.get(jobid).getJobConf().getBoolean("priter.snapshot", true))
 					this.mergerMap.get(jobid).mergeTopKFile(snapshotIndex, reduceIndex);
@@ -3331,10 +3352,24 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 						Double last = iterProgresses.get(jobid).get(snapshotIndex-1);
 						if(last == null) last = Double.MAX_VALUE;
 						double delta = Math.abs(last - curr);
-						LOG.info("curr iteration progress is " + curr + " progress difference is " + delta);
+						LOG.info("curr iteration progress is " + curr + " progress difference is " + delta + " changed progress " + changedProgresses.get(jobid));
 						
-						if(Math.abs(delta) <= threshold){
-							LOG.info("OK, let kill job");
+						// only when get more than (total workers / 2) updated progresses, we consider termination
+						if (changedProgresses.get(jobid) > totalReduces / 2) {
+							if(Math.abs(delta) <= threshold){
+								LOG.info("OK, let kill job");
+								completeJob(jobid);
+							}
+							trials = 0;
+						}else{
+							trials++;
+						}
+						changedProgresses.put(jobid, 0);
+						
+						//snapshot generation interval too small, always fail to perform termination check
+						if(trials > 10){
+							LOG.info("please increase the snapshot generation interval to ensure" +
+									"in a singal interval one iteration can be performed");
 							completeJob(jobid);
 						}
 					}
@@ -3348,8 +3383,7 @@ public class JobTracker implements MRConstants, InterTrackerProtocol,
 				}else{
 					iterProgresses.get(jobid).put(snapshotIndex, local_progress);
 					snapshotCompletionMap.get(jobid).put(snapshotIndex, tasks);						
-					snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);
-					snapshotUpdateMap.get(jobid).put(snapshotIndex, part_updates);
+					snapshotCompletionMap.get(jobid).get(snapshotIndex).add(reduceIndex);					
           
 					if(!jobs.get(jobid).getJobConf().getBoolean("priter.snapshot", true)) return;
           
