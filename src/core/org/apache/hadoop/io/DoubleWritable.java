@@ -25,7 +25,7 @@ import java.io.IOException;
 /**
  * Writable for Double values.
  */
-public class DoubleWritable implements WritableComparable {
+public class DoubleWritable implements Valueable {
 
   private double value = 0.0;
   
@@ -48,6 +48,8 @@ public class DoubleWritable implements WritableComparable {
   public void set(double value) { this.value = value; }
   
   public double get() { return value; }
+  
+  public double getV() { return value; }
 
   /**
    * Returns true iff <code>o</code> is a DoubleWritable with the same value.
