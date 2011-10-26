@@ -21,7 +21,7 @@ import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 
 
 public class SSSPActivator extends PrIterBase implements 
-	Activator<IntWritable, IntWritable, IntWritable> {
+	Activator<IntWritable, FloatWritable, FloatWritable> {
 	
 	private String subGraphsDir;
 	private int partitions;
@@ -34,9 +34,9 @@ public class SSSPActivator extends PrIterBase implements
 
 	private class Link{
 		int node;
-		int weight;
+		float weight;
 		
-		public Link(int n, int w){
+		public Link(int n, float w){
 			node = n;
 			weight = w;
 		}
@@ -70,7 +70,7 @@ public class SSSPActivator extends PrIterBase implements
 						String link = st.nextToken();
 						//System.out.println(link);
 						String item[] = link.split(",");
-						Link l = new Link(Integer.parseInt(item[0]), Integer.parseInt(item[1]));
+						Link l = new Link(Integer.parseInt(item[0]), Float.parseFloat(item[1]));
 						links.add(l);
 					}
 
@@ -92,13 +92,13 @@ public class SSSPActivator extends PrIterBase implements
 	}
 	
 	@Override
-	public void activate(IntWritable key, IntWritable value,
-			OutputCollector<IntWritable, IntWritable> output, Reporter report)
+	public void activate(IntWritable key, FloatWritable value,
+			OutputCollector<IntWritable, FloatWritable> output, Reporter report)
 			throws IOException {
 		kvs++;
 		report.setStatus(String.valueOf(kvs));
 
-		int distance = value.get();
+		float distance = value.get();
 		if(distance != Integer.MAX_VALUE){	
 			int node = key.get();
 			ArrayList<Link> links = null;
@@ -107,25 +107,25 @@ public class SSSPActivator extends PrIterBase implements
 			if(links == null) {
 				System.out.println("no links for node " + node);
 				for(int i=0; i<partitions; i++){
-					output.collect(new IntWritable(i), new IntWritable(Integer.MAX_VALUE));
+					output.collect(new IntWritable(i), new FloatWritable(Float.MAX_VALUE));
 				}
 				return;
 			}
 				
 			for(Link l : links){				
-				output.collect(new IntWritable(l.node), new IntWritable(distance + l.weight));
+				output.collect(new IntWritable(l.node), new FloatWritable(distance + l.weight));
 			}
 		} else{
 			for(int i=0; i<partitions; i++){
-				output.collect(new IntWritable(i), new IntWritable(Integer.MAX_VALUE));
+				output.collect(new IntWritable(i), new FloatWritable(Float.MAX_VALUE));
 			}			
 		}
 	}
 
 	@Override
-	public void initStarter(InputPKVBuffer<IntWritable, IntWritable> starter)
+	public void initStarter(InputPKVBuffer<IntWritable, FloatWritable> starter)
 			throws IOException {
-		starter.init(new IntWritable(startnode), new IntWritable(0));
+		starter.init(new IntWritable(startnode), new FloatWritable(0));
 	}
 
 	@Override

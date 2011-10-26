@@ -3,10 +3,12 @@ package org.apache.hadoop.examples.priorityiteration;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.StringTokenizer;
 
+import org.apache.hadoop.examples.priorityiteration.AdsorptionActivator.LinkWeight;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -44,7 +46,7 @@ public class AdsorptionUpdater extends PrIterBase implements
 			OutputPKVBuffer<IntWritable, DoubleWritable, DoubleWritable> stateTable) {
 		String subGraphsDir = job.get(MainDriver.SUBGRAPH_DIR);
 		int taskid = Util.getTaskId(job);
-		Path remote_link = new Path(subGraphsDir + "/part-" + taskid);
+		Path remote_link = new Path(subGraphsDir + "/part" + taskid);
 		double initvalue = Adsorption.RETAINFAC * 10000;
 		
 		FileSystem hdfs = null;
@@ -58,21 +60,19 @@ public class AdsorptionUpdater extends PrIterBase implements
 				int index = line.indexOf("\t");
 				if(index != -1){
 					int node = Integer.parseInt(line.substring(0, index));
-					int index2 = line.indexOf(":");
-					if(index2 != -1){
-						String linkstring = line.substring(index2+1);
-						double weight = 0.0;
-						StringTokenizer st = new StringTokenizer(linkstring);
-						while(st.hasMoreTokens()){
-							String[] field = st.nextToken().split(",");
-							weight += Double.parseDouble(field[1]);
-						}
-						this.weightMap.put(node, weight);	
-						stateTable.init(new IntWritable(node), new DoubleWritable(0), new DoubleWritable(initvalue));
-					}				
+					
+					double weight = 0.0;
+					String linkstring = line.substring(index+1);
+					StringTokenizer st = new StringTokenizer(linkstring);
+					while(st.hasMoreTokens()){
+						String link = st.nextToken();
+						String field[] = link.split(",");
+						weight += Double.parseDouble(field[1]);
+					}
+					this.weightMap.put(node, weight);	
+					stateTable.init(new IntWritable(node), new DoubleWritable(0), new DoubleWritable(initvalue));
 				}
 			}
-			
 			reader.close();
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -97,13 +97,7 @@ public class AdsorptionUpdater extends PrIterBase implements
 	
 	@Override
 	public DoubleWritable decideTopK(IntWritable key, DoubleWritable cState) {
-		Double weight = weightMap.get(key.get());
-		if(weight == null){
-			System.out.println(key + "\tnull");
-			return new DoubleWritable(0.0);
-		}else{
-			return new DoubleWritable(cState.get());
-		}	
+		return new DoubleWritable(cState.get());	
 	}
 
 	@Override

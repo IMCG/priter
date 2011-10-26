@@ -7,6 +7,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
@@ -54,10 +55,10 @@ public class SSSP extends Configured implements Tool {
 	    job.setActivatorClass(SSSPActivator.class);	
 	    job.setUpdaterClass(SSSPUpdater.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
-	    job.setMapOutputValueClass(IntWritable.class);
+	    job.setMapOutputValueClass(FloatWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
-	    job.setOutputValueClass(IntWritable.class);
-	    job.setPriorityClass(IntWritable.class);    
+	    job.setOutputValueClass(FloatWritable.class);
+	    job.setPriorityClass(FloatWritable.class);    
 
 	    job.setNumMapTasks(partitions);
 	    job.setNumReduceTasks(partitions);

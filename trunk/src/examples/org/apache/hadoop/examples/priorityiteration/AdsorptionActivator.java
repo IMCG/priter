@@ -42,7 +42,7 @@ public class AdsorptionActivator extends PrIterBase implements
 	 
 	private synchronized void loadGraphToMem(JobConf conf, int n) {
 		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
-		Path remote_link = new Path(subGraphsDir + "/part-" + n);
+		Path remote_link = new Path(subGraphsDir + "/part" + n);
 		
 		FileSystem hdfs = null;
 		try{
@@ -55,23 +55,22 @@ public class AdsorptionActivator extends PrIterBase implements
 				int index = line.indexOf("\t");
 				if(index != -1){
 					String node = line.substring(0, index);
-					int index2 = line.indexOf(":");
-					if(index2 != -1){
-						String linkstring = line.substring(index2+1);
-						ArrayList<LinkWeight> links = new ArrayList<LinkWeight>();
-						StringTokenizer st = new StringTokenizer(linkstring);
-						while(st.hasMoreTokens()){
-							String[] field = st.nextToken().split(",");
-							int linkend = Integer.parseInt(field[0]);
-							double weight = Double.parseDouble(field[1]);
-							LinkWeight linkweight = new LinkWeight(linkend, weight);
-							links.add(linkweight);
-						}
-						
-						this.linkList.put(Integer.parseInt(node), links);
-					}		
+					
+					String linkstring = line.substring(index+1);
+					ArrayList<LinkWeight> links = new ArrayList<LinkWeight>();
+					StringTokenizer st = new StringTokenizer(linkstring);
+					while(st.hasMoreTokens()){
+						String link = st.nextToken();
+						//System.out.println(link);
+						String item[] = link.split(",");
+						LinkWeight l = new LinkWeight(Integer.parseInt(item[0]), Double.parseDouble(item[1]));
+						links.add(l);
+					}
+
+					this.linkList.put(Integer.parseInt(node), links);
 				}
 			}
+			reader.close();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}

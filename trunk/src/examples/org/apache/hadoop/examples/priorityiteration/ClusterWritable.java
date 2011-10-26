@@ -4,9 +4,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import org.apache.hadoop.io.Valueable;
 import org.apache.hadoop.io.WritableComparable;
 
-public class ClusterWritable implements WritableComparable {
+public class ClusterWritable implements Valueable {
 	
 	  public int nodeid;
 	  public int clusterid;
@@ -69,6 +70,12 @@ public class ClusterWritable implements WritableComparable {
 	public int compareTo(Object o) {
 		ClusterWritable other = (ClusterWritable)o;
 		return (this.addvalue < other.addvalue ? -1 : (this.addvalue == other.addvalue ? 0 : 1));
+	}
+
+	@Override
+	public double getV() {
+		// TODO Auto-generated method stub
+		return clusterid*7+nodeid;
 	}
 
 	}
