@@ -1,50 +1,32 @@
 #! bin/bash
+# Run this shell script to perform Katz metric computation on PrIter
 
-HADOOP=/mnt/data/yzhang/hadoop-priter-0.1/bin/hadoop
+HADOOP=../bin/hadoop
+JAR=../hadoop-priter-0.1-examples.jar
 
-WORK_DIR=IterativeKaz
-
-#LOCAL_GRAPH=datasets/av_youtube_graph
-#NODE=651805
-
-#LOCAL_GRAPH=datasets/av_amazon_graph
-#NODE=403394
-
-LOCAL_GRAPH=datasets/kaz_facebook_graph
-NODE=319675
-
-
-#LOCAL_GRAPH=datasets/test
-#NODE=4
-
-#NODE=200000
-
-GRAPH=kaz_dataset/trans/iterativeTrans
-#RANK=${WORK_DIR}/$LOCAL_RANK
-IN=${WORK_DIR}/in
-OUT=${WORK_DIR}/out
-
-STARTNODE=8
-TOP_K=319675
+INPUT=katz_dataset		
+OUTPUT=katz_result
 PARTITIONS=4
-ALPHA=$1
-STOPTHRESHOLD=1
+TOP_K=1000
+QPORTION=1
 BETA=0.15
-ASYNC=true
-PRIEXE=true
+INTERVAL=10000
+STOPTHRESHOLD=1	
 
-: <<'END'
-$HADOOP dfs -rmr $WORK_DIR
-$HADOOP dfs -rmr $GRAPH
-$HADOOP dfs -put $LOCAL_GRAPH $GRAPH
-$HADOOP jar iterativeMR.jar preprocess $GRAPH ${WORK_DIR}/subgraphs $PARTITIONS $NODE false
-sleep 10
-$HADOOP dfs -put temp $IN
-END
+# for synthetic data input, you should use gendata.sh to generate some synthetic dataset. Note that you should make # of nodes|# of partitions|data dir consistent.
+#INPUT=synthetic_data	
 
-$HADOOP dfs -rmr $OUT		
-$HADOOP jar iterativeMR.jar kaz $IN $OUT ${WORK_DIR}/subgraphs $PARTITIONS $TOP_K $NODE $STARTNODE $ALPHA $STOPTHRESHOLD $ASYNC $PRIEXE $BETA
+# for real data, you should download them and upload them to HDFS first
+# facebook user  graph (http://rio.ecs.umass.edu/~yzhang/data/katz_facebook_graph)
+LOCAL_DATA=katz_facebook_graph
 
 
-#for synthetic graph
-#$HADOOP jar iterativeMR.jar pagerank $IN $OUT $GRAPH $PARTITIONS $TOP_K $NODE $STARTNODE $ALPHA $STOPTHRESHOLD
+# upload the real dataset to HDFS, it is unnecessary for the synthetic dataset
+$HADOOP dfs -rmr $INPUT
+$HADOOP dfs -put $LOCAL_DATA $INPUT
+
+
+$HADOOP dfs -rmr $OUTPUT		# remove the existed output
+
+# perform katz computation	
+$HADOOP jar $JAR katz -p $PARTITIONS -k $TOP_K -q $QPORTION -beta $BETA -i $INTERVAL -t $STOPTHRESHOLD $INPUT $OUTPUT 
