@@ -2,12 +2,34 @@
 
 = Introduction =
 
-Add your content here.
+Iterative computations are common in myriad of data mining algorithms. The massive amount of data involved in these computations exacerbates the need for a computing cloud and a distributed framework that supports fast iterative computation. MapReduce, which powered cloud computing, is such a framework that supports data processing of massive scale. Further, a series of frameworks have been proposed for iterative computation. In particular, all of the previously proposed frameworks assume that the iterative update is equally important for all data.
 
+However, in reality, selectively processing some portions of the data first has the potential of accelerating the iterative process, rather than simply performing a series of iterations over all the data. Some of the data points play an important decisive role in determining the final converged outcome. By giving an execution priority to some of the data, the iterative process can potentially converge fast. For example, the well-known shortest path algorithm, Dijkstra's algorithm, greedily expands the node with the shortest distance first. This will not only derive the shortest distance for all nodes fast but also be able to quickly return the nearest nodes. Unfortunately, neither MapReduce nor any existing distributed computing framework provides the support of prioritized execution.
 
-= Details =
+PrIter is such a distributed framework that supports the prioritized execution of iterative computations. To realize prioritized execution, PrIter allows users to explicitly specify the priority value of each processing data point. 
 
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+= Design and Implementation =
+
+First, we describe the requirements of a framework that supports prioritized iterative computations:
+
+ *  The framework needs to support iterative processing. Iterative algorithms perform the same computation in each iteration, and the state from the previous iteration has to be passed to the next iteration efficiently.
+ * The framework needs to support state maintenance across iterations. In MapReduce, only the previous iteration's result is needed for the next iteration's computation, while in PrIter the intermediate iteration state should be maintained across iterations due to the selective update operations.
+ * The framework needs to support prioritized execution. That is, an efficient selection of the high priority data should be provided.
+\end{enumerate}
+
+== Iterative Processing ==
+
+PrIter incorporates the support of [http://code.google.com/p/i-mapreduce/ iMapReduce] for iterative processing. iMapReduce following MapReduce paradigm directly passes the reduce output to the map for the next iteration, rather than writing output to distributed file system (DFS). Figure \ref{fig:imr} shows the overall iterative processing structure.
+
+<img src="http://rio.ecs.umass.edu/~yzhang/pic/imr.bmp " width=300/>
+
+We separate the data flow into two sub data flows according to their variability features, including the static data flow and the state data flow. The static data (e.g., the graph structure) keeps unchanged over iterations, which is used in the map function for exchanging information between neighboring nodes. While the state data (e.g., the iterated shortest distance or the PageRank score) is updated every iteration, which indicates the node state. The static graph data and the initial state data are partitioned and preloaded to workers, and the framework will join the static data with the state data before map operation.
+
+Under the modified MapReduce framework, we can focus on updating the state data through map and reduce functions on the key-value pairs. Each \emph{key} represents a node id, and the associated \emph{value} is the node state that is updated every iteration (e.g., the PageRank score of a webpage). In addition, each node has information that is static across iterations (e.g., the node linkage information), which is also indexed by node ids ($nid$). A hash function $F$ applying on the keys/nodes is used to split the static graph data and the initial node state data evenly into $n$ partitions according to:
+\begin{equation}
+\label{eq:partition}
+pid=F(nid, n),
+\end{equation}
+where $pid$ is a partition id. These partitions are assigned to different workers by the master. Each worker can hold one or more partitions.
+
+A map task with map task id $pid$ is assigned for processing partition $pid$, and the output $\langle$key, value$\rangle$/$\langle$node, state$\rangle$ pairs of the map task are shuffled to the reduce tasks according to the same hash function, $F$. Accordingly, a reduce task with reduce task id $pid$ is assigned by the task scheduler to connect to the map task with map task id $pid$ in the same worker, by which we establish a local reduce-to-map connection. The reduce merges the results from various maps to update a node's state, and its output $\langle$node, state$\rangle$ pairs are directed to the connected map as the map's input. By using the same hash function $F$ for partitioning and shuffling, a node's static data (e.g., neighbors in the web graph) and its dynamic state are always joined in the same map task. Therefore, a paired map and reduce tasks always operate on the same subset of keys/nodes. We refer to the paired map/reduce task as \emph{MRPair}. These tasks are persistent tasks that keep alive during the entire iterative process and maintain the intermediate iteration state. In summary, each MRPair performs the iterative computation on a data partition, and the necessary information exchange between MRPairs occurs during the maps-to-reduces shuffling.
