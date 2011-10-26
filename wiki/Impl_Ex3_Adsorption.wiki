@@ -11,138 +11,339 @@ node, it iteratively computes the weighted average of label distributions from i
 
 *_Activator_* 
 {{{
-public class AdsorptionActivator extends PrIterBase implements Activator<MapWritable> {
-    private HashMap<Integer, Link> graph;
-    private HashMap<Integer, HashMap<Integer, Double>> startNodes;
-    private int activatedTimes = 0;
-    private int activatedNodes = 0;
+public class AdsorptionActivator extends PrIterBase implements
+		Activator<IntWritable, DoubleWritable, DoubleWritable> {
 
-    public void configure(JobConf job){
-        String graphPath = job.get("priter.graph.path");
-        graph = loadWeightedGraph(graphPath);
-        String starterPath = job.get("priter.graph.starter.path");
-        startNodes = loadMapStarters(starterPath);
-    }
+	private String subGraphsDir;
+	private int kvs = 0;
+	private int iter = 0;
+	private int partitions;
+	
+	class LinkWeight {
+		public int link;
+		public double weight;
+		
+		public LinkWeight(int link, double weight){
+			this.link = link;
+			this.weight = weight;
+		}
+	}
+	//graph in local memory
+	private HashMap<Integer, ArrayList<LinkWeight>> linkList = new HashMap<Integer, ArrayList<LinkWeight>>();
+	 
+	private synchronized void loadGraphToMem(JobConf conf, int n) {
+		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
+		Path remote_link = new Path(subGraphsDir + "/part" + n);
+		
+		FileSystem hdfs = null;
+		try{
+			hdfs = FileSystem.get(conf);
+			FSDataInputStream in = hdfs.open(remote_link);
+			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+			
+			String line;
+			while((line = reader.readLine()) != null){
+				int index = line.indexOf("\t");
+				if(index != -1){
+					String node = line.substring(0, index);
+					
+					String linkstring = line.substring(index+1);
+					ArrayList<LinkWeight> links = new ArrayList<LinkWeight>();
+					StringTokenizer st = new StringTokenizer(linkstring);
+					while(st.hasMoreTokens()){
+						String link = st.nextToken();
+						//System.out.println(link);
+						String item[] = link.split(",");
+						LinkWeight l = new LinkWeight(Integer.parseInt(item[0]), Double.parseDouble(item[1]));
+						links.add(l);
+					}
 
-    public void initStarter(ActivateBuffer<MapWritable> starter) {
-        for(Map.Entry<Integer, HashMap<Integer, Double>>> entry: startNodes.entrySet()){
-            MapWritable labels = new MapWritable();
-            for(Map.Entry<Integer, Double> label : entry.getValue()){
-                labels.put(new IntWritable(label.getKey()), new DoubleWritable(label.getValue()));
-            }
-            starter.init(new IntWritable(entry.getKey()), labels);
-        } 
-    }
+					this.linkList.put(Integer.parseInt(node), links);
+				}
+			}
+			reader.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
 
-    public void activate(IntWritable node, MapWritable value, OutputCollector<IntWritable, MapWritable> output, Reporter report){
-        int nodeid = node.get();
-        MapWritable labels = value.get();
-        ArrayList<Link> links = graph.get(nodeid);
+	@Override
+	public void configure(JobConf job) {
+		int taskid = Util.getTaskId(job);
+		this.loadGraphToMem(job, taskid);
+		partitions = job.getInt("priter.graph.partitions", 1);
+	}
+	
+	@Override
+	public void initStarter(InputPKVBuffer<IntWritable, DoubleWritable> starter)
+			throws IOException {
+		double initvalue = Adsorption.RETAINFAC * 10000;
+		int count = 0;
+		for(int k : linkList.keySet()){
+			if(++count > 25) break;
+			starter.init(new IntWritable(k), new DoubleWritable(initvalue));
+		}
+	}
 
-        for(Link link: links){
-            MapWritable<Writable, Writable> outLabels = new MapWritable<Writable, Writable>();
-            for(Map.Entry<Writable, Writable> entry : labels){
-                double distribution = ((DoubleWritable)entry.getValue()).get();
-                outLabels.put(entry.getKey(), new DoubleWritable(distribution × link.weight));
-            }
-            output.collect(new IntWritable(link.end), outLabels);
-        }
+	@Override
+	public void activate(IntWritable key, DoubleWritable value,
+			OutputCollector<IntWritable, DoubleWritable> output, Reporter report)
+			throws IOException {
+			
+		kvs++;
+		report.setStatus(String.valueOf(kvs));
+		
+		int page = key.get();
+		ArrayList<LinkWeight> links = null;
+		links = this.linkList.get(key.get());
 
-        activatedNodes++;
-    }
+		if(links == null){
+			System.out.println("no links found for page " + page);
+			for(int i=0; i<partitions; i++){
+				output.collect(new IntWritable(i), new DoubleWritable(0));
+			}
+			return;
+		}	
+		double delta = value.get() * Adsorption.DAMPINGFAC;
+		
+		for(LinkWeight link : links){
+			output.collect(new IntWritable(link.link), new DoubleWritable(delta*link.weight));
+		}	
+	}
 
-    public void iterate(){
-        activatedTimes++;
-        System.out.println("activate times: " + activatedTime + ", total activated node: " + activatedNode);
-    }
+	@Override
+	public void iterate() {
+		System.out.println((iter++) + " passes " + kvs + " activations");
+	}
 }
+
 }}}
 
 *_Updator_*
 {{{
-public class AdsorptionUpdator extends PrIterBase implements Updator<DoubleWritable, MapWritable> {
-    private HashMap<Integer, Double> inWeights;
+public class AdsorptionUpdater extends PrIterBase implements
+		Updater<IntWritable, DoubleWritable, DoubleWritable> {
+	
+	private JobConf job;
+	private int workload = 0;
+	private int iterate = 0;
+	private HashMap<Integer, Double> weightMap = new HashMap<Integer, Double>();
 
-    public void configure(JobConf job){
-        String graphPath = job.get("priter.graph.path");
-        inWeights = loadInWeights(graphPath);
-    }
-
-    public void updateState(IntWritable node, MapWritable value, OutputPKVBuffer<DoubleWritable, MapWritable> buffer, Reporter report){
-        int nodeid = node.get();
-        MapWritable labels = value.get();
-    
-        PriorityRecord<DoubleWritable, MapWritable> pkvRecord;	
-	if(buffer.stateTable.containsKey(node)){
-            MapWritable<Writable, Writable> outiLabels = new MapWritable<Writable, Writable>();
-            MapWritable<Writable, Writable> outcLabels = new MapWritable<Writable, Writable>();
-            double l1norm = 0.0;
-
-            for(Map.Entry<Writable, Writable> entry : labels){
-                double distribution = ((DoubleWritable)entry.getValue()).get();
-                outiLabels.put(entry.getKey(), new DoubleWritable(distribution/inWeights.get(nodeid)+pkvRecord.getiState().get(entry.getKey())));
-                outcLabels.put(entry.getKey(), new DoubleWritable(distribution/inWeights.get(nodeid)+pkvRecord.getcState().get(entry.getKey())));
-                l1norm += distribution;
-            }            
-
-   	    buffer.stateTable.get(node).getiState().set(outiLabels);
-            buffer.stateTable.get(node).getcState().set(outcLabels);
-	    buffer.stateTable.get(node).getPriority().set(l1norm);
-        }else{
-            MapWritable<Writable, Writable> outiLabels = new MapWritable<Writable, Writable>();
-            MapWritable<Writable, Writable> outcLabels = new MapWritable<Writable, Writable>();
-            for(Map.Entry<Writable, Writable> entry : labels){
-                double distribution = ((DoubleWritable)entry.getValue()).get();
-                outiLabels.put(entry.getKey(), new DoubleWritable(distribution/inWeights.get(nodeid)));
-                outcLabels.put(entry.getKey(), new DoubleWritable(distribution/inWeights.get(nodeid)));
-                l1norm += distribution;
-            } 
-
-	    pkvRecord = new PriorityRecord<MapWritable, DoubleWritable>(
-	    new DoubleWritable(l1norm), new MapWritable(outiLabels), new MapWritable(outcLabels));
-	    buffer.stateTable.put(new IntWritable(nodeid), pkvRecord);
+	@Override
+	public void configure(JobConf job) {		
+		this.job = job;
 	}
-    }
+	
+	@Override
+	public void iterate() {
+		iterate++;
+		System.out.println("iteration " + iterate + " total parsed " + workload);
+	}
 
-    public DoubleWritable decidePriority(IntWritable node, MapWritable deltaR, boolean iornot){
-        for(Map.Entry<Writable, Writable> entry : labels){
-            double distribution = ((DoubleWritable)entry.getValue()).get();
-            l1norm += distribution;
-        }
-        return new DoubleWritable(l1norm);
-    }
+	@Override
+	public void initStateTable(
+			OutputPKVBuffer<IntWritable, DoubleWritable, DoubleWritable> stateTable) {
+		String subGraphsDir = job.get(MainDriver.SUBGRAPH_DIR);
+		int taskid = Util.getTaskId(job);
+		Path remote_link = new Path(subGraphsDir + "/part" + taskid);
+		double initvalue = Adsorption.RETAINFAC * 10000;
+		
+		FileSystem hdfs = null;
+		try{
+			hdfs = FileSystem.get(job);
+			FSDataInputStream in = hdfs.open(remote_link);
+			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+			
+			String line;
+			while((line = reader.readLine()) != null){
+				int index = line.indexOf("\t");
+				if(index != -1){
+					int node = Integer.parseInt(line.substring(0, index));
+					
+					double weight = 0.0;
+					String linkstring = line.substring(index+1);
+					StringTokenizer st = new StringTokenizer(linkstring);
+					while(st.hasMoreTokens()){
+						String link = st.nextToken();
+						String field[] = link.split(",");
+						weight += Double.parseDouble(field[1]);
+					}
+					this.weightMap.put(node, weight);	
+					stateTable.init(new IntWritable(node), new DoubleWritable(0), new DoubleWritable(initvalue));
+				}
+			}
+			reader.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	@Override
+	public DoubleWritable resetiState() {
+		return new DoubleWritable(0.0);
+	}
+
+	@Override
+	public DoubleWritable decidePriority(IntWritable key, DoubleWritable iState) {
+		Double weight = weightMap.get(key.get());
+		if(weight == null){
+			System.out.println(key + "\tnull");
+			return new DoubleWritable(0.0);
+		}else{
+			return new DoubleWritable(iState.get() * weightMap.get(key.get()));
+		}	
+	}
+	
+	@Override
+	public DoubleWritable decideTopK(IntWritable key, DoubleWritable cState) {
+		return new DoubleWritable(cState.get());	
+	}
+
+	@Override
+	public void updateState(IntWritable key, Iterator<DoubleWritable> values,
+			OutputPKVBuffer<IntWritable, DoubleWritable, DoubleWritable> buffer, Reporter report)
+			throws IOException {
+		workload++;		
+		report.setStatus(String.valueOf(workload));
+		
+		double delta = 0.0;
+		while(values.hasNext()){				
+			delta += values.next().get();	
+		}
+		
+		synchronized(buffer.stateTable){
+			PriorityRecord<DoubleWritable, DoubleWritable> pkvRecord;	
+			if(buffer.stateTable.containsKey(key)){
+				pkvRecord = buffer.stateTable.get(key);
+	
+				double iState = pkvRecord.getiState().get() + delta;
+				double cState = pkvRecord.getcState().get() + delta;
+				buffer.stateTable.get(key).getiState().set(iState);
+				buffer.stateTable.get(key).getcState().set(cState);
+				buffer.stateTable.get(key).getPriority().set(iState);
+			}else{
+				pkvRecord = new PriorityRecord<DoubleWritable, DoubleWritable>(
+						new DoubleWritable(delta), new DoubleWritable(delta), new DoubleWritable(delta));
+				buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
+			}
+		}
+	}
 }
+
 }}}
 
 *_Main_*
 {{{
-public class Adsorption{
-    public static void main(String[] args){
-        Job job = new Job();
+public class Adsorption extends Configured implements Tool {
+	private String input;
+	private String output;
+	private String subGraphDir;
+	private int partitions;
+	private int topk;
+	private float qportion;
+	private long snapinterval = 20000;
+	private float stopthresh;
+	
+	//damping factor
+	public static final double DAMPINGFAC = 0.8;
+	public static final double RETAINFAC = 0.2;
 
-        FileOutputFormat.setOutputPath(job, new Path("Adsorption_output"));
-        job.setOutputFormat(TextOutputFormat.class);
+	
+	private int adsorption() throws IOException{
+	    JobConf job = new JobConf(getConf());
+	    String jobname = "adsorption";
+	    job.setJobName(jobname);
+       
+	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
+	    if(partitions == 0) partitions = Util.getTTNum(job);			//set default partitions = num of task trackers
+	    
+	    FileInputFormat.addInputPath(job, new Path(input));
+	    FileOutputFormat.setOutputPath(job, new Path(output));
+	    job.setOutputFormat(TextOutputFormat.class);
+	    
+	    //set for iterative process   
+	    job.setBoolean("priter.job", true);
+	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
+	    job.setLong("priter.snapshot.interval", snapinterval);			//snapshot interval	
+	    job.setInt("priter.snapshot.topk", topk);						//topk
+	    job.setFloat("priter.queue.portion", qportion);					//activation queue
+	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
+	    
+	        
+	    job.setJarByClass(Adsorption.class);
+	    job.setActivatorClass(AdsorptionActivator.class);	
+	    job.setUpdaterClass(AdsorptionUpdater.class);
+	    job.setMapOutputKeyClass(IntWritable.class);
+	    job.setMapOutputValueClass(DoubleWritable.class);
+	    job.setOutputKeyClass(IntWritable.class);
+	    job.setOutputValueClass(DoubleWritable.class);
+	    job.setPriorityClass(DoubleWritable.class);
 
-        job.setBoolean("priter.job", true);
-        job.set("priter.graph.path", "Adsorption_input/facebook_graph");
-        job.set("priter.graph.starter.path", "Adsorption_input/facebook_initialdistribution");
-        job.setInt("priter.graph.partitions", 4);	
-        job.setInt("priter.graph.nodes", 1204004);
-        job.setLong("priter.snapshot.interval", 20000);
-        job.setInt("priter.snapshot.topk", 1000);
-        job.setInt("priter.queue.portion", 0.2);
-        job.setFloat("priter.stop.difference", 1);	
+	    job.setNumMapTasks(partitions);
+	    job.setNumReduceTasks(partitions);
+	    
+	    JobClient.runJob(job);
+	    return 0;
+	}
+	
+	static int printUsage() {
+		System.out.println("adsorption [-p <partitions>] [-k <options>] [-q <qportion>] " +
+				"[-i <snapshot interval>] [-t <termination threshod>] input output");
+		ToolRunner.printGenericCommandUsage(System.out);
+		return -1;
+	}
+	
+	@Override
+	public int run(String[] args) throws Exception {
+	    List<String> other_args = new ArrayList<String>();
+	    for(int i=0; i < args.length; ++i) {
+	      try {
+	        if ("-p".equals(args[i])) {
+	        	partitions = Integer.parseInt(args[++i]);
+	        } else if ("-k".equals(args[i])) {
+	        	topk = Integer.parseInt(args[++i]);
+	        } else if ("-q".equals(args[i])) {
+	        	qportion = Float.parseFloat(args[++i]);
+	        } else if ("-i".equals(args[i])) {
+	        	snapinterval = Long.parseLong(args[++i]);
+	        } else if ("-t".equals(args[i])) {
+	        	stopthresh = Float.parseFloat(args[++i]);
+	        } else {
+	          other_args.add(args[i]);
+	        }
+	      } catch (NumberFormatException except) {
+	        System.out.println("ERROR: Integer expected instead of " + args[i]);
+	        return printUsage();
+	      } catch (ArrayIndexOutOfBoundsException except) {
+	        System.out.println("ERROR: Required parameter missing from " +
+	                           args[i-1]);
+	        return printUsage();
+	      }
+	    }
+	    // Make sure there are exactly 2 parameters left.
+	    if (other_args.size() != 2) {
+	      System.out.println("ERROR: Wrong number of parameters: " +
+	                         other_args.size() + " instead of 2.");
+	      return printUsage();
+	    }
+	    
+	    input = other_args.get(0);
+	    output = other_args.get(1);
+	    subGraphDir = input + "_subgraph";
+	    
+	    Distributor.partition(input, subGraphDir, partitions, IntWritable.class, HashPartitioner.class);
+	    adsorption();
+	    
+		return 0;
+	}
 
-        job.setJarByClass(Adsorption.class);
-        job.setActivatorClass(AdsorptionActivator.class);	
-        job.setUpdatorClass(AdsorptionUpdator.class);
-        job.setMapOutputKeyClass(IntWritable.class);
-        job.setMapOutputValueClass(MapWritable.class);
-        job.setOutputKeyClass(IntWritable.class);
-        job.setOutputValueClass(MapWritable.class);
-        job.setPriorityClass(DoubleWritable.class);      
-
-        jobClient.runJob(job);
-    }
+	/**
+	 * @param args
+	 * @throws Exception 
+	 */
+	public static void main(String[] args) throws Exception {
+		int res = ToolRunner.run(new Configuration(), new Adsorption(), args);
+	    System.exit(res);
+	}
 }
 }}}
