@@ -21,7 +21,7 @@
 
 == Along with Activator class ==
 
-public interface Activator<K, P extends WritableComparable, V> extends JobConfigurable {
+`public interface Activator<K, P extends WritableComparable, V> extends JobConfigurable {`
 
  * `void initStarter(InputPKVBuffer<V> starter) throws IOException;`
 
@@ -35,10 +35,10 @@ public interface Activator<K, P extends WritableComparable, V> extends JobConfig
 
     to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes
 
-}
+`}`
 == Along with Updator ==
 
-public interface Updater<K, P extends Valueable, V extends Valueable> extends JobConfigurable {
+`public interface Updater<K, P extends Valueable, V extends Valueable> extends JobConfigurable {`
 
  * `void initStateTable(OutputPKVBuffer<P, V> stateTable);`
 
@@ -64,4 +64,4 @@ public interface Updater<K, P extends Valueable, V extends Valueable> extends Jo
 
     to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes
 
-}
+`}`
