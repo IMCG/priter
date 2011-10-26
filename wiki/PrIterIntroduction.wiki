@@ -20,7 +20,7 @@ First, we describe the requirements of a framework that supports prioritized ite
 
 PrIter incorporates the support of [http://code.google.com/p/i-mapreduce/ iMapReduce] for iterative processing. iMapReduce following MapReduce paradigm directly passes the reduce output to the map for the next iteration, rather than writing output to distributed file system (DFS). 
 
-<img src="http://rio.ecs.umass.edu/~yzhang/pic/iterprocess.png" width=500/>
+<img src="http://rio.ecs.umass.edu/~yzhang/pic/iterprocess.png" width=400/>
 
 The data is evenly distributed among workers by a hash function, which will be used to look up the destination worker when passing messages between keys/workers. The paired map and reduce tasks always operate on the same subset of keys/nodes. We refer to the paired map/reduce task as _*MRPair*_. These tasks are persistent tasks that keep alive during the entire iterative process and maintain the intermediate iteration state. In summary, each MRPair performs the iterative computation on a data partition, and the necessary information exchange between MRPairs occurs during the maps-to-reduces shuffling.
 
@@ -38,7 +38,7 @@ In summary, the StateTable stores the state information of each node. The state 
 
 In order to perform prioritized execution, PrIter labels each node with a priority value that is specified by users. The priority information of each node is also maintained in the StateTable. During the update of node state, instead of a pass over the entire StateTable as an iteration, a pass through a selected subset as a subpass is performed based on the entries' priority values. A number of nodes with larger priority values are selected for the map operation in the next subpass. Since each MRPair holds only a subset of nodes, the priority value is compared among the nodes residing in the same MRPair instead of a global comparison across workers.
 
-<img src="http://rio.ecs.umass.edu/~yzhang/pic/worker.png" width=400/>
+<img src="http://rio.ecs.umass.edu/~yzhang/pic/worker.png" width=350/>
 
 The StateTable is updated in each subpass based on the output of the UpdateState function. The priority value is determined by another function _*DecidePriority*-, which is for users to specify each node's execution priority taking account of the state information. Upon the receipt of all maps' output, a priority queue containing the <node, iState> pairs with higher priority values is extracted from the StateTable for feeding the paired map in the next iteration. After a node is decided to be enqueued, its iState and its node id are made a copy in the priority queue, and accordingly its iState in the StateTable is reset.
 
