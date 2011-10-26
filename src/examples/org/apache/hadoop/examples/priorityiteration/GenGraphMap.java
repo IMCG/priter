@@ -94,9 +94,7 @@ public class GenGraphMap extends MapReduceBase implements
 						}
 						links.add(link);
 						double rand2 = logn2.random();
-						
-						int weight = 100 - (int)Math.ceil(rand2);
-						if(weight <= 0) weight = 1;
+						float weight = (float)(1 / rand2);
 
 						out.write(String.valueOf(link) + "," + String.valueOf(weight));
 						if(j < num_link-1){
