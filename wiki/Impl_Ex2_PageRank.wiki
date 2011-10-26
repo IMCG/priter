@@ -102,61 +102,208 @@ public class PageRankActivator extends PrIterBase implements
 
 *_Updator_*
 {{{
-public class PageRankUpdator extends PrIterBase implements Updator<IntWritable, DoubleWritable> {
-    public void updateState(IntWritable node, DoubleWritable value, OutputPKVBuffer<IntWritable, DoubleWritable> buffer, Reporter report){
-        int nodeid = node.get();
-        double deltaR = value.get();
-    
-        PriorityRecord<IntWritable, DoubleWritable> pkvRecord;	
-	if(buffer.stateTable.containsKey(node)){
-	    pkvRecord = buffer.stateTable.get(node);
-	    double iState = pkvRecord.getiState().get() + deltaR;
-	    double cState = pkvRecord.getcState().get() + deltaR;
-   	    buffer.stateTable.get(node).getiState().set(iState);
-            buffer.stateTable.get(node).getcState().set(cState);
-	    buffer.stateTable.get(node).getPriority().set(iState);
-        }else{
-	    pkvRecord = new PriorityRecord<DoubleWritable, DoubleWritable>(
-	    new DoubleWritable(deltaR), new DoubleWritable(deltaR), new DoubleWritable(deltaR));
-	    buffer.stateTable.put(new IntWritable(nodeid), pkvRecord);
-	}
-    }
+public class PageRankUpdater extends PrIterBase implements
+		Updater<IntWritable, FloatWritable, FloatWritable> {
+	
+	private JobConf job;
+	private int workload = 0;
+	private int iterate = 0;
 
-    public IntWritable decidePriority(IntWritable node, DoubleWritable deltaR, boolean iornot){
-        return new IntWritable(deltaR);
-    }
+	@Override
+	public void configure(JobConf job) {	
+		this.job = job;
+	}
+
+	@Override
+	public void iterate() {
+		iterate++;
+		System.out.println("iteration " + iterate + " total parsed " + workload);
+	}
+
+	@Override
+	public void initStateTable(
+			OutputPKVBuffer<IntWritable, FloatWritable, FloatWritable> stateTable) {
+		String subGraphsDir = job.get(MainDriver.SUBGRAPH_DIR);
+		int taskid = Util.getTaskId(job);
+		Path subgraph = new Path(subGraphsDir + "/part" + taskid);
+		
+		FileSystem hdfs = null;
+	    try {
+			hdfs = FileSystem.get(job);
+			FSDataInputStream in = hdfs.open(subgraph);
+			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+			
+			String line;
+			while((line = reader.readLine()) != null){
+				int index = line.indexOf("\t");
+				if(index != -1){
+					int node = Integer.parseInt(line.substring(0, index));
+					stateTable.init(new IntWritable(node), new FloatWritable(0), new FloatWritable(PageRank.RETAINFAC));
+				}
+			}
+			reader.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	@Override
+	public FloatWritable resetiState() {
+		return new FloatWritable(0);
+	}
+	
+	@Override
+	public FloatWritable decidePriority(IntWritable key, FloatWritable iState) {
+		return new FloatWritable(iState.get());
+	}
+	
+	@Override
+	public FloatWritable decideTopK(IntWritable key, FloatWritable cState) {
+		return new FloatWritable(cState.get());
+	}
+
+	@Override
+	public void updateState(IntWritable key, Iterator<FloatWritable> values,
+			OutputPKVBuffer<IntWritable, FloatWritable, FloatWritable> buffer, Reporter report)
+			throws IOException {
+		workload++;		
+		report.setStatus(String.valueOf(workload));
+		
+		float delta = 0;
+		while(values.hasNext()){				
+			delta += values.next().get();	
+		}
+
+		synchronized(buffer.stateTable){
+			PriorityRecord<FloatWritable, FloatWritable> pkvRecord;	
+			if(buffer.stateTable.containsKey(key)){
+				pkvRecord = buffer.stateTable.get(key);
+				float iState = pkvRecord.getiState().get() + delta;
+				float cState = pkvRecord.getcState().get() + delta;
+				buffer.stateTable.get(key).getiState().set(iState);
+				buffer.stateTable.get(key).getcState().set(cState);
+				buffer.stateTable.get(key).getPriority().set(iState);
+			}else{
+				pkvRecord = new PriorityRecord<FloatWritable, FloatWritable>(
+						new FloatWritable(delta), new FloatWritable(delta), new FloatWritable(delta));
+				buffer.stateTable.put(new IntWritable(key.get()), pkvRecord);
+			}
+		}
+	}
 }
 }}}
 
 *_Main_*
 {{{
-public class PageRank{
-    public static void main(String[] args){
-        Job job = new Job();
+public class PageRank extends Configured implements Tool {
+	private String input;
+	private String output;
+	private String subGraphDir;
+	private int partitions = 0;
+	private int topk = 1000;
+	private float qportion = 1;
+	private long snapinterval = 20000;
+	private float stopthresh = 0;
+	
+	//damping factor
+	public static final float DAMPINGFAC = (float)0.8;
+	public static final float RETAINFAC = (float)0.2;
 
-        FileOutputFormat.setOutputPath(job, new Path("PageRank_output"));
-        job.setOutputFormat(TextOutputFormat.class);
+	private int pagerank() throws IOException{
+	    JobConf job = new JobConf(getConf());
+	    String jobname = "pagerank";
+	    job.setJobName(jobname);
+       
+	    job.set(MainDriver.SUBGRAPH_DIR, subGraphDir);
+	    if(partitions == 0) partitions = Util.getTTNum(job);			//set default partitions = num of task trackers
+	    
+	    FileInputFormat.addInputPath(job, new Path(input));
+	    FileOutputFormat.setOutputPath(job, new Path(output));
+	    job.setOutputFormat(TextOutputFormat.class);
+	    	    
+	    //set for iterative process   
+	    job.setBoolean("priter.job", true);
+	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
+	    job.setLong("priter.snapshot.interval", snapinterval);			//snapshot interval	
+	    job.setInt("priter.snapshot.topk", topk);						//topk
+	    job.setFloat("priter.queue.portion", qportion);					//priority queue portion
+	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
+	          
+	    job.setJarByClass(PageRank.class);
+	    job.setActivatorClass(PageRankActivator.class);	
+	    job.setUpdaterClass(PageRankUpdater.class);
+	    job.setMapOutputKeyClass(IntWritable.class);
+	    job.setMapOutputValueClass(FloatWritable.class);
+	    job.setOutputKeyClass(IntWritable.class);
+	    job.setOutputValueClass(FloatWritable.class);
+	    job.setPriorityClass(FloatWritable.class);
 
-        job.setBoolean("priter.job", true);
-        job.set("priter.graph.path", "PageRank_input/google_graph");
-        job.set("priter.graph.starter.path", "PageRank_input/google_startpages");
-        job.setInt("priter.graph.partitions", 4);	
-        job.setInt("priter.graph.nodes", 875713);
-        job.setLong("priter.snapshot.interval", 20000);
-        job.setInt("priter.snapshot.topk", 1000);
-        job.setInt("priter.queue.portion", 0.2);
-        job.setFloat("priter.stop.difference", 1);	
+	    job.setNumMapTasks(partitions);
+	    job.setNumReduceTasks(partitions);
+	    
+	    JobClient.runJob(job);
+	    return 0;
+	}
+	
+	static int printUsage() {
+		System.out.println("pagerank [-p <partitions>] [-k <options>] [-q <qportion>] " +
+				"[-i <snapshot interval>] [-t <termination threshod>] input output");
+		ToolRunner.printGenericCommandUsage(System.out);
+		return -1;
+	}
+	  
+	@Override
+	public int run(String[] args) throws Exception {
+	    List<String> other_args = new ArrayList<String>();
+	    for(int i=0; i < args.length; ++i) {
+	      try {
+	        if ("-p".equals(args[i])) {
+	        	partitions = Integer.parseInt(args[++i]);
+	        } else if ("-k".equals(args[i])) {
+	        	topk = Integer.parseInt(args[++i]);
+	        } else if ("-q".equals(args[i])) {
+	        	qportion = Float.parseFloat(args[++i]);
+	        } else if ("-i".equals(args[i])) {
+	        	snapinterval = Long.parseLong(args[++i]);
+	        } else if ("-t".equals(args[i])) {
+	        	stopthresh = Float.parseFloat(args[++i]);
+	        } else {
+	          other_args.add(args[i]);
+	        }
+	      } catch (NumberFormatException except) {
+	        System.out.println("ERROR: Integer expected instead of " + args[i]);
+	        return printUsage();
+	      } catch (ArrayIndexOutOfBoundsException except) {
+	        System.out.println("ERROR: Required parameter missing from " +
+	                           args[i-1]);
+	        return printUsage();
+	      }
+	    }
+	    // Make sure there are exactly 2 parameters left.
+	    if (other_args.size() != 2) {
+	      System.out.println("ERROR: Wrong number of parameters: " +
+	                         other_args.size() + " instead of 2.");
+	      return printUsage();
+	    }
+	    
+	    input = other_args.get(0);
+	    output = other_args.get(1);
+	    subGraphDir = input + "_subgraph";
+	    
+	    Distributor.partition(input, subGraphDir, partitions, IntWritable.class, HashPartitioner.class);
+	    pagerank();
+	    
+		return 0;
+	}
 
-        job.setJarByClass(PageRank.class);
-        job.setActivatorClass(PageRankActivator.class);	
-        job.setUpdatorClass(PageRankUpdator.class);
-        job.setMapOutputKeyClass(IntWritable.class);
-        job.setMapOutputValueClass(DoubleWritable.class);
-        job.setOutputKeyClass(IntWritable.class);
-        job.setOutputValueClass(DoubleWritable.class);
-        job.setPriorityClass(DoubleWritable.class);      
-
-        jobClient.runJob(job);
-    }
+	/**
+	 * @param args
+	 * @throws Exception 
+	 */
+	public static void main(String[] args) throws Exception {
+		int res = ToolRunner.run(new Configuration(), new PageRank(), args);
+	    System.exit(res);
+	}
 }
+
 }}}
