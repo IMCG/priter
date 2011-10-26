@@ -3,10 +3,10 @@ package org.apache.hadoop.mapred;
 import java.io.IOException;
 import java.util.Iterator;
 
-import org.apache.hadoop.io.Getable;
+import org.apache.hadoop.io.Valueable;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
 
-public interface Updater<K, P extends Getable, V extends Getable> extends JobConfigurable {
+public interface Updater<K, P extends Valueable, V extends Valueable> extends JobConfigurable {
 	/*
 	 * for update node state, that is reduce
 	 */
