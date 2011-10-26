@@ -20,14 +20,10 @@
 == PrIter Job ==
 || *property* || *type* || *default* || *description* ||
 || "priter.job.priority" || boolean || true || turn on prioritized iteration, otherwise it performs normal iteration on top of PrIter ||
-|| "priter.job.inmem" || boolean || true || in-memory PrIter system, no need to sort, otherwise on-disk PrIter, need to sort||
 || "priter.job.priorityclass" || class || --- || the priority data type ||
 
-== Graph Information ==
-|| "priter.graph.path" || String || --- || the graph path ||
-|| "priter.graph.starter.path" || String || the starter path || the initial state path ||
+== Input Graph Information ==
 || "priter.graph.partitions" || int || 2 x (# of tasktrackers) || the number of graph partitions ||
-|| "priter.graph.nodes" || int || --- || the number of graph nodes ||
 
 == Onlie Query Support ==
 || "priter.snapshot.interval" || long || 10000 || the time interval (ms) of snapshot generation for online query ||
@@ -40,6 +36,6 @@
 || "priter.queue.uniqlength" || integer || --- || the activation queue length (unique queue, with elements are unique) ||
 
 == Iteration Termination ==
-|| "priter.stop.difference" || float || --- || stop iteration by check difference between two continuous top result ||
+|| "priter.stop.difference" || float || --- || stop iteration by check difference between two continuous iteration progresses ||
 || "priter.stop.maxiteration" || integer || --- || stop iteration when it iterates max rounds ||
 || "priter.stop.maxtime" || long || --- || stop iteration when its iterates long enough ||
