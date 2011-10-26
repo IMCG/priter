@@ -10,43 +10,94 @@ To extract priority property from PageRank problem, we change PageRank to anothe
 
 *_Activator_* 
 {{{
-public class PageRankActivator extends PrIterBase implements Activator<DoubleWritable> {
-    private HashMap<Integer, Integer> graph;
-    private HashMap<Integer, Double> startPages;
-    private int activatedTimes = 0;
-    private int activatedNodes = 0;
+public class PageRankActivator extends PrIterBase implements
+	Activator<IntWritable, FloatWritable, FloatWritable> {
 
-    public void configure(JobConf job){
-        String graphPath = job.get("priter.graph.path");
-        graph = loadUnWeightedGraph(graphPath);
-        String starterPath = job.get("priter.graph.starter.path");
-        startPages = loadStarters(starterPath);
-    }
+	private String subGraphsDir;
+	private int iter = 0;
+	private int kvs = 0;				//for tracking
+	private int partitions;
+	
+	//graph in local memory
+	private HashMap<Integer, ArrayList<Integer>> linkList = new HashMap<Integer, ArrayList<Integer>>();
+	
+	private synchronized void loadGraphToMem(JobConf conf, int n){
+		subGraphsDir = conf.get(MainDriver.SUBGRAPH_DIR);
+		Path subgraph = new Path(subGraphsDir + "/part" + n);
+		
+		FileSystem hdfs = null;
+	    try {
+			hdfs = FileSystem.get(conf);
+			FSDataInputStream in = hdfs.open(subgraph);
+			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+			
+			String line;
+			while((line = reader.readLine()) != null){
+				int index = line.indexOf("\t");
+				if(index != -1){
+					String node = line.substring(0, index);
+					
+					String linkstring = line.substring(index+1);
+					ArrayList<Integer> links = new ArrayList<Integer>();
+					StringTokenizer st = new StringTokenizer(linkstring);
+					while(st.hasMoreTokens()){
+						links.add(Integer.parseInt(st.nextToken()));
+					}
+					
+					this.linkList.put(Integer.parseInt(node), links);
+				}
+			}
+			reader.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
 
-    public void initStarter(ActivateBuffer<IntWritable> starter) {
-        for(Map.Entry<Integer, Double> entry: startPages.entrySet()){
-            starter.init(new IntWritable(entry.getKey()), new DoubleWritable(entry.getValue()));
-        } 
-    }
+	@Override
+	public void configure(JobConf job) {
+		int taskid = Util.getTaskId(job);
+		partitions = job.getInt("priter.graph.partitions", 1);
+		loadGraphToMem(job, taskid);
+	}
+	
+	@Override
+	public void initStarter(InputPKVBuffer<IntWritable, FloatWritable> starter) throws IOException {	
+		for(int k : linkList.keySet()){
+			starter.init(new IntWritable(k), new FloatWritable(PageRank.RETAINFAC));
+		}
+	}
 
-    public void activate(IntWritable node, DoubleWritable value, OutputCollector<IntWritable, DoubleWritable> output, Reporter report){
-        int nodeid = node.get();
-        double inDeltaR = value.get();
-        ArrayList<Integer> linkTo = graph.get(nodeid);
+	@Override
+	public void activate(IntWritable key, FloatWritable value,
+			OutputCollector<IntWritable, FloatWritable> output, Reporter report)
+			throws IOException {
+		kvs++;
+		report.setStatus(String.valueOf(kvs));
+		
+		int page = key.get();
+		ArrayList<Integer> links = null;
+		links = this.linkList.get(key.get());
 
-        double outDeltaR = inDeltaR * 0.85 / linkTo.size();
-        for(int linkend: linkTo){
-            output.collect(new IntWritable(linkend), new DoubleWritable(outDeltaR));
-        }
+		if(links == null){
+			System.out.println("no links found for page " + page);
+			for(int i=0; i<partitions; i++){
+				output.collect(new IntWritable(i), new FloatWritable(0));
+			}
+			return;
+		}	
+		float delta = value.get() * PageRank.DAMPINGFAC / links.size();
+		
+		for(int link : links){
+			output.collect(new IntWritable(link), new FloatWritable(delta));
+		}	
+	}
 
-        activatedNodes++;
-    }
-
-    public void iterate(){
-        activatedTimes++;
-        System.out.println("activate times: " + activatedTime + ", total activated node: " + activatedNode);
-    }
+	@Override
+	public void iterate() {
+		System.out.println((iter++) + " passes " + kvs + " activations");
+	}
 }
+
 }}}
 
 *_Updator_*
