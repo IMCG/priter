@@ -225,8 +225,8 @@ public class PageRank extends Configured implements Tool {
 	    job.setBoolean("priter.job", true);
 	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
 	    job.setLong("priter.snapshot.interval", snapinterval);			//snapshot interval	
-	    job.setInt("priter.snapshot.topk", topk);						//topk
-	    job.setFloat("priter.queue.portion", qportion);					//priority queue portion
+	    job.setInt("priter.snapshot.topk", topk);		//topk
+	    job.setFloat("priter.queue.portion", qportion);	//priority queue portion
 	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
 	          
 	    job.setJarByClass(PageRank.class);
