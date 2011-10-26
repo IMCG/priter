@@ -1,5 +1,5 @@
 package org.apache.hadoop.io;
 
-public interface Valueable extends WritableComparable, Getable{
+public interface Valueable<T> extends WritableComparable<T>, Getable{
 
 }
