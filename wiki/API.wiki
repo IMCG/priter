@@ -17,30 +17,11 @@
 
     set the priority class
 
-= PrIterBase Class =
-
-Every Activator class and Updator class should extend PrIterBase class, so that the following methods can be used.
-
- * `ArrayList<Integer, Integer> loadUnWeightedGraph(Path graphPath) throws IOException;`
-
-    load unweighted graph partition
-
- * `ArrayList<Integer, Link<Integer, V>> loadWeightedGraph(Path graphPath) throws IOException;`
-
-    load weighted graph partition
-
- * `HashMap<Integer, V> loadStarters(Path startersPath) throws IOException;`
-
-    load initial state into a vector partition
-
- * `int getPartitionID();`
-
-    get the assigned graph partition ID
-
-
 = User-Defined Functions =
 
 == Along with Activator class ==
+
+public interface Activator<K, P extends WritableComparable, V> extends JobConfigurable {
 
  * `void initStarter(InputPKVBuffer<V> starter) throws IOException;`
 
@@ -54,7 +35,10 @@ Every Activator class and Updator class should extend PrIterBase class, so that 
 
     to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes
 
+}
 == Along with Updator ==
+
+public interface Updater<K, P extends Valueable, V extends Valueable> extends JobConfigurable {
 
  * `void initStateTable(OutputPKVBuffer<P, V> stateTable);`
 
@@ -64,14 +48,20 @@ Every Activator class and Updator class should extend PrIterBase class, so that 
 
     to be invoked when node record reset, reset the node's iState
 
- * `P decidePriority(IntWritable nodeid, V iState, boolean iornot);`
+ * `P decidePriority(IntWritable nodeid, V iState);`
 
-    to be invoked when updating statetable or extracting top k result, decide node's execution priority (based on iState) or priority for online top k query (based on cState)
+    to be invoked when updating statetable, decide node's execution priority (based on iState).
 
- * `void updateState(K nodeid, V iState, OutputPKVBuffer<P, V> stateTable, Reporter reporter) throws IOException;`
+ * `P decideTopK(IntWritable nodeid, V cState);`
+
+    to be invoked when extracting top k result, decide node's priority for online top k query (based on cState)
+
+ * `void updateState(K nodeid, V iState, OutputPKVBuffer<K, P, V> stateTable, Reporter reporter) throws IOException;`
 
     to be invoked when updating StateTable, users specify the update rule to realize their algorithm logic
 	
  * `void iterate();`
 
     to be invoked after emitting all the results to neighbors after each iteation, implement some tracke codes
+
+}
