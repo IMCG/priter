@@ -1,50 +1,34 @@
 #! bin/bash
+# Run this shell script to perform PageRank computation on PrIter
 
 HADOOP=../bin/hadoop
+JAR=../hadoop-priter-0.1-examples.jar
 
-WORK_DIR=PriPageRank
-
-#LOCAL_GRAPH=datasets/pg_synthetic_graph
-#NODE=200000
-LOCAL_GRAPH=datasets/pg_google_graph
-NODE=916428
-#AVGDEG=6.6
-#LOCAL_GRAPH=datasets/pg_berkstan_graph
-#NODE=685231
-#EDGE=7626576
-#AVGDEG=11.2
-#LOCAL_GRAPH=datasets/pg_notredame_graph
-#NODE=324721
-
-#NODE=1000000
-
-GRAPH=pg_dataset/trans/iterativeTrans
-#RANK=${WORK_DIR}/$LOCAL_RANK
-IN=${WORK_DIR}/in
-OUT=${WORK_DIR}/out
-
-STARTNODE=100
-TOP_K=1000
-SORT=false
+INPUT=pagerank_dataset		
+OUTPUT=pagerank_result
 PARTITIONS=4
-ALPHA=$1
-STOPTHRESHOLD=1
-ASYNC=true
-PRIEXE=true
+TOP_K=1000
+QPORTION=0.2
 INTERVAL=20000
+STOPTHRESHOLD=1	
 
-: <<'END'
-$HADOOP dfs -rmr $WORK_DIR
-$HADOOP dfs -rmr $GRAPH
-$HADOOP dfs -put $LOCAL_GRAPH $GRAPH
-$HADOOP jar iterativeMR.jar preprocess $GRAPH ${WORK_DIR}/subgraphs $PARTITIONS $NODE false
-sleep 10
-$HADOOP dfs -put temp $IN
-END
+# for synthetic data input, you should use gendata.sh to generate some synthetic dataset. Note that you should make # of nodes|# of partitions|data dir consistent.
+#INPUT=synthetic_data	
 
-$HADOOP dfs -rmr $OUT		
-$HADOOP jar iterativeMR.jar pagerank $IN $OUT ${WORK_DIR}/subgraphs $PARTITIONS $TOP_K $NODE $STARTNODE $ALPHA $STOPTHRESHOLD $ASYNC $PRIEXE $INTERVAL
+# for real data, you should download them and upload them to HDFS first
+# google web graph (http://rio.ecs.umass.edu/~yzhang/data/pg_google_graph)
+#LOCAL_DATA=pg_google_graph
+
+# berkstan web graph (http://rio.ecs.umass.edu/~yzhang/data/pg_berkstan_graph)
+LOCAL_DATA=pg_berkstan_graph
+
+# upload the real dataset to HDFS, it is unnecessary for the synthetic dataset
+$HADOOP dfs -rmr $INPUT
+$HADOOP dfs -put $LOCAL_DATA $INPUT
 
 
-#for synthetic graph
-#$HADOOP jar iterativeMR.jar pagerank $IN $OUT $GRAPH $PARTITIONS $TOP_K $NODE $STARTNODE $ALPHA $STOPTHRESHOLD $ASYNC $PRIEXE $INTERVAL
+$HADOOP dfs -rmr $OUTPUT		# remove the existed output
+
+# perform pagerank computation	
+$HADOOP jar $JAR pagerank -p $PARTITIONS -k $TOP_K -q $QPORTION -i $INTERVAL -t $STOPTHRESHOLD $INPUT $OUTPUT 
+

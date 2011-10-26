@@ -1,53 +1,35 @@
 #! bin/bash
+# Run this shell script to perform adsorption computation on PrIter
 
-HADOOP=/mnt/data/yzhang/hadoop-priter-0.1/bin/hadoop
+HADOOP=../bin/hadoop
+JAR=../hadoop-priter-0.1-examples.jar
 
-WORK_DIR=IterativeAdsorption
-
-#for test
-#LOCAL_GRAPH=test
-#NODE=4
-
-#for youtube
-#LOCAL_GRAPH=ad_youtube_graph
-#NODE=113367
-
-#for amazon
-#LOCAL_GRAPH=ad_amazon_graph
-#NODE=50000
-
-#for youtube
-LOCAL_GRAPH=ad_facebook_graph
-NODE=80000
-
-#for Synthetic
-#LOCAL_GRAPH=sp_synthetic_graph
-#LOCAL_RANK=sp_synthetic_rank
-#NODE=10000
-#STARTNODE=0
-
-GRAPH=ad_dataset/iterativestatic
-RANK=ad_dataset/iterativestate
-
-
-IN=${WORK_DIR}/in
-OUT=${WORK_DIR}/out
-STARTNODES=100
-TOP_K=1000
+INPUT=adsorption_dataset		
+OUTPUT=adsorption_result
 PARTITIONS=4
-ALPHA=0.1
-STOPTIME=-1
+TOP_K=1000
+QPORTION=1
+INTERVAL=10000
+STOPTHRESHOLD=1	
 
-: <<'END'
-$HADOOP dfs -rmr $WORK_DIR
-$HADOOP dfs -rmr ad_dataset
-$HADOOP dfs -put datasets/$LOCAL_GRAPH $GRAPH
-$HADOOP jar iterativeMR.jar preprocess $GRAPH ${WORK_DIR}/subgraphs $PARTITIONS $NODE false
-sleep 10
-$HADOOP dfs -put temp $IN
-END
+# for synthetic data input, you should use gendata.sh to generate some synthetic dataset. Note that you should make # of nodes|# of partitions|data dir consistent.
+#INPUT=synthetic_data	
 
-$HADOOP dfs -rmr $OUT		
-$HADOOP jar iterativeMR.jar adsorption $IN $OUT ${WORK_DIR}/subgraphs $PARTITIONS $TOP_K $NODE $STARTNODES $ALPHA $STOPTIME
+# for real data, you should download them and upload them to HDFS first
+# amazon co-purchase graph (http://rio.ecs.umass.edu/~yzhang/data/ad_amazon_weightgraph)
+#LOCAL_DATA=ad_amazon_weightgraph
+
+# youtube user-view graph (http://rio.ecs.umass.edu/~yzhang/data/ad_youtube_weightgraph)
+LOCAL_DATA=ad_youtube_weightgraph
+
+# upload the real dataset to HDFS, it is unnecessary for the synthetic dataset
+$HADOOP dfs -rmr $INPUT
+$HADOOP dfs -put $LOCAL_DATA $INPUT
+
+
+$HADOOP dfs -rmr $OUTPUT		# remove the existed output
+
+# perform adsorption computation	
+$HADOOP jar $JAR adsorption -p $PARTITIONS -k $TOP_K -q $QPORTION -i $INTERVAL -t $STOPTHRESHOLD $INPUT $OUTPUT 
 
 
