@@ -23,7 +23,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.FloatWritable;
-import org.apache.hadoop.io.Getable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Valueable;
@@ -694,7 +693,6 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 					P pri = (P) updater.decideTopK(k, v);
 					if(pri.compareTo(threshold) > 0){
 						writer.append(pri, k, stateTable.get(k).getcState());
-						//writer.write(k + "\t" + stateTable.get(k).getcState() + "\n");
 					}
 					progress += v.getV();
 				}	
