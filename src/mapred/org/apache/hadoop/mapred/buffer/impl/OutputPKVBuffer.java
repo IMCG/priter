@@ -68,7 +68,7 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 	private String topkDir = null;
 	private int topk;
 
-    private Updater updater = null;
+    private Updater<K, P, V> updater = null;
 	public Map<K, PriorityRecord<P, V>> stateTable = new HashMap<K, PriorityRecord<P, V>>();
 	private ArrayList<KVRecord<K, V>> priorityQueue = new ArrayList<KVRecord<K, V>>();
 	private K defaultKey;
@@ -165,7 +165,7 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 	}
 
 	public void init(K key, V iState, V cState){
-		P pri = (P) updater.decidePriority(key, iState);
+		P pri = updater.decidePriority(key, iState);
 		PriorityRecord<P, V> newpkvRecord = new PriorityRecord<P, V>(pri, iState, cState);
 		this.stateTable.put(key, newpkvRecord);
 	}
@@ -177,9 +177,9 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 				V v = stateTable.get(k).getiState();
 	
 				records.add(new KVRecord<K, V>(k, v));
-				V iState = (V)updater.resetiState();
+				V iState = updater.resetiState();
 				this.stateTable.get(k).setiState(iState);
-				P p = (P) updater.decidePriority(k, iState);
+				P p = updater.decidePriority(k, iState);
 				this.stateTable.get(k).setPriority(p);
 				activations++;
 			}
@@ -190,7 +190,7 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 		
 		synchronized(this.stateTable){	
 			int activations = 0;
-			P threshold = (P) updater.decidePriority(new IntWritable(0), (V)updater.resetiState());
+			P threshold = updater.decidePriority((K)(new IntWritable(0)), updater.resetiState());
 			
 			//select eligible records to keys
 			List<K> keys = new ArrayList<K>();
@@ -208,9 +208,9 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 					for(K k : keys){		
 						V v = stateTable.get(k).getiState();
 						records.add(new KVRecord<K, V>(k, v));
-						V iState = (V)updater.resetiState();
+						V iState = updater.resetiState();
 						this.stateTable.get(k).setiState(iState);
-						P p = (P) updater.decidePriority(k, iState);
+						P p = updater.decidePriority(k, iState);
 						this.stateTable.get(k).setPriority(p);
 						activations++;	
 					}
@@ -250,9 +250,9 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 							
 							if(pri.compareTo(threshold) >= 0){
 								records.add(new KVRecord<K, V>(k, v));
-								V iState = (V)updater.resetiState();
+								V iState = updater.resetiState();
 								this.stateTable.get(k).setiState(iState);
-								P p = (P) updater.decidePriority(k, iState);
+								P p = updater.decidePriority(k, iState);
 								this.stateTable.get(k).setPriority(p);
 								activations++;
 							}
@@ -264,9 +264,9 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 							
 							if(pri.compareTo(threshold) > 0){
 								records.add(new KVRecord<K, V>(k, v));
-								V iState = (V)updater.resetiState();
+								V iState = updater.resetiState();
 								this.stateTable.get(k).setiState(iState);
-								P p = (P) updater.decidePriority(k, iState);
+								P p = updater.decidePriority(k, iState);
 								this.stateTable.get(k).setPriority(p);
 								activations++;
 							}
@@ -291,9 +291,9 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 					for(K k : keys){		
 						V v = stateTable.get(k).getiState();			
 						records.add(new KVRecord<K, V>(k, v));
-						V iState = (V)updater.resetiState();
+						V iState = updater.resetiState();
 						this.stateTable.get(k).setiState(iState);
-						P p = (P) updater.decidePriority(k, iState);
+						P p = updater.decidePriority(k, iState);
 						this.stateTable.get(k).setPriority(p);
 						activations++;	
 					}
@@ -332,9 +332,9 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 							
 							if(pri.compareTo(threshold) >= 0){
 								records.add(new KVRecord<K, V>(k, v));
-								V iState = (V)updater.resetiState();
+								V iState = updater.resetiState();
 								this.stateTable.get(k).setiState(iState);
-								P p = (P) updater.decidePriority(k, iState);
+								P p = updater.decidePriority(k, iState);
 								this.stateTable.get(k).setPriority(p);
 								activations++;
 							}
@@ -346,9 +346,9 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 							
 							if(pri.compareTo(threshold) > 0){
 								records.add(new KVRecord<K, V>(k, v));
-								V iState = (V)updater.resetiState();
+								V iState = updater.resetiState();
 								this.stateTable.get(k).setiState(iState);
-								P p = (P) updater.decidePriority(k, iState);
+								P p = updater.decidePriority(k, iState);
 								this.stateTable.get(k).setPriority(p);
 								activations++;
 							}
@@ -388,9 +388,9 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 					
 					if(pri.compareTo(threshold) > 0){
 						records.add(new KVRecord<K, V>(k, v));
-						V iState = (V)updater.resetiState();
+						V iState = updater.resetiState();
 						this.stateTable.get(k).setiState(iState);
-						P p = (P) updater.decidePriority(k, iState);
+						P p = updater.decidePriority(k, iState);
 						this.stateTable.get(k).setPriority(p);
 						activations++;
 					}
@@ -656,7 +656,7 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 			if(stateTable.size() <= topk || stateTable.size() <= SAMPLESIZE){
 				for(K k : stateTable.keySet()){	
 					V v = stateTable.get(k).getcState();
-					P pri = (P) updater.decideTopK(k, v);
+					P pri = updater.decideTopK(k, v);
 					writer.append(pri, k, stateTable.get(k).getcState());	
 					progress += v.getV();
 				}
@@ -678,8 +678,8 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 							public int compare(Object left, Object right){
 								V leftrecord = langForSort.get(left).getcState();
 								V rightrecord = langForSort.get(right).getcState();
-								P leftpriority = (P) updater.decideTopK((K)left, leftrecord);
-								P rightpriority = (P) updater.decideTopK((K)right, rightrecord);
+								P leftpriority = updater.decideTopK((K)left, leftrecord);
+								P rightpriority = updater.decideTopK((K)right, rightrecord);
 								return -leftpriority.compareTo(rightpriority);
 							}
 						});
@@ -690,7 +690,7 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 				LOG.info("table size " + this.stateTable.size() + " cutindex " + cutindex + " threshold " + threshold);
 				for(K k : stateTable.keySet()){		
 					V v = stateTable.get(k).getcState();
-					P pri = (P) updater.decideTopK(k, v);
+					P pri = updater.decideTopK(k, v);
 					if(pri.compareTo(threshold) > 0){
 						writer.append(pri, k, stateTable.get(k).getcState());
 					}
