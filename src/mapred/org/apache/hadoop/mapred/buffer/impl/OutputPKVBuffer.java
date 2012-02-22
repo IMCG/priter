@@ -97,7 +97,7 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 	public OutputPKVBuffer(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
 				Reporter reporter, Progress progress, 
 				Class<K> keyClass, Class<P> priClass, Class<V> valClass, 
-				Updater updater) throws IOException{	
+				Updater<K, P, V> updater) throws IOException{	
 		
 		LOG.info("OutputPKVBuffer is reset for task " + task.getTaskID());
 
@@ -413,6 +413,7 @@ public class OutputPKVBuffer<K extends Object, P extends Valueable, V extends Va
 		start = true;
 		
 		if(bMemTrans){
+			//mem trans seems not work, i forgot whether I have implemented it or not
 			OutputFile outfile;
 			if(job.getBoolean("priter.job.mapsync", false)){
 				outfile = new OutputFile(this.taskAttemptID, this.iteration, new Path("/tmp/t1"), new Path("/tmp/t1"), partitions);

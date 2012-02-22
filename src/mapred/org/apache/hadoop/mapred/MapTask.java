@@ -44,6 +44,7 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapred.TaskCompletionEvent.Status;
 import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
+import org.apache.hadoop.mapred.buffer.impl.InputKVDFile;
 import org.apache.hadoop.mapred.buffer.impl.InputPKVBuffer;
 import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
 import org.apache.hadoop.mapred.buffer.impl.UnSortOutputBuffer;
@@ -244,6 +245,7 @@ public class MapTask extends Task {
 	
     protected Class inputKeyClass;
     protected Class inputValClass;
+    protected Class dataClass;
     
     protected TaskID pipeReduceTaskId = null;
     protected boolean ftsupport = false;
@@ -253,6 +255,11 @@ public class MapTask extends Task {
     
     public boolean mapsync = false;
     private JobConf job;
+    
+    public Activator activator = null;
+    public FileBasedActivator filebasedactivator = null;
+    public InputPKVBuffer pkvBuffer = null;
+    public InputKVDFile kvdFile = null;
 
 	private static final Log LOG = LogFactory.getLog(MapTask.class.getName());
 
@@ -390,7 +397,7 @@ public class MapTask extends Task {
 
 	@Override
 	@SuppressWarnings("unchecked")
-	public void run(final JobConf job, final TaskUmbilicalProtocol umbilical, final BufferUmbilicalProtocol bufferUmbilical)
+	public void run(JobConf job, final TaskUmbilicalProtocol umbilical, final BufferUmbilicalProtocol bufferUmbilical)
 	throws IOException {
 		final Reporter reporter = getReporter(umbilical);
 		this.job = job;
@@ -420,86 +427,75 @@ public class MapTask extends Task {
 		//iterative version
 		if(this.iterative){
 			job.setPartitionerClass(PrIterPartitioner.class);
-			job.setBoolean("priter.job.inmem", true);
+			//job.setBoolean("priter.job.inmem", true);
 			
 			setPhase(TaskStatus.Phase.PIPELINE); 
 			
-			if (numReduceTasks > 0) {
-				Class mapCombiner = job.getClass("mapred.map.combiner.class", null);
-				if (mapCombiner != null) {
-					job.setCombinerClass(mapCombiner);
-				}
-
-				this.inputKeyClass = job.getMapOutputKeyClass();
-				this.inputValClass = job.getMapOutputValueClass();
-				Class<? extends CompressionCodec> codecClass = null;
-				if (conf.getCompressMapOutput()) {
-					codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
-				}
-
-				if(job.getBoolean("priter.job.inmem", false)){
-					this.nsortBuffer = new UnSortOutputBuffer(bufferUmbilical, this, job, 
-							reporter, getProgress(), false, 
-							this.inputKeyClass, this.inputValClass, codecClass);
-				}else{
-					this.buffer = new JOutputBuffer(bufferUmbilical, this, job, 
-							reporter, getProgress(), false, 
-							this.inputKeyClass, this.inputValClass, codecClass);
-				}
-	
-			} else { 
-				LOG.info("I didn't consider this");
-			}
+			if (numReduceTasks <= 0) {LOG.error("I didn't consider this");}
 			
+			Class mapCombiner = job.getClass("mapred.map.combiner.class", null);
+			if (mapCombiner != null) {
+				job.setCombinerClass(mapCombiner);
+			}
+
+			this.inputKeyClass = job.getMapOutputKeyClass();
+			this.inputValClass = job.getMapOutputValueClass();
+			this.dataClass = job.getStaticDataClass();
+			
+			Class<? extends CompressionCodec> codecClass = null;
+			if (conf.getCompressMapOutput()) {
+				codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
+			}
+
 			ftsupport = job.getBoolean("priter.checkpoint", true);
+			long workload = 0;
+			long counter = 0;
 			
-			Activator activator = (Activator) ReflectionUtils.newInstance(job.getActivatorClass(), job);
+			//in memory case
+			if(job.getBoolean("priter.job.inmem", true)){
+				this.nsortBuffer = new UnSortOutputBuffer(bufferUmbilical, this, job, 
+						reporter, getProgress(), false, 
+						this.inputKeyClass, this.inputValClass, codecClass);
+				
+				activator = (Activator) ReflectionUtils.newInstance(job.getActivatorClass(), job);
+				pkvBuffer = new InputPKVBuffer(bufferUmbilical, this, job, reporter, null, inputKeyClass, inputValClass);
 			
-			InputPKVBuffer pkvBuffer = new InputPKVBuffer(bufferUmbilical, this, job, reporter, null, inputKeyClass, inputValClass);
-			
-		    /* This object will be the sink's input buffer. */
-			BufferExchangeSink sink = new BufferExchangeSink(job, pkvBuffer, this); 
-			sink.open();
-			LOG.info("buffere exchange sink opened");
-			/* Start the reduce output fetcher 
-			 * I should refine it later, let we choose the exact taskID in the same machine
-			 * */
-			while(this.pipeReduceTaskId == null){
-				this.pipeReduceTaskId = new TaskID(this.getJobID(), false, this.getTaskID().getTaskID().getId());
+			    /* This object will be the sink's input buffer. */
+				BufferExchangeSink sink = new BufferExchangeSink(job, pkvBuffer, this); 
+				sink.open();
+				LOG.info("buffere exchange sink opened");
+				/* Start the reduce output fetcher 
+				 * I should refine it later, let we choose the exact taskID in the same machine
+				 * */
+				while(this.pipeReduceTaskId == null){
+					this.pipeReduceTaskId = new TaskID(this.getJobID(), false, this.getTaskID().getTaskID().getId());
 
-				try {
-					Thread.sleep(100);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
 				}
-			}
-			LOG.info("local reduce task id extracted " + pipeReduceTaskId);
-			
-			ReduceOutputFetcher rof = new ReduceOutputFetcher(umbilical, bufferUmbilical, sink, pipeReduceTaskId);
-			rof.setDaemon(true);
-			rof.start();
-			
-			LOG.info("mapper configure phase");
-			//mapper.configure(job);
-			LOG.info("mapper initPKVBuffer phase");
-			if(this.checkpointIter <= 0){
-				activator.initStarter(pkvBuffer);
-			}
-		
-			if(ftsupport){
-				//rollback check thread
-				this.rollbackCheckThread = new RollbackCheckThread(umbilical, bufferUmbilical, sink, this, pkvBuffer);
-				this.rollbackCheckThread.setDaemon(true);
-				this.rollbackCheckThread.start();
-			}
-			//setPhase(TaskStatus.Phase.SHUFFLE); 
-			
-			int workload = 0;
-			int counter = 0;
-					
-			try{
-				synchronized(this){		
-					if(job.getBoolean("priter.job.inmem", true)){
+				LOG.info("local reduce task id extracted " + pipeReduceTaskId);
+				
+				ReduceOutputFetcher rof = new ReduceOutputFetcher(umbilical, bufferUmbilical, sink, pipeReduceTaskId);
+				rof.setDaemon(true);
+				rof.start();
+				
+				LOG.info("mapper initPKVBuffer phase");
+				if(this.checkpointIter <= 0){
+					activator.initStarter(pkvBuffer);
+				}
+				
+				if(ftsupport){
+					//rollback check thread
+					this.rollbackCheckThread = new RollbackCheckThread(umbilical, bufferUmbilical, sink, this, pkvBuffer);
+					this.rollbackCheckThread.setDaemon(true);
+					this.rollbackCheckThread.start();
+				}
+				
+				try{
+					synchronized(this){		
 						//iteration loop, stop when reduce let it stop
 						
 						//for processing time measurement
@@ -522,7 +518,6 @@ public class MapTask extends Task {
 								long processtime = processend - processstart;
 									
 								LOG.info("unsort total workload is " + workload + " use time " + processtime);
-								
 								LOG.info("no records, I am waiting!");
 								
 								setProgressFlag();
@@ -544,54 +539,113 @@ public class MapTask extends Task {
 							workload++;
 							counter++;										
 						}
-					}else{
-						//iteration loop, stop when reduce let it stop	
+					}
+				}finally {
+						rof.interrupt();
+						rof = null;
+						if(ftsupport){
+							rollbackCheckThread.interrupt();
+							rollbackCheckThread = null;
+						}
+						sink.close();
+				}
+			}else{
+				//on disk case
+				
+				//output should be sorted in the number order, doesn't help, since jobconf is
+				//declared as final
+				//job.setOutputKeyComparatorClass(IntWritableIncreasingComparator.class);
+				
+				this.buffer = new JOutputBuffer(bufferUmbilical, this, job, 
+						reporter, getProgress(), false, 
+						this.inputKeyClass, this.inputValClass, codecClass);
+				
+				filebasedactivator = (FileBasedActivator) ReflectionUtils.newInstance(job.getFileActivatorClass(), job);
+				kvdFile = new InputKVDFile(this, job, reporter, buffer, inputKeyClass, inputValClass, dataClass, filebasedactivator);
+			
+			    /* This object will be the sink's input buffer. */
+				BufferExchangeSink sink = new BufferExchangeSink(job, kvdFile, this); 
+				sink.open();
+				LOG.info("buffere exchange sink opened");
+				/* Start the reduce output fetcher 
+				 * I should refine it later, let we choose the exact taskID in the same machine
+				 * */
+				while(this.pipeReduceTaskId == null){
+					this.pipeReduceTaskId = new TaskID(this.getJobID(), false, this.getTaskID().getTaskID().getId());
+
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+				LOG.info("local reduce task id extracted " + pipeReduceTaskId);
+				
+				ReduceOutputFetcher rof = new ReduceOutputFetcher(umbilical, bufferUmbilical, sink, pipeReduceTaskId);
+				rof.setDaemon(true);
+				rof.start();
+				
+				LOG.info("mapper initPKVBuffer phase");
+				while(!kvdFile.isReady()){
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+				
+				LOG.info("priority queue file is ready!");
+				//not implemented yet
+				/*
+				if(ftsupport){
+					//rollback check thread
+					this.rollbackCheckThread = new RollbackCheckThread(umbilical, bufferUmbilical, sink, this, kvdFile);
+					this.rollbackCheckThread.setDaemon(true);
+					this.rollbackCheckThread.start();
+				}
+				*/
+				
+				try{
+					synchronized(this){		
+						//iteration loop, stop when reduce let it stop
 						while(true) {
-							while(!pkvBuffer.next()){
-								LOG.info("total workload is " + workload);
-								activator.iterate();
-								if(counter == 0){
-									LOG.info("sort no records left, do nothing");
-								}else{		
-									this.buffer.iterate();
-									counter = 0;
-								}
-														
-								LOG.info("no records, I am waiting!");
-								
-								setProgressFlag();
+
+							if(workload != 0){
 								try {
 									this.wait();
 								} catch (InterruptedException e) {
 									// TODO Auto-generated catch block
 									e.printStackTrace();
 								}
-							
 							}
+
+							long processstart = new Date().getTime();
 							
-							Object keyObject = pkvBuffer.getTopKey();
-							Object valObject = pkvBuffer.getTopValue();
-							if(keyObject != null && valObject != null){
-								activator.activate(keyObject, valObject, this.buffer, reporter);
-								reporter.incrCounter(Counter.MAP_INPUT_RECORDS, 1);
-								workload++;
-								counter++;	
-							}			
+							long kvds = kvdFile.process();
+							workload += kvds;
+							//measure process time
+							long processend = new Date().getTime();
+								
+							LOG.info("process kvds " + kvds + " use time " + (processend - processstart));
+							LOG.info("no records, I am waiting!");
+							setProgressFlag();		
+							
+							filebasedactivator.iterate();
+							buffer.iterate();
 						}
 					}
-	
+				}finally {
+						rof.interrupt();
+						rof = null;
+						if(ftsupport){
+							rollbackCheckThread.interrupt();
+							rollbackCheckThread = null;
+						}
+						sink.close();
 				}
-			}finally {
-				rof.interrupt();
-				rof = null;
-				if(ftsupport){
-					rollbackCheckThread.interrupt();
-					rollbackCheckThread = null;
-				}
-				sink.close();
 			}
-		}
-		else{
+		}else{
+			job.setBoolean("priter.job.inmem", false);
 			boolean pipeline = job.getBoolean("mapred.map.pipeline", false);
 			if (numReduceTasks > 0) {
 				Class mapCombiner = job.getClass("mapred.map.combiner.class", null);

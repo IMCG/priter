@@ -2,7 +2,6 @@ package org.apache.hadoop.mapred.buffer.impl;
 
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.LinkedList;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -15,8 +14,8 @@ import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.mapred.FileBasedActivator;
-import org.apache.hadoop.mapred.FileBasedUpdater;
 import org.apache.hadoop.mapred.FileHandle;
+import org.apache.hadoop.mapred.IFile;
 import org.apache.hadoop.mapred.InputCollector;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Reporter;
@@ -24,10 +23,8 @@ import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskAttemptID;
 import org.apache.hadoop.mapred.IFile.PriorityQueueReader;
 import org.apache.hadoop.mapred.Task.Counter;
-import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.mapred.buffer.OutputFile.Header;
-import org.apache.hadoop.util.Progress;
 
 public class InputKVDFile<K extends Object, P extends WritableComparable, V extends WritableComparable, D extends Object> implements InputCollector<K, V>{
 
@@ -48,8 +45,10 @@ public class InputKVDFile<K extends Object, P extends WritableComparable, V exte
 	private V val;
 	private D data;
 	private Path priQueueFile;
+	private Path signalFile;
 	private JOutputBuffer<K, V> buffer;
 	private Reporter reporter;
+	private long lastlength = -1;
 	
 	private FileBasedActivator<K, P, V, D> activator;
 	
@@ -64,6 +63,7 @@ public class InputKVDFile<K extends Object, P extends WritableComparable, V exte
 		this.localFs = FileSystem.getLocal(job);
     	this.outputHandle = new FileHandle(task.getJobID());
     	this.outputHandle.setConf(job);
+    	this.taskAttemptID = task.getTaskID();
     	
 		this.keyClass = keyClass;
 		this.valClass = valClass;
@@ -74,6 +74,7 @@ public class InputKVDFile<K extends Object, P extends WritableComparable, V exte
 	    this.dataDeserializer = serializationFactory.getDeserializer(dataClass);
 	    
 		this.priQueueFile = outputHandle.getPriorityQueueFile(taskAttemptID);
+		this.signalFile = outputHandle.getSignalFile(taskAttemptID);
 		this.activator = activator;
 		this.buffer = buffer;
 		this.reporter = reporter;
@@ -84,6 +85,12 @@ public class InputKVDFile<K extends Object, P extends WritableComparable, V exte
 			throws IOException {
 		if(this.iteration <= ((OutputFile.PKVBufferHeader)header).iteration()){
 			this.iteration = ((OutputFile.PKVBufferHeader)header).iteration();
+
+			IFile.Reader reader = new IFile.Reader(job, istream, header.compressed(), null, null);
+			DataInputBuffer key = new DataInputBuffer();
+			DataInputBuffer value = new DataInputBuffer();
+			
+			//while (reader.next(key, value)) {}
 			return true;
 		}else{
 			LOG.error("current iteration " + this.iteration + " but receive iteration " + ((OutputFile.PKVBufferHeader)header).iteration());
@@ -98,7 +105,7 @@ public class InputKVDFile<K extends Object, P extends WritableComparable, V exte
 		}
 		long count = 0;
 		
-		PriorityQueueReader<K, V, D> priqueue_reader = new PriorityQueueReader<K, V, D>(job, hdfs, priQueueFile, null, null);
+		PriorityQueueReader<K, V, D> priqueue_reader = new PriorityQueueReader<K, V, D>(job, localFs, priQueueFile, null, null);
 		
 		DataInputBuffer keyIn = new DataInputBuffer();
 		DataInputBuffer valueIn = new DataInputBuffer();
@@ -124,29 +131,28 @@ public class InputKVDFile<K extends Object, P extends WritableComparable, V exte
 	
 	public boolean isReady() throws IOException{
 		//ready when priority queue file has been initialized
-		if(localFs.exists(priQueueFile)){
-			 FSDataInputStream istream = null;
-			 try{
-				 istream = localFs.open(priQueueFile);
-			 }catch(IOException e){
-				 return false;
-			 }finally{
-				 if(istream != null){
-					 istream.close();
-				 }
-			 }
-			 
-			 if(istream != null){
-				 istream.close();
-				 return true;
-			 }else{
-				 return false;
-			 }
-			
+		
+		if(localFs.exists(signalFile)){
+			return true;
 		}else{
 			return false;
 		}
 		
+		/*
+		if(localFs.exists(priQueueFile)){
+			long length = localFs.getLength(priQueueFile);
+			
+			LOG.info("length " + length);
+			if(length != lastlength){
+				lastlength = length;
+				return false;
+			}else{
+				return true;
+			}
+		}else{
+			return false;
+		}
+		*/
 	}
 	
 	@Override

@@ -469,8 +469,22 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					LOG.debug("File handler " + hashCode() + " ready to receive -- " + header);
 					if (collector.read(istream, header)) {
 						updateProgress(header);
-						synchronized (task) {
-							task.notifyAll();
+						
+						int recMaps = 0;
+						if(!syncMapPos.containsKey(position.longValue())){
+							recMaps = 1;
+						}else{
+							recMaps = syncMapPos.get(position.longValue()) + 1;
+						}
+						
+						LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
+						syncMapPos.put(position.longValue(), recMaps);
+						
+						if(recMaps == syncMaps){					
+							syncMapPos.remove(position.longValue());	
+							synchronized (task) {
+								task.notifyAll();
+							}							
 						}
 					}
 					position.set(header.ids().last() + 1);
@@ -534,14 +548,16 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						
 						LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
 						syncMapPos.put(position.longValue(), recMaps);
-						
+						/*
+						 * measure synchronization overhead
 						if(header.owner().getTaskID().getId() == task.getTaskID().getTaskID().getId()){
 							long current = System.currentTimeMillis();
 							LOG.info("synchronization start. " + current +
 									"task id " + header.owner().getTaskID().getId() +
 									" and " + task.getTaskID().getTaskID().getId());
 						}
-							
+						*/
+						
 						if(recMaps == syncMaps){					
 							syncMapPos.remove(position.longValue());	
 							((ReduceTask)task).spillIter = true;	

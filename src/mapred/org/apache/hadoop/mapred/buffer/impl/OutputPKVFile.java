@@ -1,15 +1,9 @@
 package org.apache.hadoop.mapred.buffer.impl;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.TreeMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -31,36 +25,55 @@ public class OutputPKVFile<K extends Object, P extends Valueable, V extends Valu
 			implements OutputCollector<K, V> {
 	private static final Log LOG = LogFactory.getLog(OutputPKVFile.class.getName());
 	
+	class KPRecord<K, P>{
+		K key;
+		P pri;
+		
+		public KPRecord(K k, P p){
+			key = k;
+			pri = p;
+		}
+	}
+	
+	private JobConf job;
 	private FileHandle outputHandle;
+	private FileSystem localFs;
 	private TaskAttemptID taskAttemptID;
+	private Path intermediatefile;
+	private Class<K> keyClass;
+	private Class<V> valClass;
 	private IFile.Writer<K, V> writer;
 	private FileBasedUpdater<K, P, V, D> updater;
-	private HashMap<K, P> samples;
+	private ArrayList<KPRecord<K, P>> samples;
 	private int SAMPLESIZE;
 	private boolean bPortion = false;
 	private boolean bLength = false;
 	private double queueportion = 0.2;
 	private int queuelen = 0;
 	private int counter = 0;
-	private int checkInterval;
-	private int totalRecords;
+	private long checkInterval;
+	private long totalRecords;
 	
 	public OutputPKVFile(BufferUmbilicalProtocol umbilical, Task task, JobConf job, 
 			Reporter reporter, Progress progress, 
 			Class<K> keyClass, Class<P> priClass, Class<V> valClass, 
-			FileBasedUpdater<K, P, V, D> updater) throws IOException{
+			FileBasedUpdater<K, P, V, D> updater, long records) throws IOException{
 		
-		FileSystem hdfs = FileSystem.get(job);
-		outputHandle = new FileHandle(task.getJobID());
-    	outputHandle.setConf(job);
-    	taskAttemptID = task.getTaskID();
-		Path intermediatefile = outputHandle.getiStateFile4Write(taskAttemptID);
-		this.writer = new IFile.Writer<K, V>(job, hdfs, intermediatefile, keyClass, valClass, null, null);
+		this.job = job;
+		this.localFs = FileSystem.getLocal(job);
+		this.outputHandle = new FileHandle(task.getJobID());
+    	this.outputHandle.setConf(job);
+    	this.taskAttemptID = task.getTaskID();
+    	this.keyClass = keyClass;
+    	this.valClass = valClass;
+		this.intermediatefile = outputHandle.getiStateFileIntermediate(taskAttemptID);
+		this.writer = new IFile.Writer<K, V>(job, localFs, intermediatefile, keyClass, valClass, null, null);
 		this.updater = updater;
 		
+		totalRecords = records;
 		SAMPLESIZE = job.getInt("priter.job.samplesize", 1000);
-		checkInterval = totalRecords / SAMPLESIZE - 1;
-		samples = new HashMap<K, P>();
+		checkInterval = totalRecords / SAMPLESIZE + 1;
+		samples = new ArrayList<KPRecord<K, P>>(totalRecords > SAMPLESIZE ? SAMPLESIZE : (int)totalRecords);
 		
 		if(job.getFloat("priter.queue.portion", -1) != -1){
 			this.bPortion = true;
@@ -71,59 +84,66 @@ public class OutputPKVFile<K extends Object, P extends Valueable, V extends Valu
 		}
 	}
 	
+	public void initIntermediateFile() throws IOException{
+		this.writer = new IFile.Writer<K, V>(job, localFs, intermediatefile, keyClass, valClass, null, null);
+	}
+	
 	@Override
 	public void collect(K key, V value) throws IOException {
 		writer.append(key, value);
-		if(counter % checkInterval == 0){
+		if(++counter % checkInterval == 0){
 			P pri = updater.decidePriority(key, value);
-			samples.put(key, pri);
+			samples.add(new KPRecord<K, P>(key, pri));
 		}
 	}
 	
 	public P getPriorityThreshold(){
 		//retrieve the priority threshold at the same time
-		
-		final Map<K, P> langForSort = samples;
-		List<K> randomkeys = new ArrayList<K>(samples.keySet());
-		Collections.sort(randomkeys, 
+		Collections.sort(samples, 
 				new Comparator(){
 					public int compare(Object left, Object right){
-						P leftrecord = langForSort.get(left);
-						P rightrecord = langForSort.get(right);
+						P leftrecord = ((KPRecord<K, P>)left).pri;
+						P rightrecord = ((KPRecord<K, P>)right).pri;
 						return -leftrecord.compareTo(rightrecord);
 					}
 				});
 		
+		if(counter > Long.MAX_VALUE / 2) counter = 0;
 		if(this.bPortion){
 			int actualqueuelen = (int) (this.totalRecords * this.queueportion);
 			
-			int cutindex = (int) this.queueportion * SAMPLESIZE;
-			P threshold = samples.get((randomkeys.get(cutindex-1>=0?cutindex-1:0)));
+			int cutindex = (int) (queueportion * samples.size());
+			P threshold = samples.get(cutindex-1>=0?cutindex-1:0).pri;
 			
-			LOG.info("queuelen " + actualqueuelen + " eliglbe records " + totalRecords + 
-					" cut index " + cutindex + " threshold is " + threshold);
+			LOG.info("1queuelen " + actualqueuelen + " eliglbe records " + totalRecords + " sample size " + samples.size()
+					+ " cut index " + cutindex + " threshold is " + threshold);
+			samples.clear();
 			return threshold;
 		} else{
-			int cutindex = queuelen * SAMPLESIZE / totalRecords;
-			P threshold = samples.get((randomkeys.get(cutindex-1>=0?cutindex-1:0)));
+			int cutindex = (int) (queuelen * samples.size() / totalRecords);
+			P threshold = samples.get(cutindex-1>=0?cutindex-1:0).pri;
 			
-			LOG.info("queuelen " + queuelen + " eliglbe records " + totalRecords + 
+			LOG.info("2queuelen " + queuelen + " eliglbe records " + totalRecords + 
 					" cut index " + cutindex + " threshold is " + threshold);
+			samples.clear();
 			return threshold;
 		}	
 	}
 	
 	public void close() throws IOException{
 		writer.close();
-		
+		/*
+		 * renaming files results in crc checksum problems, I change method
 		//rename the istatefile_for_write to istatefile_for_read
 		Path file4write = outputHandle.getiStateFile4Write(taskAttemptID);
 		Path file4read = outputHandle.getiStateFile4Read(taskAttemptID);
-		File toBeRenamed = new File(file4write.getName());
-		File newfile = new File(file4read.getName());
+		File toBeRenamed = new File(file4write.getParent()+"/"+file4write.getName());
+		File newfile = new File(file4read.getParent()+"/"+file4read.getName());
+		LOG.info("renaming file " + toBeRenamed + " to file " + newfile);
 		if(!toBeRenamed.renameTo(newfile)){
 			LOG.error("error renaming file " + toBeRenamed + " to " + newfile);
 		}
+		*/
 	}
 
 }

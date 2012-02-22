@@ -23,6 +23,7 @@ import java.io.IOException;
 
 import java.net.URL;
 import java.net.URLDecoder;
+import java.util.ArrayList;
 import java.util.Enumeration;
 
 import org.apache.commons.logging.Log;
@@ -714,6 +715,24 @@ public class JobConf extends Configuration {
   }
 
   /**
+   * Get the value class for job outputs.
+   * 
+   * @return the value class for job outputs.
+   */
+  public Class<?> getStaticDataClass() {
+    return getClass("mapred.static.data.class", ArrayList.class, Object.class);
+  }
+  
+  /**
+   * Set the value class for job outputs.
+   * 
+   * @param theClass the value class for job outputs.
+   */
+  public void setStaticDataClass(Class<?> theClass) {
+    setClass("mapred.static.data.class", theClass, Object.class);
+  }
+  
+  /**
    * Get the priority class for priority iteration.
    * 
    * @return the priority class for priority iteration.
@@ -767,6 +786,24 @@ public class JobConf extends Configuration {
     setClass("priter.activator.class", theClass, Activator.class);
   }
 
+  /**
+   * Get the {@link Mapper} class for the job.
+   * 
+   * @return the {@link Mapper} class for the job.
+   */
+  public Class<? extends FileBasedActivator> getFileActivatorClass() {
+    return getClass("priter.file.activator.class", null, FileBasedActivator.class);
+  }
+  
+  /**
+   * Set the {@link Mapper} class for the job.
+   * 
+   * @param theClass the {@link Mapper} class for the job.
+   */
+  public void setFileActivatorClass(Class<? extends FileBasedActivator> theClass) {
+    setClass("priter.file.activator.class", theClass, FileBasedActivator.class);
+  }
+  
   /**
    * Get the {@link MapRunnable} class for the job.
    * 
@@ -843,10 +880,28 @@ public class JobConf extends Configuration {
    * 
    * @param theClass the {@link Reducer} class for the job.
    */
+  public void setFileUpdaterClass(Class<? extends FileBasedUpdater> theClass) {
+    setClass("priter.file.updator.class", theClass, FileBasedUpdater.class);
+  }
+
+  /**
+   * Get the {@link Reducer} class for the job.
+   * 
+   * @return the {@link Reducer} class for the job.
+   */
+  public Class<? extends FileBasedUpdater> getFileUpdatorClass() {
+    return getClass("priter.file.updator.class",
+                    null, FileBasedUpdater.class);
+  }
+  
+  /**
+   * Set the {@link Reducer} class for the job.
+   * 
+   * @param theClass the {@link Reducer} class for the job.
+   */
   public void setUpdaterClass(Class<? extends Updater> theClass) {
     setClass("priter.updator.class", theClass, Updater.class);
   }
-
   /**
    * Get the user-defined <i>combiner</i> class used to combine map-outputs 
    * before being sent to the reducers. Typically the combiner is same as the
