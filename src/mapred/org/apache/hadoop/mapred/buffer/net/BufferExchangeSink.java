@@ -377,7 +377,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					try {
 						//LOG.info("Waiting for open signal.");
 						open = istream.readInt();
-						LOG.info("what is open? " + open);
+						//LOG.info("what is open? " + open);
 
 						if (open == Integer.MAX_VALUE) {
 							H header = (H) OutputFile.Header.readHeader(istream);
