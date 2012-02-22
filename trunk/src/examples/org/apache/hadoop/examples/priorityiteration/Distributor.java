@@ -9,6 +9,7 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.mapred.IntWritableIncreasingComparator;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.KeyValueTextInputFormat;
@@ -34,6 +35,7 @@ public class Distributor {
 		    job.setMapperClass(DistributorMaps.TextMap.class);
 	    }else if(keyclass == IntWritable.class){
 	    	job.setMapperClass(DistributorMaps.IntMap.class);
+	    	job.setOutputKeyComparatorClass(IntWritableIncreasingComparator.class);
 	    }else if(keyclass == FloatWritable.class){
 	    	job.setMapperClass(DistributorMaps.FloatMap.class);
 	    }else if(keyclass == DoubleWritable.class){
@@ -46,6 +48,7 @@ public class Distributor {
 	    job.setOutputKeyClass(NullWritable.class);
 	    job.setOutputValueClass(NullWritable.class);
 	    job.setPartitionerClass(partitionclass);
+	    
 	    
 	    job.setNumMapTasks(numparts*2);
 	    job.setNumReduceTasks(numparts);

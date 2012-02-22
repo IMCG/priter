@@ -241,6 +241,7 @@ public class PrIterTaskScheduler extends TaskScheduler {
 	          }else{
 		          Task t = job.obtainNewReduceTask(taskTracker, numTaskTrackers, 
 			              taskTrackerManager.getNumberOfUniqueHosts());
+		          job.getJobConf().setBoolean("priter.job.inmem", false);
 		          
 		          if (t != null) {
 			            return Collections.singletonList(t);

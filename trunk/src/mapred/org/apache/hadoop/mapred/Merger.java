@@ -164,17 +164,17 @@ public class Merger {
 }
 
   public static class Segment<K extends Object, V extends Object> {
-    Reader<K, V> reader = null;
-    DataInputBuffer key = new DataInputBuffer();
-    DataInputBuffer value = new DataInputBuffer();
+    protected Reader<K, V> reader = null;
+    protected DataInputBuffer key = new DataInputBuffer();
+    protected DataInputBuffer value = new DataInputBuffer();
     
-    Configuration conf = null;
-    FileSystem fs = null;
-    Path file = null;
-    boolean preserve = false;
-    CompressionCodec codec = null;
-    long segmentOffset = 0;
-    long segmentLength = -1;
+    protected Configuration conf = null;
+    protected FileSystem fs = null;
+    protected Path file = null;
+    protected boolean preserve = false;
+    protected CompressionCodec codec = null;
+    protected long segmentOffset = 0;
+    protected long segmentLength = -1;
     
     public Segment(Configuration conf, FileSystem fs, Path file,
                    CompressionCodec codec, boolean preserve) throws IOException {

@@ -55,7 +55,7 @@ public class PageRankFileUpdater extends PrIterBase implements
 	}
 
 	@Override
-	public void initFiles(
+	public long initFiles(
 			Writer<IntWritable, FloatWritable> istateWriter,
 			Writer<IntWritable, FloatWritable> cstateWriter,
 			Writer<IntWritable, IntArrayWritable> staticWriter,
@@ -65,7 +65,7 @@ public class PageRankFileUpdater extends PrIterBase implements
 		int taskid = Util.getTaskId(job);
 		Path subgraph = new Path(subGraphsDir + "/part" + taskid);
 		
-		
+		long records = 0;
 		FileSystem hdfs = null;
 	    try {
 			hdfs = FileSystem.get(job);
@@ -96,12 +96,13 @@ public class PageRankFileUpdater extends PrIterBase implements
 					
 					IntArrayWritable links3 = new IntArrayWritable();
 					links3.set(links2);
-					
-					
+						
 					istateWriter.append(new IntWritable(node), new FloatWritable(PageRank.RETAINFAC));
 					cstateWriter.append(new IntWritable(node), new FloatWritable(0));
 					staticWriter.append(new IntWritable(node), links3);
 					priorityqueueWriter.append(new IntWritable(node), new FloatWritable(PageRank.RETAINFAC), links3);
+					
+					records++;
 				}
 			}
 
@@ -113,6 +114,8 @@ public class PageRankFileUpdater extends PrIterBase implements
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+	    
+	    return records;
 	}
 
 	@Override
@@ -127,11 +130,15 @@ public class PageRankFileUpdater extends PrIterBase implements
 		workload++;		
 		reporter.setStatus(String.valueOf(workload));
 		
+		//System.out.println(key);
 		float delta = 0;
-		while(values.hasNext()){				
-			delta += values.next().get();	
+		while(values.hasNext()){	
+			float v = values.next().get();
+			delta += v;
+			//System.out.print(v + " ");
 		}
-
+		//System.out.println();
+		
 		output.collect(key, new FloatWritable(delta));
 	}
 }

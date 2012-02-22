@@ -38,6 +38,7 @@ import org.apache.hadoop.mapred.RawKeyValueIterator;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskID;
+import org.apache.hadoop.mapred.TaskTracker;
 import org.apache.hadoop.mapred.IFile.InMemoryReader;
 import org.apache.hadoop.mapred.IFile.Reader;
 import org.apache.hadoop.mapred.IFile.Writer;
@@ -540,7 +541,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 	
 	@Override
 	public ValuesIterator<K, V> valuesIterator() throws IOException {
-		if(conf.getBoolean("priter.job.inmem", false)){
+		if(conf.getBoolean("priter.job.inmem", true)){
 			RawKeyValueIterator kvIter = this.createUnSortKVIterator(conf, rfs, reporter);
 			return new ValuesIterator<K, V>(kvIter, comparator, keyClass, valClass, conf, reporter);
 		}else{
@@ -836,6 +837,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		for (JInput input : inputFilesOnDisk) {
 			fileList.add(input.file);
 		}
+
 		return fileList.toArray(new Path[0]);
 	}
 
@@ -883,9 +885,17 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 				onDiskBytes += fs.getFileStatus(file).getLen();
 				diskSegments.add(new Segment<K, V>(job, fs, file, codec, false));
 			}
+
+			//if it is file-based priter, add old istate file
+			if(conf.getBoolean("priter.job", false) && !conf.getBoolean("priter.job.inmem", true)){
+				Path iStatefile = outputHandle.getiStateFile(task.getTaskID());
+
+				diskSegments.add(new Segment<K, V>(job, fs, iStatefile, codec, false));
+			}
 			inputFilesOnDisk.clear();
 		}
 		
+		//they sort based on the file size, bigger first, maybe I should let state table file in last
 		LOG.info("Merging " + diskSegments.size() + " files, " +
 				onDiskBytes + " bytes from disk");
 		Collections.sort(diskSegments, new Comparator<Segment<K,V>>() {

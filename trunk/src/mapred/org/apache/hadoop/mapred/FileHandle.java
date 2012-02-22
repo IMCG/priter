@@ -245,6 +245,80 @@ public class FileHandle {
                        + "/map_" + mapTaskId.toString() + "_" + id + ".in", conf);
   }
 
+  
+  /** Get the istate file name.
+   * @param mapTaskId a map task id
+   * @param reduceTaskId a reduce task id
+   * @param size the size of the file
+   */
+  public Path getSignalFile(TaskAttemptID reduceTaskId)
+    throws IOException {
+	    return lDirAlloc.getLocalPathForWrite(TaskTracker.getLocalJobDir(jobId.toString())
+                + "/signal" + reduceTaskId.getTaskID().getId() + ".file", conf);
+                       
+  }
+  
+  /** Get the istate file name.
+   * @param mapTaskId a map task id
+   * @param reduceTaskId a reduce task id
+   * @param size the size of the file
+   */
+  public Path getiStateFile(TaskAttemptID reduceTaskId)
+    throws IOException {
+	
+    return lDirAlloc.getLocalPathForWrite(TaskTracker.getIntermediateOutputDir(
+                       jobId.toString(), reduceTaskId.toString())
+                       + "/istate_" + reduceTaskId.getTaskID().getId() + ".file", conf);
+                       
+  }
+  
+  /** Get the istate file name.
+   * @param mapTaskId a map task id
+   * @param reduceTaskId a reduce task id
+   * @param size the size of the file
+   */
+  public Path getiStateFileIntermediate(TaskAttemptID reduceTaskId)
+    throws IOException {
+    return lDirAlloc.getLocalPathForWrite(TaskTracker.getIntermediateOutputDir(
+                       jobId.toString(), reduceTaskId.toString())
+                       + "/istate_intermediate_" + reduceTaskId.getTaskID().getId() + ".file", conf);
+  }
+  
+  /** Get the cstate file name.
+   * @param mapTaskId a map task id
+   * @param reduceTaskId a reduce task id
+   * @param size the size of the file
+   */
+  public Path getcStateFile(TaskAttemptID reduceTaskId, int iteration)
+    throws IOException {
+    return lDirAlloc.getLocalPathForWrite(TaskTracker.getIntermediateOutputDir(
+                       jobId.toString(), reduceTaskId.toString())
+                       + "/cstate_" + reduceTaskId.getTaskID().getId() + "_" + iteration  + ".file", conf);
+  }
+  
+  /** Get the static file name.
+   * @param mapTaskId a map task id
+   * @param reduceTaskId a reduce task id
+   * @param size the size of the file
+   */
+  public Path getStaticFile(TaskAttemptID reduceTaskId)
+    throws IOException {
+    return lDirAlloc.getLocalPathForWrite(TaskTracker.getIntermediateOutputDir(
+                       jobId.toString(), reduceTaskId.toString())
+                       + "/static_" + reduceTaskId.getTaskID().getId() + ".file", conf);
+  }
+ 
+  /** Get the priority queue file name.
+   * @param mapTaskId a map task id
+   * @param reduceTaskId a reduce task id
+   * @param size the size of the file
+   */
+  public Path getPriorityQueueFile(TaskAttemptID reduceTaskId)
+    throws IOException {
+    return lDirAlloc.getLocalPathForWrite(TaskTracker.getLocalJobDir(jobId.toString())
+                       + "/priorityqueue_" + reduceTaskId.getTaskID().getId() + ".file", conf);
+  }
+  
   /** Removes all of the files related to a task. */
   public void removeAll(TaskAttemptID taskId) throws IOException {
     conf.deleteLocalFiles(TaskTracker.getIntermediateOutputDir(

@@ -24,13 +24,20 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Writable;
@@ -38,12 +45,16 @@ import org.apache.hadoop.io.WritableFactories;
 import org.apache.hadoop.io.WritableFactory;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.DefaultCodec;
+import org.apache.hadoop.mapred.IFile.Reader;
 import org.apache.hadoop.mapred.buffer.BufferUmbilicalProtocol;
 import org.apache.hadoop.mapred.buffer.OutputFile;
 import org.apache.hadoop.mapred.buffer.impl.JInputBuffer;
 import org.apache.hadoop.mapred.buffer.impl.JOutputBuffer;
 import org.apache.hadoop.mapred.buffer.impl.JSnapshotBuffer;
 import org.apache.hadoop.mapred.buffer.impl.OutputPKVBuffer;
+import org.apache.hadoop.mapred.buffer.impl.OutputPKVFile;
+import org.apache.hadoop.mapred.buffer.impl.PriorityFilter;
+import org.apache.hadoop.mapred.buffer.impl.PriorityRecord;
 import org.apache.hadoop.mapred.buffer.impl.ValuesIterator;
 import org.apache.hadoop.mapred.buffer.net.BufferExchange;
 import org.apache.hadoop.mapred.buffer.net.BufferRequest;
@@ -172,49 +183,99 @@ public class ReduceTask extends Task {
 		public void run() {
 		    int id = getTaskID().getTaskID().getId();
 		    
-			while(true) {
-				synchronized(this){
-					try{
-						this.wait(conf.getLong("priter.snapshot.interval", 20000));
-						if(!bRecompute){
-							LOG.info("pkvBuffer size " + pkvBuffer.size() + " index " + snapshotIndex + " total maps is " + pkvBuffer.total_map);
-							
-							while((pkvBuffer == null) || (pkvBuffer.size() == 0)){	
-								this.wait(500);
-							}
-							while(!pkvBuffer.start){
-								this.wait(500);
-							}
-							
-							double local_progress = 0;
-							if(conf.getBoolean("priter.snapshot", true)){
-								//snapshot generation
-								pkvBuffer.snapshot(snapshotIndex);
-								local_progress = pkvBuffer.progress;
+		    if(conf.getBoolean("priter.job.inmem", true)){
+		    	//in memory version
+				while(true) {
+					synchronized(this){
+						try{
+							this.wait(conf.getLong("priter.snapshot.interval", 20000));
+							if(!bRecompute){	
+								while((pkvBuffer == null) || (pkvBuffer.size() == 0)){	
+									this.wait(500);
+								}
+								while(!pkvBuffer.start){
+									this.wait(500);
+								}
+								
+								LOG.info("pkvBuffer size " + pkvBuffer.size() + " index " + snapshotIndex + " total maps is " + pkvBuffer.total_map);
+								
+								double local_progress = 0;
+								if(conf.getBoolean("priter.snapshot", true)){
+									//snapshot generation
+									pkvBuffer.snapshot(snapshotIndex);
+									local_progress = pkvBuffer.progress;
+								}else{
+									local_progress = pkvBuffer.measureProgress();
+								}
+								long total_updates = pkvBuffer.total_map;					
+								
+								SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, total_updates, local_progress, getJobID());
+								try {
+									this.trackerUmbilical.snapshotCommit(event);
+								} catch (Exception e) {
+									e.printStackTrace();
+								}
+								
+								pkvBuffer.progress = 0;
+								snapshotIndex++;	
 							}else{
-								local_progress = pkvBuffer.measureProgress();
+								bRecompute = false;
 							}
-							long total_updates = pkvBuffer.total_map;					
-							
-							SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, pkvBuffer.getIteration(), id, total_updates, local_progress, getJobID());
-							try {
-								this.trackerUmbilical.snapshotCommit(event);
-							} catch (Exception e) {
-								e.printStackTrace();
-							}
-							
-							pkvBuffer.progress = 0;
-							snapshotIndex++;	
-						}else{
-							bRecompute = false;
+						}catch(IOException ioe){
+							ioe.printStackTrace();
+						}catch (InterruptedException e) {
+							return;
 						}
-					}catch(IOException ioe){
-						ioe.printStackTrace();
-					}catch (InterruptedException e) {
-						return;
 					}
 				}
-			}
+		    }else{
+		    	//on disk version
+				while(true) {
+					synchronized(this){
+						try{
+							this.wait(conf.getLong("priter.snapshot.interval", 20000));
+							if(!bRecompute){
+
+								while((priorityFilter == null) || (pkvFile == null)){	
+									this.wait(500);
+								}
+								while(!priorityFilter.init){
+									this.wait(500);
+								}
+								
+								LOG.info("generating topk results, total records " + priorityFilter.localRecords + " index " + snapshotIndex + " total maps is " + priorityFilter.activations);
+								
+								double local_progress = 0;
+								if(conf.getBoolean("priter.snapshot", true)){
+									//snapshot generation
+									priorityFilter.snapshot(snapshotIndex);
+									local_progress = priorityFilter.progress;
+								}else{
+									local_progress = priorityFilter.measureProgress();
+								}
+								long total_updates = priorityFilter.activations;					
+								
+								SnapshotCompletionEvent event = new SnapshotCompletionEvent(snapshotIndex, priorityFilter.getIteration(), id, total_updates, local_progress, getJobID());
+								try {
+									this.trackerUmbilical.snapshotCommit(event);
+								} catch (Exception e) {
+									e.printStackTrace();
+								}
+								
+								priorityFilter.progress = 0;
+								snapshotIndex++;	
+							}else{
+								bRecompute = false;
+							}
+						}catch(IOException ioe){
+							ioe.printStackTrace();
+						}catch (InterruptedException e) {
+							return;
+						}
+					}
+				}
+		    }
+
 		}
 	}
 	
@@ -290,12 +351,15 @@ public class ReduceTask extends Task {
 	
 	protected JOutputBuffer outputBuffer = null;
 	public OutputPKVBuffer pkvBuffer = null;
+	public OutputPKVFile pkvFile = null;
+	public PriorityFilter priorityFilter = null;
 	protected int numMaps;
     protected Class inputKeyClass;
     protected Class inputValClass;
     protected Class outputKeyClass;
     protected Class outputValClass;
     protected Class priorityClass;
+    protected Class dataClass;
 	protected Class<? extends CompressionCodec> codecClass = null;
 
 	protected CompressionCodec codec;
@@ -310,6 +374,7 @@ public class ReduceTask extends Task {
 	private boolean stream = false;
 	private Reducer reducer = null;
 	private Updater updater = null;
+	private FileBasedUpdater filebasedupdater = null;
 	public boolean spillIter = false;
 	
 	private MapOutputFetcher fetcher = null;
@@ -442,6 +507,10 @@ public class ReduceTask extends Task {
 	    this.outputValClass = job.getOutputValueClass();
 	    this.priorityClass = job.getPriorityClass();
 	    
+	    if(!conf.getBoolean("priter.job.inmem", true)){
+	    	this.dataClass = job.getStaticDataClass();
+	    }
+	    
 		if (job.getCompressMapOutput()) {
 			this.codecClass = conf.getMapOutputCompressorClass(DefaultCodec.class);
 		}
@@ -451,6 +520,7 @@ public class ReduceTask extends Task {
 		snapshotThreshold = snapshotFreq;
 		inputSnapshots  = job.getBoolean("mapred.job.input.snapshots", false);
 		iterative = job.getBoolean("priter.job", false);
+		if(!iterative) job.setBoolean("priter.job.inmem", false);
 		
 		InputCollector inputCollector = null;
 		if (inputSnapshots) {
@@ -518,19 +588,47 @@ public class ReduceTask extends Task {
 			BufferExchangeSink sink, TaskUmbilicalProtocol taskUmbilical,
 			BufferUmbilicalProtocol umbilical) throws IOException {
 		this.ftsupport = job.getBoolean("priter.checkpoint", true);
+		long records = 0;
 		
-		this.updater = (Updater)ReflectionUtils.newInstance(job.getUpdatorClass(), job);
-		if (this.pkvBuffer == null) {
-			Progress progress = sink.getProgress(); 	
-			this.pkvBuffer = new OutputPKVBuffer(umbilical, this, job, reporter, progress, 
-										outputKeyClass, priorityClass, outputValClass, 
-										this.updater);
+		if(conf.getBoolean("priter.job.inmem", true)){
+			//memory-based pkv buffer
+			this.updater = (Updater)ReflectionUtils.newInstance(job.getUpdatorClass(), job);
+			if (this.pkvBuffer == null) {
+				Progress progress = sink.getProgress(); 	
+				this.pkvBuffer = new OutputPKVBuffer(umbilical, this, job, reporter, progress, 
+											outputKeyClass, priorityClass, outputValClass, 
+											this.updater);
+			}
+		}else{
+			//output should be sorted in the number order, doesn't help
+			//since job is declared as final object
+			//job.setOutputKeyComparatorClass(IntWritableIncreasingComparator.class);
+			
+			this.filebasedupdater = (FileBasedUpdater)ReflectionUtils.newInstance(job.getFileUpdatorClass(), job);
+			
+			
+			if(this.priorityFilter == null){
+				priorityFilter = new PriorityFilter(this, job, outputKeyClass, priorityClass, 
+										outputValClass, dataClass, this.filebasedupdater);
+				
+				//init files
+				records = priorityFilter.initFiles();
+			}
+			
+			//file-based pkv file
+			if (this.pkvFile == null) {
+				Progress progress = sink.getProgress(); 
+				this.pkvFile = new OutputPKVFile(umbilical, this, job, reporter, progress, 
+						outputKeyClass, priorityClass, outputValClass, 
+						this.filebasedupdater, records);
+			}
 		}
+
 		
 		if(this.checkpointIter > 0){
 			pkvBuffer.iteration = checkpointIter;
-			int records = this.pkvBuffer.loadStateTable();
-			LOG.info("start new task, return to checkpoint " + checkpointIter + "load statetable with " + records + " records");
+			int loadrecords = this.pkvBuffer.loadStateTable();
+			LOG.info("start new task, return to checkpoint " + checkpointIter + "load statetable with " + loadrecords + " records");
 			
 			sink.resetCursorPosition(checkpointIter+1);
 		}
@@ -559,6 +657,13 @@ public class ReduceTask extends Task {
 						 (System.currentTimeMillis() - windowTimeStamp) + "ms.");
 				windowTimeStamp = System.currentTimeMillis();
 				
+				try {
+					this.wait();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
 				reduce(job, reporter, inputCollector, taskUmbilical, umbilical, sink.getProgress(), null);
 
 				if(this.spillIter || this.checkpointIter > 0){
@@ -566,15 +671,31 @@ public class ReduceTask extends Task {
 						this.pkvBuffer.iteration = checkpointIter;
 						this.checkpointIter = 0;
 					}
-					//retrieve the top records, and generate a file
-					OutputFile outputFile = pkvBuffer.spillTops();
-					if(outputFile != null){
-						updater.iterate();
-						umbilical.output(outputFile);
-						LOG.info("output file " + outputFile);
+					
+					if(conf.getBoolean("priter.job.inmem", true)){
+						//for in memory case
+						//retrieve the top records, and generate a file, and send back to map
+						OutputFile outputFile = pkvBuffer.spillTops();
+						if(outputFile != null){
+							updater.iterate();
+							umbilical.output(outputFile);
+							LOG.info("output file " + outputFile);
+						}else{
+							LOG.info("no record is reduced, so wait!");
+						}
 					}else{
-						LOG.info("no record is reduced, so wait!");
+						//for on disk version
+						//filter the records in pkvfile, and extract high-priority records to write to priority queue file
+						//notify map to process this priority queue file, implemented in reduce function
+						
+						//here is just a fake output to notify map that i am ready
+						OutputFile outputFile = priorityFilter.generateFakeOutput();
+						
+						filebasedupdater.iterate();
+						umbilical.output(outputFile);
+						LOG.info("output fake file " + outputFile);
 					}
+
 					this.spillIter = false;
 					
 					if(ftsupport){
@@ -599,12 +720,6 @@ public class ReduceTask extends Task {
 				
 				inputCollector.free(); // Free current data
 
-				try {
-					this.wait();
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
 				//}
 			}
 		}	
@@ -681,11 +796,37 @@ public class ReduceTask extends Task {
 		int count = 0;
 		try {
 			if(iterative){
-				synchronized(((OutputPKVBuffer)output).stateTable){
+				if(conf.getBoolean("priter.job.inmem", true)){
+					//in memory version, use in-memory state table
+					OutputPKVBuffer outputpkvbuffer = (OutputPKVBuffer)output;
+					synchronized(((OutputPKVBuffer)output).stateTable){
+						ValuesIterator values = input.valuesIterator();
+						while (values.more()) {	
+							count++;
+							updater.updateState(values.getKey(), values, outputpkvbuffer, reporter);
+
+							values.nextKey();
+							
+					        if (progress != null) {
+					        	progress.set(values.getProgress().get());
+					        }
+					        if (reporter != null) reporter.progress();
+					        setProgressFlag();
+						}
+						values.close();
+					}
+				}else{
+					//on disk version, use file-based state table
+					
+					OutputPKVFile outputpkvfile = (OutputPKVFile)output;
+					
+					//recreate the intermediate file, override the old one
+					outputpkvfile.initIntermediateFile();		
+					
 					ValuesIterator values = input.valuesIterator();
 					while (values.more()) {	
 						count++;
-						updater.updateState(values.getKey(), values, (OutputPKVBuffer)output, reporter);
+						filebasedupdater.updateState(values.getKey(), values, outputpkvfile, reporter);
 
 						values.nextKey();
 						
@@ -696,7 +837,13 @@ public class ReduceTask extends Task {
 				        setProgressFlag();
 					}
 					values.close();
+					outputpkvfile.close();
+					
+					//filter the records in pkvfile, and extract high-priority records to write to priority queue file
+					//notify map to process this priority queue file
+					priorityFilter.generatePrioriyQueue(outputpkvfile.getPriorityThreshold());
 				}
+				
 			}else{
 				ValuesIterator values = input.valuesIterator();
 				while (values.more()) {	
@@ -736,14 +883,18 @@ public class ReduceTask extends Task {
 		int count = 0;
 		
 		if(iterative) {
-			job.setBoolean("priter.job.inmem", true);
+			//job.setBoolean("priter.job.inmem", true);
 			long processstart = new Date().getTime();
 			inputCollector.flush();		
 			long flushend = System.currentTimeMillis();
 			LOG.info("reduce read flush use time " + (flushend-processstart));
 
-			//LOG.info("ReduceTask: " + getTaskID() + " start iterative reduce phase.");
-			count = reduce(job, inputCollector, pkvBuffer, reporter, reduceProgress);	
+			if(conf.getBoolean("priter.job.inmem", true)){
+				count = reduce(job, inputCollector, pkvBuffer, reporter, reduceProgress);	
+			}else{
+				count = reduce(job, inputCollector, pkvFile, reporter, reduceProgress);	
+			}
+
 			long processend = new Date().getTime();
 			long processtime = processend - processstart;
 			LOG.info("processed " + count + " use time " + processtime);
