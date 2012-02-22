@@ -897,7 +897,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		}
 		
 		//they sort based on the file size, bigger first, maybe I should let state table file in last
-		LOG.info("Merging " + diskSegments.size() + " files, " +
+		LOG.debug("Merging " + diskSegments.size() + " files, " +
 				onDiskBytes + " bytes from disk");
 		Collections.sort(diskSegments, new Comparator<Segment<K,V>>() {
 			public int compare(Segment<K, V> o1, Segment<K, V> o2) {
@@ -921,7 +921,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			final int numInMemSegments = finalSegments.size();
 			finalSegments.addAll(diskSegments);
 
-			LOG.info("Merging " + finalSegments.size() + " segments, " +
+			LOG.debug("Merging " + finalSegments.size() + " segments, " +
 					(inMemBytes + onDiskBytes) + " bytes from memory");
 			riter = Merger.merge(
 					job, fs, keyClass, valClass, codec, finalSegments,
@@ -1125,7 +1125,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 					synchronized (inputFilesOnDisk) {
 						while (!exit &&
 								inputFilesOnDisk.size() < mergeFactor) {
-							LOG.info(task.getTaskID() + " Thread waiting: " + getName() + 
+							LOG.debug(task.getTaskID() + " Thread waiting: " + getName() + 
 									". Input files on disk " + inputFilesOnDisk.size() + 
 									". Waiting for " + (mergeFactor));
 							inputFilesOnDisk.wait();

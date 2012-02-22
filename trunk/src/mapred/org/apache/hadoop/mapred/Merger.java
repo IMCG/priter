@@ -388,7 +388,7 @@ public class Merger {
                                      Counters.Counter readsCounter,
                                      Counters.Counter writesCounter)
         throws IOException {
-      LOG.info("Merging " + segments.size() + " sorted segments");
+      LOG.debug("Merging " + segments.size() + " sorted segments");
       
       //create the MergeStreams from the sorted map created in the constructor
       //and dump the final output to a file
