@@ -471,11 +471,11 @@ public class Merger {
           else
             mergeProgress.set(1.0f); // Last pass and no segments left - we're done
           
-          LOG.info("Down to the last merge-pass, with " + numSegments + 
+          LOG.debug("Down to the last merge-pass, with " + numSegments + 
                    " segments left of total size: " + totalBytes + " bytes");
           return this;
         } else {
-          LOG.info("Merging " + segmentsToMerge.size() + 
+          LOG.debug("Merging " + segmentsToMerge.size() + 
                    " intermediate segments out of a total of " + 
                    (segments.size()+segmentsToMerge.size()));
           

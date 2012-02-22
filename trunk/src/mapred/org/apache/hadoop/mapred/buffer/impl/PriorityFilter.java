@@ -17,6 +17,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputBuffer;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Valueable;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
@@ -32,10 +33,9 @@ import org.apache.hadoop.mapred.IFile.Reader;
 import org.apache.hadoop.mapred.IFile.Writer;
 import org.apache.hadoop.mapred.IFile.PriorityQueueWriter;
 import org.apache.hadoop.mapred.buffer.OutputFile;
-import org.apache.hadoop.mapred.buffer.impl.OutputPKVFile.KPRecord;
 
 public class PriorityFilter<K extends Object, P extends Valueable, V extends Valueable, D extends Object> {
-	private static final Log LOG = LogFactory.getLog(OutputPKVFile.class.getName());
+	private static final Log LOG = LogFactory.getLog(PriorityFilter.class.getName());
 	
 	class KPRecord<K, P>{
 		K key;
@@ -192,6 +192,7 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 			DataInputBuffer dataIn = new DataInputBuffer();
 			
 			samples.clear();
+			V defaultistate = updater.resetiState();
 			while (istate_reader.next(keyIn, istateIn)) {
 				keyDeserializer.open(keyIn);
 				istateDeserializer.open(istateIn);
@@ -202,21 +203,19 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 					throw new IOException("cstate file length not match to intermediate file");
 				}
 				
-				keyDeserializer.open(keyIn);
+				//keyDeserializer.open(keyIn);
 				cstateDeserializer.open(cstateIn);
-				key = keyDeserializer.deserialize(key);
+				//key = keyDeserializer.deserialize(key);
 				cstate = cstateDeserializer.deserialize(cstate);
-				
+
 				if(!static_reader.next(keyIn, dataIn)){
 					throw new IOException("static file length not match to intermediate file");
 				}
 				
-				keyDeserializer.open(keyIn);
+				//keyDeserializer.open(keyIn);
 				dataDeserializer.open(dataIn);
-				key = keyDeserializer.deserialize(key);
+				//key = keyDeserializer.deserialize(key);
 				data = dataDeserializer.deserialize(data);
-				
-				V defaultistate = updater.resetiState();
 				
 				P pri = updater.decidePriority(key, istate);
 				if(pri.compareTo(prithreshold) >= 0){
@@ -234,7 +233,6 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 				
 				//sampling for topk extraction
 				if(++counter % checkInterval == 0){
-					pri = updater.decideTopK(key, cstate);
 					samples.add(new KPRecord<K, P>(key, pri));
 				}
 				
@@ -271,7 +269,7 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 		long segmentLength = out.getPos() - start;
 		indexOut.writeLong(segmentLength);
 		
-		LOG.info("index record <offset, raw-length, compressed-length>: " + 
+		LOG.debug("index record <offset, raw-length, compressed-length>: " + 
 				start + ", " + writer.getRawLength() + ", " + segmentLength);
 	}
 	
@@ -337,7 +335,7 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 		synchronized(synclock){
 			if(counter > Long.MAX_VALUE / 2) counter = 0;
 			
-			LOG.info("OK, lock is released");
+			//LOG.info("OK, lock is released");
 			
 			cStateFileNext = outputHandle.getcStateFile(taskAttemptID, iteration);
 			Reader<K, V> cstate_reader = new Reader<K, V>(conf, localFs, cStateFileNext, null, null);

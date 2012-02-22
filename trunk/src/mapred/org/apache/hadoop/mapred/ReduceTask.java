@@ -679,7 +679,7 @@ public class ReduceTask extends Task {
 						if(outputFile != null){
 							updater.iterate();
 							umbilical.output(outputFile);
-							LOG.info("output file " + outputFile);
+							//LOG.info("output file " + outputFile);
 						}else{
 							LOG.info("no record is reduced, so wait!");
 						}
@@ -693,7 +693,7 @@ public class ReduceTask extends Task {
 						
 						filebasedupdater.iterate();
 						umbilical.output(outputFile);
-						LOG.info("output fake file " + outputFile);
+						//LOG.info("output fake file " + outputFile);
 					}
 
 					this.spillIter = false;

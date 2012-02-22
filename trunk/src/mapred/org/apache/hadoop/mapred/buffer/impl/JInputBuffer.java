@@ -496,7 +496,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		RawKeyValueIterator rIter = null;
 		try {
 			int segments = inMemorySegments.size();
-			LOG.info("Initiating in-memory merge with " + 
+			LOG.debug("Initiating in-memory merge with " + 
 					segments +
 					" segments... total size = " + mergeOutputSize);
 
@@ -535,7 +535,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		FileStatus status = localFileSys.getFileStatus(outputPath);
 		addInputFilesOnDisk(new JInput(taskid, outputPath, status.getLen()));
 
-		LOG.info("FLUSH: Merged " + inMemorySegments.size() + " segments, " +
+		LOG.debug("FLUSH: Merged " + inMemorySegments.size() + " segments, " +
 				mergeOutputSize + " bytes to disk to satisfy " + "reduce memory limit");
 	}
 	
@@ -890,7 +890,8 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			if(conf.getBoolean("priter.job", false) && !conf.getBoolean("priter.job.inmem", true)){
 				Path iStatefile = outputHandle.getiStateFile(task.getTaskID());
 
-				diskSegments.add(new Segment<K, V>(job, fs, iStatefile, codec, false));
+				onDiskBytes += fs.getFileStatus(iStatefile).getLen();
+				diskSegments.add(new Segment<K, V>(job, fs, iStatefile, codec, false));	
 			}
 			inputFilesOnDisk.clear();
 		}
@@ -925,7 +926,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 			riter = Merger.merge(
 					job, fs, keyClass, valClass, codec, finalSegments,
 					ioSortFactor, numInMemSegments, tmpDir, comparator,
-					reporter, false, null, null);
+					reporter, true, null, null);
 		}
 		else {
 			// All that remains is in-memory segments
@@ -1081,7 +1082,7 @@ extends Buffer<K, V> implements InputCollector<K, V> {
 		synchronized (inputFilesOnDisk) {
 			inputFilesOnDisk.add(input);
 			inputFilesOnDisk.notifyAll();
-			LOG.info("Total input files on disk " + inputFilesOnDisk.size());
+			LOG.debug("Total input files on disk " + inputFilesOnDisk.size());
 		}
 	}
 
