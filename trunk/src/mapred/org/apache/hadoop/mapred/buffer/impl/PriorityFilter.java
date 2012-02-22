@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Date;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -235,7 +236,10 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 					pri = updater.decideTopK(key, cstate);
 					samples.add(new KPRecord<K, P>(key, pri));
 				}
+				
 			}
+			
+			LOG.info("we have collected samples " + samples.size() + " counter is " + counter);
 			
 			istate_reader.close();
 			cstate_reader.close();
@@ -245,6 +249,15 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 			priqueue_writer.close();
 			
 			localFs.delete(iStateFileIntermediate, false);
+			
+			this.iteration++;
+			
+			if(iteration % 10 == 0){
+				for(int i=iteration-10; i<iteration; i++){
+					Path oldStateFile = outputHandle.getcStateFile(taskAttemptID, iteration);
+					localFs.delete(oldStateFile, false);
+				}
+			}
 		}
 	}
 	
@@ -309,12 +322,12 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 			}
 		}
 		
-		this.iteration++;
 		return new OutputFile(this.taskAttemptID, this.iteration, filename, indexFilename, 1);
 	}
 	
 	public void snapshot(int index) throws IOException, InterruptedException{
 		
+		cStateFileNext = outputHandle.getcStateFile(taskAttemptID, iteration+1);
 		while(!localFs.exists(cStateFileNext) || iteration < 2){
 			Thread.sleep(1000);
 		}
@@ -332,6 +345,10 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 			DataInputBuffer cstateIn = new DataInputBuffer();
 			
 			progress = 0;
+			
+			Date start = new Date();
+			P threshold = (P) updater.resetiState();
+			int cutindex = 0;
 			
 			if(localRecords <= topk || localRecords <= SAMPLESIZE){
 				while (cstate_reader.next(keyIn, cstateIn)) {
@@ -354,11 +371,13 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 							}
 						});
 	
-				int cutindex = (int)(this.topk * samples.size() / localRecords) + 1;
-				P threshold = samples.get(cutindex-1>=0?cutindex-1:0).pri;
-		
-				LOG.info("table size " + localRecords + " sample size " + samples.size() + " cutindex " + cutindex + " threshold " + threshold);
+				if(samples.size() == 0){
+					throw new IOException("no samples iteration " + iteration);
+				}
 				
+				cutindex = (int)(this.topk * samples.size() / localRecords) + 1;
+				threshold = samples.get(cutindex-1>=0?cutindex-1:0).pri;
+			
 				while (cstate_reader.next(keyIn, cstateIn)) {
 					keyDeserializer.open(keyIn);
 					cstateDeserializer.open(cstateIn);
@@ -373,8 +392,11 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 					progress += cstate.getV();
 				}
 			}
+			Date end = new Date();
+			long spendtime = (end.getTime() - start.getTime()) / 1000;
+			LOG.info("table size " + localRecords + " sample size " + samples.size() 
+				+ " cutindex " + cutindex + " threshold " + threshold + " use time " + spendtime);
 			
-			samples.clear();
 			cstate_reader.close();
 			topkwriter.close();
 		}
