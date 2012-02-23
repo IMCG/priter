@@ -98,7 +98,7 @@ public class PageRankFileUpdater extends PrIterBase implements
 					links3.set(links2);
 						
 					istateWriter.append(new IntWritable(node), new FloatWritable(0));
-					cstateWriter.append(new IntWritable(node), new FloatWritable(0));
+					cstateWriter.append(new IntWritable(node), new FloatWritable(PageRank.RETAINFAC));
 					staticWriter.append(new IntWritable(node), links3);
 					priorityqueueWriter.append(new IntWritable(node), new FloatWritable(PageRank.RETAINFAC), links3);
 					
