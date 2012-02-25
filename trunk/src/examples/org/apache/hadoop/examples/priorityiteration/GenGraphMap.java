@@ -76,7 +76,7 @@ public class GenGraphMap extends MapReduceBase implements
 					double rand = logn.random();			
 					int num_link = (int) Math.ceil(rand);
 					
-					while(num_link > capacity){
+					while(num_link > capacity / 10){
 						rand = logn.random();
 						num_link = (int)Math.ceil(rand);
 					}
@@ -89,6 +89,11 @@ public class GenGraphMap extends MapReduceBase implements
 					ArrayList<Integer> links = new ArrayList<Integer>(num_link);
 					for(int j=0; j< num_link; j++){
 						int link = r.nextInt(capacity);
+            
+            while(link == index){
+							link = r.nextInt(capacity);
+						}
+             
 						while(links.contains(link)){
 							link = r.nextInt(capacity);
 						}
@@ -116,7 +121,7 @@ public class GenGraphMap extends MapReduceBase implements
 
 					int num_link = (int)Math.ceil(rand);
 					
-					while(num_link > capacity){
+					while(num_link > capacity / 10){
 						rand = logn.random();
 						num_link = (int)Math.ceil(rand);
 					}
@@ -127,6 +132,11 @@ public class GenGraphMap extends MapReduceBase implements
 					ArrayList<Integer> links = new ArrayList<Integer>(num_link);
 					for(int j=0; j< num_link; j++){
 						int link = r.nextInt(capacity);
+            
+            while(link == index){
+							link = r.nextInt(capacity);
+						}
+            
 						while(links.contains(link)){
 							link = r.nextInt(capacity);
 						}
