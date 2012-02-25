@@ -468,18 +468,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					if (collector.read(istream, header)) {
 						updateProgress(header);
 						
-						int recMaps = 0;
-						if(!syncMapPos.containsKey(position.longValue())){
-							recMaps = 1;
-						}else{
-							recMaps = syncMapPos.get(position.longValue()) + 1;
-						}
-						
-						LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
-						syncMapPos.put(position.longValue(), recMaps);
-						
-						if(recMaps == syncMaps){					
-							syncMapPos.remove(position.longValue());	
+						if(complete()){					
 							synchronized (task) {
 								task.notifyAll();
 							}							
@@ -536,7 +525,8 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
 					if (collector.read(istream, header)) {
 						updateProgress(header);
-									
+								
+            /* use complete() can avoid dead lock
 						int recMaps = 0;
 						if(!syncMapPos.containsKey(position.longValue())){
 							recMaps = 1;
@@ -546,6 +536,9 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						
 						LOG.info("recMaps: " + recMaps + " syncMaps: " + syncMaps);
 						syncMapPos.put(position.longValue(), recMaps);
+             * */
+            
+            
 						/*
 						 * measure synchronization overhead
 						if(header.owner().getTaskID().getId() == task.getTaskID().getTaskID().getId()){
@@ -556,10 +549,12 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						}
 						*/
 						
-						if(recMaps == syncMaps){					
-							syncMapPos.remove(position.longValue());	
+						if(complete()){					
 							((ReduceTask)task).spillIter = true;	
-							task.notifyAll();								
+							task.notifyAll();					
+              
+              // reset the sync checker for next iteration,
+              successful.clear();
 						}else if(conf.getBoolean("priter.job.syncupdate", false)){
 							
 						}else if(conf.getBoolean("priter.job.inmem", true)){
