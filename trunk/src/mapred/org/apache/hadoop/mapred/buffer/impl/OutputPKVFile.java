@@ -75,6 +75,7 @@ public class OutputPKVFile<K extends Object, P extends Valueable, V extends Valu
 		checkInterval = totalRecords / SAMPLESIZE + 1;
 		samples = new ArrayList<KPRecord<K, P>>(totalRecords > SAMPLESIZE ? SAMPLESIZE : (int)totalRecords);
 		
+    LOG.info("checkinterval is " + checkInterval);
 		if(job.getFloat("priter.queue.portion", -1) != -1){
 			this.bPortion = true;
 			this.queueportion = job.getFloat("priter.queue.portion", 1);
