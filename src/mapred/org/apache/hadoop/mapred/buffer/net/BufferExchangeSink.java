@@ -158,11 +158,13 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 	    this.cursor = new HashMap<TaskID, Position>();
 	    this.syncMapPos = new HashMap<Long, Integer>();
 	    this.syncMaps = conf.getInt("priter.graph.partitions", 0);
+      int maptasks = conf.getNumMapTasks();
 		if(syncMaps == 0){
-			JobClient jobclient = new JobClient(conf);
-			ClusterStatus status = jobclient.getClusterStatus();
-			syncMaps = status.getTaskTrackers();
-		}
+			syncMaps = maptasks;
+		}else if(syncMaps != maptasks){
+      throw new IOException("number of paritions " + syncMaps + " is not equal to the number of maptasks " + maptasks);
+    }
+    
 		this.syncReducePos = new HashMap<Long, Integer>();
 	    //this.syncReduces = conf.getInt("priter.graph.partitions", 0);
 	    this.syncReduces = conf.getNumMapTasks();
@@ -386,7 +388,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						LOG.info(e);
 						return;
 					}
-					LOG.info("open ? " + open + " " + (open == Integer.MAX_VALUE));
+					//LOG.info("open ? " + open + " " + (open == Integer.MAX_VALUE));
 				}
 
 			} finally {
@@ -567,9 +569,9 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 
 						//task.notifyAll();
 						position.set(header.sequence() + 1);
-						LOG.debug("Stream handler " + " done receiving up to position " + position.longValue());
+						//LOG.info("Stream handler " + " done receiving up to position " + position.longValue());
 					}else {
-						LOG.debug(this + " ignoring -- " + header);
+						LOG.info(this + " ignoring -- " + header);
 						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
 					}
 					// Indicate the next spill file that I expect.
