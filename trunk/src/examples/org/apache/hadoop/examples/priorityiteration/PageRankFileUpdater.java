@@ -130,14 +130,11 @@ public class PageRankFileUpdater extends PrIterBase implements
 		workload++;		
 		reporter.setStatus(String.valueOf(workload));
 		
-		//System.out.println(key);
 		float delta = 0;
 		while(values.hasNext()){	
 			float v = values.next().get();
 			delta += v;
-			//System.out.print(v + " ");
 		}
-		//System.out.println();
 		
 		output.collect(key, new FloatWritable(delta));
 	}
