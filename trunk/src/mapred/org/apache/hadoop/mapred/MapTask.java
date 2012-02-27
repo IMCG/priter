@@ -509,6 +509,18 @@ public class MapTask extends Task {
 								}else if(mapsync){
 									LOG.info("sync barrier");
 								}else{		
+									//avoid missing map's output
+									LOG.info("wait for reduces are ready, we have " + job.getNumReduceTasks() + " reduces");
+									while(bufferUmbilical.getNumReduces(this.getJobID()) != job.getNumReduceTasks()){
+										LOG.info("already have " + bufferUmbilical.getNumReduces(this.getJobID()) + "\tshouldhave " + job.getNumReduceTasks());
+										try {
+											Thread.sleep(500);  
+										} catch (InterruptedException e) {
+											// TODO Auto-generated catch block
+											e.printStackTrace();
+										}
+									}
+									
 									this.nsortBuffer.iterate();
 									counter = 0;
 								}
@@ -631,6 +643,19 @@ public class MapTask extends Task {
 							setProgressFlag();		
 							
 							filebasedactivator.iterate();
+							
+							//avoid missing map's output
+							LOG.info("wait for reduces are ready, we have " + job.getNumReduceTasks() + " reduces");
+							while(bufferUmbilical.getNumReduces(this.getJobID()) != job.getNumReduceTasks()){
+								LOG.info("already have " + bufferUmbilical.getNumReduces(this.getJobID()) + "\tshouldhave " + job.getNumReduceTasks());
+								try {
+									Thread.sleep(500);  
+								} catch (InterruptedException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
+							}
+							
 							buffer.iterate();
 						}
 					}
@@ -700,8 +725,20 @@ public class MapTask extends Task {
 			try {
 				runner.run(this.recordReader, collector, reporter);      
 				getProgress().complete();
-				LOG.info("Map task complete. Perform final close.");
+				LOG.info("Map task complete. Perform final close. ");
 
+				//avoid missing map's output
+				LOG.info("wait for reduces are ready, we have " + job.getNumReduceTasks() + " reduces");
+				while(bufferUmbilical.getNumReduces(this.getJobID()) != job.getNumReduceTasks()){
+					LOG.info("already have " + bufferUmbilical.getNumReduces(this.getJobID()) + "\tshouldhave " + job.getNumReduceTasks());
+					try {
+						Thread.sleep(500);  
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+				
 				if (collector instanceof JOutputBuffer) {
 					JOutputBuffer buffer = (JOutputBuffer) collector;
 					OutputFile finalOut = buffer.close();
@@ -723,12 +760,7 @@ public class MapTask extends Task {
 			}
 		}
 		
-		try {
-			Thread.sleep(5000);         // what's this? avoiding end too quick?
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+
 		done(umbilical);
 	}
 	
