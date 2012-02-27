@@ -916,13 +916,16 @@ public class Manager implements BufferUmbilicalProtocol {
 
 	@Override
 	public int getNumReduces(JobID jobid) {
-		// TODO Auto-generated method stub
-		return reduceSources.get(jobid).size();
+		if(mapSources.containsKey(jobid)){
+      return mapSources.get(jobid).size();
+    }else{
+      return -1;
+    }
 	}
 
 	@Override
 	public int getNumMaps(JobID jobid) {
-		
+		//not implemented, don't invoke it
 		return mapSources.get(jobid).size();
 	}
 }
