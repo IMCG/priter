@@ -56,7 +56,7 @@ public class GenGraph extends Configured implements Tool {
 	    job.setMapOutputValueClass(Text.class);
 	    job.setOutputKeyClass(NullWritable.class);
 	    job.setOutputValueClass(NullWritable.class);
-	    
+
 	    job.setNumMapTasks(partitions);
 	    
 	    JobClient.runJob(job);

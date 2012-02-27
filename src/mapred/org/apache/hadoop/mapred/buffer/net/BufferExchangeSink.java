@@ -149,7 +149,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		this.progress = new Progress();
 		this.ownerid = task.getTaskID();
 		this.collector = collector;
-		this.maxConnections = conf.getInt("mapred.reduce.parallel.copies", 20);
+		this.maxConnections = conf.getInt("mapred.reduce.parallel.copies", 20000);
 
 		this.task = task;
 	    this.numInputs = task.getNumberOfInputs();
@@ -312,7 +312,7 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 		inputProgress.put(taskid, header.progress());
 		progressSum += header.progress();
 		
-		if (header.eof()) {
+		if (header.eof()) { //eof means an iteration finishes, like map->reduce uses eof header, but reduce->map use non eof header
 			successful.add(header.owner().getTaskID());
 			LOG.info(successful.size() + " completed connections. " +
 					(numInputs - successful.size()) + " remaining.");
@@ -510,10 +510,12 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 			}
 
 					
-			long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
-			//LOG.info("position is: " + pos + "; sequence() is " + header.sequence());
-			if (pos == header.sequence()) {
-				synchronized (task) {	
+			/* I'm the only one that should be updating this position. */
+      synchronized (task) {
+        
+        long pos = position.longValue() < 0 ? header.sequence() : position.longValue(); 
+        if (pos == header.sequence()) {
+				
 					//ignore expired map output
 					if(task.checkpointIter > 0){
 						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
@@ -525,8 +527,10 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 					LOG.debug("Stream handler " + hashCode() + " ready to receive -- " + header);
 					if (collector.read(istream, header)) {
 						updateProgress(header);
-								
-            /* use complete() can avoid dead lock
+							
+            //synchronized (task){  //this one results in dead lock
+            
+            /* 
 						int recMaps = 0;
 						if(!syncMapPos.containsKey(position.longValue())){
 							recMaps = 1;
@@ -549,38 +553,38 @@ public class BufferExchangeSink<K extends Object, V extends Object> implements B
 						}
 						*/
 						
-						if(complete()){					
-							((ReduceTask)task).spillIter = true;	
-							task.notifyAll();					
-              
+						if(complete()){           //maybe I should use while()?
+              synchronized (task) {	
+                ((ReduceTask)task).spillIter = true;	
+                task.notifyAll();					
+              }
               // reset the sync checker for next iteration,
               successful.clear();
 						}else if(conf.getBoolean("priter.job.syncupdate", false)){
 							
 						}else if(conf.getBoolean("priter.job.inmem", true)){
 							// no need to be synchronized, the state is stored in hashmap
-							task.notifyAll();
+              synchronized (task) {	
+                task.notifyAll();
+              }
 						}
 
 						//task.notifyAll();
 						position.set(header.sequence() + 1);
 						//LOG.info("Stream handler " + " done receiving up to position " + position.longValue());
-					}else {
-						LOG.info(this + " ignoring -- " + header);
-						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
 					}
-					// Indicate the next spill file that I expect.
-					pos = position.longValue();
-					LOG.debug("Updating source position to " + pos);
-					ostream.writeLong(pos);
-					ostream.flush();
-				}
-			}else{
-				WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
-				ostream.flush();
-				LOG.info("position mismatch, return ignore ");
-			}
 			
+        }else{
+          	LOG.info(this + " ignoring -- " + header);
+						WritableUtils.writeEnum(ostream, BufferExchange.Transfer.IGNORE);
+        }
+        
+              // Indicate the next spill file that I expect.
+        pos = position.longValue();
+        LOG.debug("Updating source position to " + pos);
+        ostream.writeLong(pos);
+        ostream.flush();
+      }
 		}		
 	}
 	
