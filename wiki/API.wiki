@@ -1,4 +1,4 @@
-#summary PrIter API.
+#summary memory-based PrIter API.
 
 Besides the job configurations specified like Hadoop job. PrIter asks users to specify Activator and Updater instead of Mapper and Reducer. Users should specify the priority class in addition to key class and value class.
 
