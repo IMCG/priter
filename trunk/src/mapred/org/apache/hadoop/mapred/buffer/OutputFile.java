@@ -138,10 +138,10 @@ public class OutputFile<K extends Object, V extends Object> implements Comparabl
 		
 		private long sequence;
 		
-		public StreamHeader() { super(Type.STREAM, null, 0f, false); }
+		public StreamHeader() { super(Type.STREAM, null, 0f, true); }
 		
 		public StreamHeader(TaskAttemptID owner, long sequence) {
-			super(Type.STREAM, owner, 0f, false);
+			super(Type.STREAM, owner, 0f, true);
 			this.sequence = sequence;
 		}
 		

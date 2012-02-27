@@ -724,7 +724,7 @@ public class MapTask extends Task {
 		}
 		
 		try {
-			Thread.sleep(5000);
+			Thread.sleep(5000);         // what's this? avoiding end too quick?
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

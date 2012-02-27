@@ -50,7 +50,7 @@ public class Distributor {
 	    job.setPartitionerClass(partitionclass);
 	    
 	    
-	    job.setNumMapTasks(numparts*2);
+	    job.setNumMapTasks(numparts);
 	    job.setNumReduceTasks(numparts);
 	    
 	    JobClient.runJob(job);
