@@ -62,4 +62,6 @@ public interface BufferUmbilicalProtocol extends VersionedProtocol {
 
 	public void rollbackForMap(JobID jobid);
 	public void rollbackForReduce(TaskID jobid);
+	public int getNumReduces(JobID jobid);
+	public int getNumMaps(JobID jobid);	
 }

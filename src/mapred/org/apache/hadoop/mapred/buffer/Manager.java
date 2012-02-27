@@ -913,4 +913,16 @@ public class Manager implements BufferUmbilicalProtocol {
 			source.rollback = true;
 		}
 	}
+
+	@Override
+	public int getNumReduces(JobID jobid) {
+		// TODO Auto-generated method stub
+		return reduceSources.get(jobid).size();
+	}
+
+	@Override
+	public int getNumMaps(JobID jobid) {
+		
+		return mapSources.get(jobid).size();
+	}
 }
