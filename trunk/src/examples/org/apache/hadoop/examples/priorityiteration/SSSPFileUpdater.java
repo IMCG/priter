@@ -165,9 +165,7 @@ public class SSSPFileUpdater extends PrIterBase implements
   public void updateiState(IntWritable key, Iterator<FloatWritable> values, OutputCollector<IntWritable, FloatWritable> output, Reporter reporter) throws IOException {
     workload++;		
 		reporter.setStatus(String.valueOf(workload));
-		
-    System.out.println("input: " + key);
-    
+
 		float distance = Float.MAX_VALUE;
 		while(values.hasNext()){	
 			float v = values.next().get();
