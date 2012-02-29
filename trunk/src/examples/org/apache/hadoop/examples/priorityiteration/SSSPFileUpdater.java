@@ -25,6 +25,7 @@ public class SSSPFileUpdater extends PrIterBase implements
 	private int workload = 0;
 	private int iterate = 0;
   private int startnode;
+  private int partitions;
   private JobConf job;
 	
   
@@ -42,6 +43,7 @@ public class SSSPFileUpdater extends PrIterBase implements
 	public void configure(JobConf job) {	
 		this.job = job;
     this.startnode = job.getInt(MainDriver.START_NODE, 0);
+    this.partitions = job.getInt("priter.graph.partitions", -1);
 	}
     
 	@Override
@@ -75,6 +77,7 @@ public class SSSPFileUpdater extends PrIterBase implements
 			FSDataInputStream in = hdfs.open(subgraph);
 			BufferedReader reader = new BufferedReader(new InputStreamReader(in));
 			
+      boolean hasStart = false;
 			String line;
 			while((line = reader.readLine()) != null){
 				int index = line.indexOf("\t");
@@ -104,16 +107,30 @@ public class SSSPFileUpdater extends PrIterBase implements
             cstateWriter.append(new IntWritable(node), new FloatWritable(0));
             staticWriter.append(new IntWritable(node), links3);
             priorityqueueWriter.append(new IntWritable(node), new FloatWritable(0), links3);
+            
+            hasStart = true;
           }else{
             istateWriter.append(new IntWritable(node), new FloatWritable(max));
             cstateWriter.append(new IntWritable(node), new FloatWritable(max));
             staticWriter.append(new IntWritable(node), links3);
           }
 
-					
 					records++;
 				}
 			}
+      
+      //to avoid no priority queue exception
+      if(!hasStart){
+        LinkWritable[] links2 = new LinkWritable[partitions];
+
+        for(int i=0; i<partitions; i++){
+          //no use, map will skip it
+          links2[i] = new LinkWritable(i, 1000);
+        }
+        LinkArrayWritable links3 = new LinkArrayWritable();
+        links3.set(links2);
+        priorityqueueWriter.append(new IntWritable(-1), new FloatWritable(0), links3);
+      }
 
 			System.out.println(istateWriter.getRawLength());
 			System.out.println(cstateWriter.getRawLength());
@@ -149,6 +166,8 @@ public class SSSPFileUpdater extends PrIterBase implements
     workload++;		
 		reporter.setStatus(String.valueOf(workload));
 		
+    System.out.println("input: " + key);
+    
 		float distance = Float.MAX_VALUE;
 		while(values.hasNext()){	
 			float v = values.next().get();
