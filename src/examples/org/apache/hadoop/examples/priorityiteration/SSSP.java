@@ -11,6 +11,7 @@ import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
+import org.apache.hadoop.mapred.IntWritableIncreasingComparator;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextOutputFormat;
@@ -23,6 +24,7 @@ public class SSSP extends Configured implements Tool {
 	private String input;
 	private String output;
 	private String subGraphDir;
+	private boolean inmem = true;
 	private int partitions;
 	private int topk;
 	private int startnode;
@@ -45,20 +47,29 @@ public class SSSP extends Configured implements Tool {
 	    
 	    //set for iterative process   
 	    job.setBoolean("priter.job", true);
+      job.setBoolean("priter.job.inmem", inmem);						//memory based or not
 	    job.setInt("priter.graph.partitions", partitions);				//graph partitions
 	    job.setLong("priter.snapshot.interval", snapinterval);			//snapshot interval	 
 	    job.setInt("priter.snapshot.topk", topk);						//topk 
 	    job.setInt("priter.queue.length", queuelen);						//execution queue
 	    job.setFloat("priter.stop.difference", stopthresh);				//termination check
-	    
+            
 	    job.setJarByClass(SSSP.class);
-	    job.setActivatorClass(SSSPActivator.class);	
-	    job.setUpdaterClass(SSSPUpdater.class);
 	    job.setMapOutputKeyClass(IntWritable.class);
 	    job.setMapOutputValueClass(FloatWritable.class);
 	    job.setOutputKeyClass(IntWritable.class);
 	    job.setOutputValueClass(FloatWritable.class);
-	    job.setPriorityClass(FloatWritable.class);    
+	    job.setPriorityClass(FloatWritable.class);   
+      	    
+      if(inmem){
+		    job.setActivatorClass(SSSPActivator.class);	
+		    job.setUpdaterClass(SSSPUpdater.class);
+	    }else{
+		    job.setFileActivatorClass(SSSPFileActivator.class);	
+		    job.setFileUpdaterClass(SSSPFileUpdater.class);
+		    job.setStaticDataClass(LinkArrayWritable.class);
+		    job.setOutputKeyComparatorClass(IntWritableIncreasingComparator.class);
+	    }
 
 	    job.setNumMapTasks(partitions);
 	    job.setNumReduceTasks(partitions);
@@ -68,7 +79,7 @@ public class SSSP extends Configured implements Tool {
 	}
 	
 	static int printUsage() {
-		System.out.println("sssp [-p <partitions>] [-k <options>] [-qlen <qportion>] [-s <source node>]" +
+		System.out.println("sssp [-m <memory based>] [-p <partitions>] [-k <options>] [-qlen <qportion>] [-s <source node>]" +
 				"[-i <snapshot interval>] [-t <termination threshod>] input output");
 		ToolRunner.printGenericCommandUsage(System.out);
 		return -1;
@@ -79,7 +90,9 @@ public class SSSP extends Configured implements Tool {
 	    List<String> other_args = new ArrayList<String>();
 	    for(int i=0; i < args.length; ++i) {
 	      try {
-	        if ("-p".equals(args[i])) {
+          if ("-m".equals(args[i])) {
+            inmem = Boolean.parseBoolean(args[++i]);
+	        } else if ("-p".equals(args[i])) {
 	        	partitions = Integer.parseInt(args[++i]);
 	        } else if ("-k".equals(args[i])) {
 	        	topk = Integer.parseInt(args[++i]);
