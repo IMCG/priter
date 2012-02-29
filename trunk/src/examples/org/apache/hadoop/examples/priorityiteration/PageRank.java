@@ -7,7 +7,6 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.FileInputFormat;
@@ -94,8 +93,8 @@ public class PageRank extends Configured implements Tool {
 	    List<String> other_args = new ArrayList<String>();
 	    for(int i=0; i < args.length; ++i) {
 	      try {
-	    	if ("-m".equals(args[i])) {
-	    		inmem = Boolean.parseBoolean(args[++i]);
+          if ("-m".equals(args[i])) {
+            inmem = Boolean.parseBoolean(args[++i]);
 	        } else if ("-p".equals(args[i])) {
 	        	partitions = Integer.parseInt(args[++i]);
 	        } else if ("-k".equals(args[i])) {
