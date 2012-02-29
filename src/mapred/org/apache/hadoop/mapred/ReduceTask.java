@@ -826,7 +826,7 @@ public class ReduceTask extends Task {
 					ValuesIterator values = input.valuesIterator();
 					while (values.more()) {	
 						count++;
-						filebasedupdater.updateState(values.getKey(), values, outputpkvfile, reporter);
+						filebasedupdater.updateiState(values.getKey(), values, outputpkvfile, reporter);
 
 						values.nextKey();
 						

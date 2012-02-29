@@ -220,7 +220,7 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 				P pri = updater.decidePriority(key, istate);
 				if(pri.compareTo(prithreshold) >= 0){
 					//LOG.info("key " + key + " value " + istate + " threshold " + prithreshold);
-					V accum = updater.accumulate(istate, cstate);
+					V accum = updater.updatecState(istate, cstate);
 					cstate_writer.append(key, accum);
 					priqueue_writer.append(key, istate, data);
 					istate_writer.append(key, defaultistate);
