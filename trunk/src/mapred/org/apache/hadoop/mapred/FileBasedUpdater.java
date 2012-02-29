@@ -19,8 +19,8 @@ public interface FileBasedUpdater<K, P extends Valueable, V extends Valueable, D
 	V resetiState();
 	P decidePriority(K key, V iState);
 	P decideTopK(K key, V cState);	
-	V accumulate(V iState, V cState);
-	void updateState(K key, Iterator<V> values, OutputCollector<K, V> output, Reporter reporter) throws IOException;	
+	V updatecState(V iState, V cState);
+	void updateiState(K key, Iterator<V> values, OutputCollector<K, V> output, Reporter reporter) throws IOException;	
 	
 	void iterate();
 }

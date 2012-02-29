@@ -119,12 +119,12 @@ public class PageRankFileUpdater extends PrIterBase implements
 	}
 
 	@Override
-	public FloatWritable accumulate(FloatWritable iState, FloatWritable cState) {
+	public FloatWritable updatecState(FloatWritable iState, FloatWritable cState) {
 		return new FloatWritable(iState.get() + cState.get());
 	}
 
 	@Override
-	public void updateState(IntWritable key, Iterator<FloatWritable> values,
+	public void updateiState(IntWritable key, Iterator<FloatWritable> values,
 			OutputCollector<IntWritable, FloatWritable> output,
 			Reporter reporter) throws IOException {
 		workload++;		
