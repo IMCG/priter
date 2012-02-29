@@ -35,7 +35,6 @@ public class SSSPFileActivator extends PrIterBase implements
 		float distance = value.get();
     int node = nodeid.get();
 
-    System.out.println("input: " + node + "\t" + distance);
     if(node == -1) {
       System.out.println("no links for node " + node);
       for(int i=0; i<partitions; i++){

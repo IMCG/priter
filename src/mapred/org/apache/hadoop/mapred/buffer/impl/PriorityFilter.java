@@ -398,7 +398,7 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 					cstate = cstateDeserializer.deserialize(cstate);
 					P pri = updater.decidePriority(key, cstate);
 					
-					if(pri.compareTo(topk_threshold) > 0){
+					if(pri.compareTo(topk_threshold) >= 0){
 						topkwriter.append(pri, key, cstate);
 					}
 					
