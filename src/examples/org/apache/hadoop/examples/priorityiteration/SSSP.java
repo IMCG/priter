@@ -28,6 +28,7 @@ public class SSSP extends Configured implements Tool {
 	private int partitions;
 	private int topk;
 	private int startnode;
+  private int totalnodes;
 	private int queuelen;
 	private long snapinterval = 5000;
 	private float stopthresh;
@@ -65,6 +66,7 @@ public class SSSP extends Configured implements Tool {
 		    job.setActivatorClass(SSSPActivator.class);	
 		    job.setUpdaterClass(SSSPUpdater.class);
 	    }else{
+        job.setInt("sssp.totalnodes", totalnodes);
 		    job.setFileActivatorClass(SSSPFileActivator.class);	
 		    job.setFileUpdaterClass(SSSPFileUpdater.class);
 		    job.setStaticDataClass(LinkArrayWritable.class);
@@ -79,7 +81,8 @@ public class SSSP extends Configured implements Tool {
 	}
 	
 	static int printUsage() {
-		System.out.println("sssp [-m <memory based>] [-p <partitions>] [-k <options>] [-qlen <qportion>] [-s <source node>]" +
+		System.out.println("sssp [-m <memory based>] [-p <partitions>] [-k <options>] "
+            + "[-qlen <qportion>] [-s <source node>] [-n <total nodes>]" +
 				"[-i <snapshot interval>] [-t <termination threshod>] input output");
 		ToolRunner.printGenericCommandUsage(System.out);
 		return -1;
@@ -100,6 +103,8 @@ public class SSSP extends Configured implements Tool {
 	        	queuelen = Integer.parseInt(args[++i]);
 	        } else if ("-s".equals(args[i])) {
 	        	startnode = Integer.parseInt(args[++i]);
+	        } else if ("-n".equals(args[i])) {
+	        	totalnodes = Integer.parseInt(args[++i]);
 	        } else if ("-i".equals(args[i])) {
 	        	snapinterval = Long.parseLong(args[++i]);
 	        } else if ("-t".equals(args[i])) {

@@ -9,6 +9,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Valueable;
 import org.apache.hadoop.mapred.FileBasedUpdater;
 import org.apache.hadoop.mapred.FileHandle;
@@ -123,7 +124,8 @@ public class OutputPKVFile<K extends Object, P extends Valueable, V extends Valu
 		} else{
 			int cutindex = (int) (queuelen * samples.size() / totalRecords);
 			P threshold = samples.get(cutindex-1>=0?cutindex-1:0).pri;
-			
+
+      
 			LOG.info("2queuelen " + queuelen + " eliglbe records " + totalRecords + 
 					" cut index " + cutindex + " threshold is " + threshold);
 			samples.clear();

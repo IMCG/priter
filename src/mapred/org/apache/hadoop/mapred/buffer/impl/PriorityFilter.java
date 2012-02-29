@@ -218,14 +218,21 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 				data = dataDeserializer.deserialize(data);
 				
 				P pri = updater.decidePriority(key, istate);
-				if(pri.compareTo(prithreshold) >= 0){
+				if(pri.compareTo(prithreshold) > 0){
 					//LOG.info("key " + key + " value " + istate + " threshold " + prithreshold);
 					V accum = updater.updatecState(istate, cstate);
-					cstate_writer.append(key, accum);
-					priqueue_writer.append(key, istate, data);
-					istate_writer.append(key, defaultistate);
-					
-					activations++;
+          
+          //if no change, don't output
+          if(accum.compareTo(cstate) == 0){
+            istate_writer.append(key, istate);
+            cstate_writer.append(key, cstate);
+          }else{
+            cstate_writer.append(key, accum);
+            priqueue_writer.append(key, istate, data);
+            istate_writer.append(key, defaultistate);			
+            
+            activations++;
+          }
 				}else{
 					istate_writer.append(key, istate);
 					cstate_writer.append(key, cstate);
@@ -349,6 +356,7 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 			
 			Date start = new Date();
 			int cutindex = 0;
+      V defaultiState = updater.resetiState();
 			
 			if(localRecords <= topk || localRecords <= SAMPLESIZE){
 				while (cstate_reader.next(keyIn, cstateIn)) {
@@ -394,7 +402,9 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 						topkwriter.append(pri, key, cstate);
 					}
 					
-					progress += cstate.getV();
+          if(cstate.getV() != defaultiState.getV()){
+            progress += cstate.getV();
+          }
 				}
 			}
 			Date end = new Date();
@@ -414,10 +424,13 @@ public class PriorityFilter<K extends Object, P extends Valueable, V extends Val
 			DataInputBuffer keyIn = new DataInputBuffer();
 			DataInputBuffer cstateIn = new DataInputBuffer();
 			
+      V defaultiState = updater.resetiState();
 			while (cstate_reader.next(keyIn, cstateIn)) {
 				cstateDeserializer.open(cstateIn);
 				cstate = cstateDeserializer.deserialize(cstate);
-				progress += cstate.getV();
+        if(cstate.getV() != defaultiState.getV()){
+          progress += cstate.getV();
+        }
 			}
 		
 		}
